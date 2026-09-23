@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MemoryDataContextStore } from '../../data/context/store.mts';
 import { defaultPolicy } from '../../orchestration/policy/evaluate.mts';
-import type { ProposedContext } from '../../orchestration/postgres/confirmed-service.mts';
 import { createPersistentFakeIntelligence } from '../index.mts';
 
 const now = '2026-09-23T12:00:00.000Z';
@@ -16,17 +15,11 @@ function setup(type: 'text' | 'image' = 'text') {
     sentAt: '2026-09-23T11:59:00.000Z', receivedAt: '2026-09-23T11:59:00.000Z',
     provenance: 'fixture', isAgentGenerated: false, mode: 'live' });
   const policy = defaultPolicy(contact.id, 'Asia/Shanghai', '轻松交流');
-  const projection = store.buildContext({ callerContactId: contact.id, contactId: contact.id,
+  // 02 hands 04 the projection it just built, exactly as PgConfirmedService does.
+  const context = store.buildContext({ callerContactId: contact.id, contactId: contact.id,
     cutoffTime: now, generation: 1, allowedScopes: policy.factScopes, policyVersion: policy.version });
-  const context: ProposedContext = {
-    id: projection.snapshot.id, conversationId: projection.snapshot.conversationId,
-    generation: projection.snapshot.generation, policyVersion: projection.snapshot.policyVersion, hash: projection.snapshot.hash,
-    messageRefs: projection.snapshot.messageRefs.map(r => r.id), factRefs: [], analysisRefs: [],
-    messages: projection.messages.map(m => ({ id: m.id, actor: m.actor as 'contact', text: m.contentRef ?? '' })),
-    facts: [], analyses: [],
-  };
   const ai = createPersistentFakeIntelligence(async snapshotId => {
-    assert.equal(snapshotId, projection.snapshot.id);
+    assert.equal(snapshotId, context.snapshot.id);
     return store.readContextProjection({ callerContactId: contact.id, contactId: contact.id,
       snapshotId, allowedScopes: policy.factScopes });
   });
@@ -49,7 +42,7 @@ test('02 PersistentIntelligence gets 03 scoped text and returns checked structur
 
 test('lossy 02 envelope cannot replace or stale 03 snapshot', async () => {
   const { ai, context, policy } = setup();
-  const wrong = { ...context, hash: 'forged-hash' };
+  const wrong = { ...context, snapshot: { ...context.snapshot, hash: 'forged-hash' } };
   await assert.rejects(() => ai.propose(wrong, policy), /STALE_CONTEXT/);
   const checked = await ai.checkEdited(wrong, policy, [{ type: 'text', content: '你好' }]);
   assert.deepEqual(checked, { allowed: false, reasons: ['STALE_CONTEXT'] });

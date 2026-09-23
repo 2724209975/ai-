@@ -83,7 +83,9 @@ function RowActions({ row, prefix, run, actions }: { row: Operable; prefix: stri
 function App() {
   const initial = location.hash.slice(1) as Page;
   const [page, setPage] = useState<Page>(pages.some(item => item.id === initial) ? initial : 'overview');
-  const [data, setData] = useState<unknown>(null);
+  /** Tagged with the page it belongs to: a hash change renders the new page before its fetch
+   * resolves, and stale data from the previous page must never be rendered as the new one. */
+  const [data, setData] = useState<{ page: Page; value: unknown } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -124,7 +126,7 @@ function App() {
     if (auth !== 'signed-in') return;
     let active = true; setLoading(true); setError(''); setData(null);
     const load = api[page]();
-    void load.then(value => { if (active) setData(value); }).catch(cause => { if (active) setError(formatError(cause)); }).finally(() => { if (active) setLoading(false); });
+    void load.then(value => { if (active) setData({ page, value }); }).catch(cause => { if (active) setError(formatError(cause)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [page, reload, auth]);
   async function run(path: string, body: Record<string, unknown>) {
@@ -141,7 +143,8 @@ function App() {
       throw cause;
     }
   }
-  const list = <T,>() => (data as { items: T[] } | null)?.items ?? [];
+  const current = data?.page === page ? data.value : null;
+  const list = <T,>() => (current as { items: T[] } | null)?.items ?? [];
   if (auth !== 'signed-in') return <main className="page">
     <header className="topbar"><div><p className="eyebrow">管理端 · 仅本人可访问</p><h1>个人聊天代理</h1></div><span className="badge">未登录</span></header>
     {auth === 'checking'
@@ -162,7 +165,7 @@ function App() {
     {notice && <p className="notice" role="status">{notice}</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {loading && <p role="status">正在读取后端状态…</p>}
-    {!loading && !error && page === 'overview' && (() => { const row = data as Overview; return <section className="stack">
+    {!loading && !error && page === 'overview' && (() => { const row = current as Overview | null; if (!row) return null; return <section className="stack">
       <article className="card"><h3>运行状态</h3><p>全局：<strong>{row.globalPaused ? '已暂停' : '运行中'}</strong></p><p>待办 {row.pendingCount} · 结果未知 {row.unknownSendCount}</p>
         <div className="actions">{row.allowedActions.includes('pauseAll') && <button onClick={() => void run('/control/pause-all', { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>暂停全部代理</button>}
           {row.allowedActions.includes('resumeAll') && <button onClick={() => void run('/control/resume-all', { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>恢复全部代理</button>}</div></article>

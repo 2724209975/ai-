@@ -1,5 +1,5 @@
 import type { Draft } from '../../orchestration/conversations/engine.mts';
-import type { PersistentIntelligence, ProposedContext } from '../../orchestration/postgres/confirmed-service.mts';
+import type { PersistentIntelligence } from '../../orchestration/postgres/confirmed-service.mts';
 import type { Policy, Risk } from '../../orchestration/policy/evaluate.mts';
 import type { PgDataProvider } from '../../data/postgres/provider.mts';
 import { withTransaction, type PgPool } from '../../infrastructure/postgres/transaction.mts';
@@ -10,6 +10,9 @@ import type { PolicyProjection, RiskCategory } from '../types.mts';
 
 type PgProjection = Awaited<ReturnType<PgDataProvider['buildContext']>>;
 export type ScopedProjectionLoader = (snapshotId: string, policy: Policy) => Promise<DataContextProjectionInput | PgProjection>;
+/** The smallest 02 → 04 envelope: the immutable snapshot reference 04 must re-verify on its own. */
+type SnapshotEnvelope = { snapshot: { id: string; conversationId: string; generation: number; policyVersion: number; hash: string;
+  messageRefs: readonly { id: string }[]; factRefs: readonly { id: string }[]; analysisRefs: readonly { id: string }[] } };
 
 function projectedPolicy(policy: Policy): PolicyProjection {
   return { contactId: policy.contactId, version: policy.version, goal: policy.goal,
@@ -29,13 +32,17 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-async function scopedContext(context: ProposedContext, policy: Policy, load: ScopedProjectionLoader) {
-  const full = adaptDataContextProjection(await load(context.id, policy));
-  if (full.contactId !== policy.contactId || full.snapshot.id !== context.id || full.snapshot.conversationId !== context.conversationId ||
-    full.snapshot.generation !== context.generation || full.snapshot.policyVersion !== context.policyVersion ||
-    full.snapshot.policyVersion !== policy.version || full.snapshot.hash !== context.hash ||
-    !sameIds(full.snapshot.messageRefs, context.messageRefs) || !sameIds(full.snapshot.factRefs.map(r => r.id), context.factRefs) ||
-    !sameIds(full.snapshot.analysisRefs.map(r => r.id), context.analysisRefs)) throw new Error('STALE_CONTEXT');
+/** 02 hands 04 the projection it just built. 04 re-reads the snapshot in its own transaction and
+ * refuses any envelope whose identity, hash, versions or references no longer match, so a forged
+ * or lossy 02 envelope can never replace 03's stored snapshot. */
+async function scopedContext(context: SnapshotEnvelope, policy: Policy, load: ScopedProjectionLoader) {
+  const envelope = context.snapshot;
+  const full = adaptDataContextProjection(await load(envelope.id, policy));
+  if (full.contactId !== policy.contactId || full.snapshot.id !== envelope.id || full.snapshot.conversationId !== envelope.conversationId ||
+    full.snapshot.generation !== envelope.generation || full.snapshot.policyVersion !== envelope.policyVersion ||
+    full.snapshot.policyVersion !== policy.version || full.snapshot.hash !== envelope.hash ||
+    !sameIds(full.snapshot.messageRefs, envelope.messageRefs.map(r => r.id)) || !sameIds(full.snapshot.factRefs.map(r => r.id), envelope.factRefs.map(r => r.id)) ||
+    !sameIds(full.snapshot.analysisRefs.map(r => r.id), envelope.analysisRefs.map(r => r.id))) throw new Error('STALE_CONTEXT');
   return full;
 }
 
