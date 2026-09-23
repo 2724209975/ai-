@@ -1,0 +1,8 @@
+{
+  "adapter": "mock",
+  "platform": "qq",
+  "realPlatformEnabled": false,
+  "externalBridgeInstalled": false,
+  "credentials": "NONE_REQUIRED_FOR_MOCK",
+  "note": "Illustrative configuration only; no real network transport or configuration loader is implemented."
+}

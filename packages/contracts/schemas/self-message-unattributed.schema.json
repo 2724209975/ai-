@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.ai-chat-agent/contracts/0.3.0/self-message-unattributed",
+  "type": "object",
+  "required": ["platform", "accountId", "conversationRef", "platformEventId", "platformMessageId", "sentAt", "receivedAt", "type", "rawEventRef", "actor", "originStatus", "isAgentGenerated", "provenance", "mode"],
+  "properties": {
+    "platform": { "enum": ["wechat", "qq"] },
+    "accountId": { "type": "string", "minLength": 1 },
+    "conversationRef": { "type": "object", "required": ["accountId", "conversationId", "externalContactRef"], "properties": { "accountId": { "type": "string", "minLength": 1 }, "conversationId": { "type": "string", "minLength": 1 }, "externalContactRef": { "type": "string", "minLength": 1 } }, "additionalProperties": false },
+    "platformEventId": { "type": "string", "minLength": 1 },
+    "platformMessageId": { "type": "string", "minLength": 1 },
+    "sentAt": { "type": "string", "format": "date-time" },
+    "receivedAt": { "type": "string", "format": "date-time" },
+    "type": { "enum": ["text", "image", "voice", "sticker_static", "sticker_animated", "unsupported"] },
+    "contentRef": { "type": "string" },
+    "mediaId": { "type": "string" },
+    "rawEventRef": { "type": "string", "minLength": 1 },
+    "actor": { "const": "unknown" },
+    "originStatus": { "const": "unknown" },
+    "isAgentGenerated": { "const": false },
+    "provenance": { "type": "object", "required": ["source", "rawEventRef"], "properties": { "source": { "type": "string", "minLength": 1 }, "rawEventRef": { "type": "string", "minLength": 1 }, "evidence": { "type": "string" } } },
+    "mode": { "enum": ["live", "import", "trial", "replay"] }
+  }
+}

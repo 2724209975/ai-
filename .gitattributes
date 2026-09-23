@@ -1,0 +1,9 @@
+# This repository is LF-only. Without this, Windows Git rewrites checked-out files to CRLF
+# and produces noisy diffs in test fixtures and the acceptance matrix.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.zip binary

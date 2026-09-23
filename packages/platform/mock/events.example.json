@@ -1,0 +1,217 @@
+{
+  "adapter": "mock",
+  "contractBaseline": "0.1.0",
+  "notice": "Synthetic examples; local payload projections pending 00 schema approval",
+  "events": [
+    {
+      "eventId": "01a0c820-fc00-74a6-bb31-949ec5e23242",
+      "eventType": "PlatformConnectionChanged",
+      "eventVersion": 1,
+      "occurredAt": "2026-09-22T08:00:00.000Z",
+      "correlationId": "01a0c820-fc00-7fd8-bf91-fa846f404b82",
+      "causationId": "01997000-0000-7000-8000-000000000001",
+      "aggregateId": "01997000-0000-7000-8000-000000000001",
+      "aggregateVersion": 1,
+      "payload": {
+        "adapter": "mock",
+        "platform": "qq",
+        "accountId": "01997000-0000-7000-8000-000000000001",
+        "state": "RECONCILING",
+        "reloginRequired": false,
+        "epoch": 1
+      }
+    },
+    {
+      "eventId": "01a0c820-fc00-7d39-8639-7f705a72dc5f",
+      "eventType": "PlatformConnectionChanged",
+      "eventVersion": 1,
+      "occurredAt": "2026-09-22T08:00:00.000Z",
+      "correlationId": "01a0c820-fc00-771f-b442-f036a0f5e550",
+      "causationId": "01997000-0000-7000-8000-000000000001",
+      "aggregateId": "01997000-0000-7000-8000-000000000001",
+      "aggregateVersion": 2,
+      "payload": {
+        "adapter": "mock",
+        "platform": "qq",
+        "accountId": "01997000-0000-7000-8000-000000000001",
+        "state": "CONNECTED",
+        "reloginRequired": false,
+        "epoch": 2
+      }
+    },
+    {
+      "eventId": "01a0c820-fc00-7131-b95a-3ca3adb0d9ea",
+      "eventType": "PlatformInboundObserved",
+      "eventVersion": 1,
+      "occurredAt": "2026-09-22T08:00:00.000Z",
+      "correlationId": "01a0c820-fc00-7d7d-b4a1-c34ebd11cc04",
+      "causationId": "synthetic-inbound-event",
+      "aggregateId": "01997000-0000-7000-8000-000000000002",
+      "aggregateVersion": 3,
+      "payload": {
+        "adapter": "mock",
+        "platform": "qq",
+        "accountId": "01997000-0000-7000-8000-000000000001",
+        "platformEventId": "synthetic-inbound-event",
+        "platformMessageId": "synthetic-inbound-msg",
+        "conversationRef": {
+          "accountId": "01997000-0000-7000-8000-000000000001",
+          "conversationId": "01997000-0000-7000-8000-000000000002",
+          "externalContactRef": "synthetic-contact"
+        },
+        "sentAt": "2026-09-22T08:00:00.000Z",
+        "type": "text",
+        "contentRef": "fixture:hello",
+        "direction": "incoming",
+        "rawEventRef": "fixture:raw-inbound",
+        "mode": "live",
+        "actor": "contact",
+        "isAgentGenerated": false,
+        "receivedAt": "2026-09-22T08:00:00.000Z",
+        "provenance": {
+          "source": "synthetic_fixture",
+          "rawEventRef": "fixture:raw-inbound",
+          "evidence": "unverified_or_contact"
+        },
+        "requiresReview": false
+      }
+    },
+    {
+      "eventId": "01a0c820-fc00-7b4a-a343-d1521bbd27b9",
+      "eventType": "PlatformReceiptObserved",
+      "eventVersion": 1,
+      "occurredAt": "2026-09-22T08:00:00.000Z",
+      "correlationId": "01997000-0000-7000-8000-000000000004",
+      "causationId": "01997000-0000-7000-8000-000000000003",
+      "aggregateId": "01997000-0000-7000-8000-000000000002",
+      "aggregateVersion": 4,
+      "payload": {
+        "adapter": "mock",
+        "platform": "qq",
+        "accountId": "01997000-0000-7000-8000-000000000001",
+        "sendTaskId": "01997000-0000-7000-8000-000000000003",
+        "status": "SUBMITTED",
+        "correlationId": "01997000-0000-7000-8000-000000000004",
+        "resultVersion": 1,
+        "receiptLevel": "accepted",
+        "platformMessageId": "mock:01a0c820-fc00-7447-b001-396d22839faa",
+        "sendKey": "synthetic-task-part-1"
+      }
+    },
+    {
+      "eventId": "01a0c820-fc00-7a81-871d-75ffb3f8ee13",
+      "eventType": "PlatformAgentEchoObserved",
+      "eventVersion": 1,
+      "occurredAt": "2026-09-22T08:00:00.000Z",
+      "correlationId": "01a0c820-fc00-7606-97c4-06657ef3504c",
+      "causationId": "synthetic-echo",
+      "aggregateId": "01997000-0000-7000-8000-000000000002",
+      "aggregateVersion": 5,
+      "payload": {
+        "adapter": "mock",
+        "platform": "qq",
+        "accountId": "01997000-0000-7000-8000-000000000001",
+        "platformEventId": "synthetic-echo",
+        "platformMessageId": "mock:01a0c820-fc00-7447-b001-396d22839faa",
+        "conversationRef": {
+          "accountId": "01997000-0000-7000-8000-000000000001",
+          "conversationId": "01997000-0000-7000-8000-000000000002",
+          "externalContactRef": "synthetic-contact"
+        },
+        "sentAt": "2026-09-22T08:00:00.000Z",
+        "type": "text",
+        "contentRef": "fixture:hello",
+        "direction": "self",
+        "rawEventRef": "fixture:raw-inbound",
+        "mode": "live",
+        "actor": "agent",
+        "isAgentGenerated": true,
+        "receivedAt": "2026-09-22T08:00:00.000Z",
+        "provenance": {
+          "source": "synthetic_fixture",
+          "rawEventRef": "fixture:raw-inbound",
+          "evidence": "ledger_message_id"
+        },
+        "sendKey": "synthetic-task-part-1",
+        "sendTaskId": "01997000-0000-7000-8000-000000000003",
+        "requiresReview": false
+      }
+    },
+    {
+      "eventId": "01a0c820-fc00-7e3f-a73f-85b0bb26d3a2",
+      "eventType": "PlatformOwnerMessageObserved",
+      "eventVersion": 1,
+      "occurredAt": "2026-09-22T08:00:00.000Z",
+      "correlationId": "01a0c820-fc00-7603-ba7c-52a3d3217301",
+      "causationId": "synthetic-owner",
+      "aggregateId": "01997000-0000-7000-8000-000000000002",
+      "aggregateVersion": 6,
+      "payload": {
+        "adapter": "mock",
+        "platform": "qq",
+        "accountId": "01997000-0000-7000-8000-000000000001",
+        "platformEventId": "synthetic-owner",
+        "platformMessageId": "synthetic-owner-msg",
+        "conversationRef": {
+          "accountId": "01997000-0000-7000-8000-000000000001",
+          "conversationId": "01997000-0000-7000-8000-000000000002",
+          "externalContactRef": "synthetic-contact"
+        },
+        "sentAt": "2026-09-22T08:00:00.000Z",
+        "type": "text",
+        "contentRef": "fixture:hello",
+        "direction": "self",
+        "rawEventRef": "fixture:raw-inbound",
+        "mode": "live",
+        "verifiedOwnerEvidence": "fixture:manual-phone",
+        "actor": "owner",
+        "isAgentGenerated": false,
+        "receivedAt": "2026-09-22T08:00:00.000Z",
+        "provenance": {
+          "source": "synthetic_fixture",
+          "rawEventRef": "fixture:raw-inbound",
+          "evidence": "fixture:manual-phone"
+        },
+        "requiresReview": false
+      }
+    },
+    {
+      "eventId": "01a0c820-fc00-7765-a131-df09750c28c8",
+      "eventType": "PlatformMessageMutationObserved",
+      "eventVersion": 1,
+      "occurredAt": "2026-09-22T08:00:00.000Z",
+      "correlationId": "01a0c820-fc00-72f8-8fb7-4aedeeaa863a",
+      "causationId": "synthetic-recall",
+      "aggregateId": "01997000-0000-7000-8000-000000000002",
+      "aggregateVersion": 7,
+      "payload": {
+        "adapter": "mock",
+        "platform": "qq",
+        "accountId": "01997000-0000-7000-8000-000000000001",
+        "platformEventId": "synthetic-recall",
+        "platformMessageId": "synthetic-inbound-msg",
+        "conversationRef": {
+          "accountId": "01997000-0000-7000-8000-000000000001",
+          "conversationId": "01997000-0000-7000-8000-000000000002",
+          "externalContactRef": "synthetic-contact"
+        },
+        "sentAt": "2026-09-22T08:00:00.000Z",
+        "type": "text",
+        "contentRef": "fixture:hello",
+        "direction": "incoming",
+        "rawEventRef": "fixture:raw-inbound",
+        "mode": "live",
+        "mutation": "recall",
+        "actor": "contact",
+        "isAgentGenerated": false,
+        "receivedAt": "2026-09-22T08:00:00.000Z",
+        "provenance": {
+          "source": "synthetic_fixture",
+          "rawEventRef": "fixture:raw-inbound",
+          "evidence": "unverified_or_contact"
+        },
+        "requiresReview": false
+      }
+    }
+  ]
+}

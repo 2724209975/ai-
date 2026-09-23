@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { MockPlatformAdapter } from '../../platform/mock/adapter.mts';
+import { MemoryDataContextStore } from '../../data/context/store.mts';
+import { Orchestrator, contentHash } from '../conversations/engine.mts';
+import { createMockIntegrationPorts } from './mock-ports.mts';
+
+test('01 mock, 03 context, 04 fake, 02 confirmation and receipt interoperate', async () => {
+  const now = Date.parse('2026-09-23T10:00:00Z');
+  const authority = {};
+  const platform = new MockPlatformAdapter({ platform: 'qq', accountId: 'a', authority, clock: () => now });
+  platform.setConnection('RECONCILING'); platform.setConnection('CONNECTED');
+  const store = new MemoryDataContextStore(() => now);
+  const contact = store.createContact({ conversationId: 'c', platformAccountId: 'a', externalContactRef: 'ext', displayName: '测试联系人', enrollmentStatus: 'enrolled' });
+  const ports = createMockIntegrationPorts(store, new Map([['c', contact.id]]), () => now);
+  const engine = new Orchestrator({ ...ports, platform, authority, now: () => now });
+  engine.enrollContact({ contactId: contact.id, conversationId: 'c', accountId: 'a', externalContactRef: 'ext', timezone: 'Asia/Shanghai', goal: '了解对方' });
+  const event = platform.observe({ platformEventId: 'evt-1', platformMessageId: 'msg-1', conversationRef: { accountId: 'a', conversationId: 'c', externalContactRef: 'ext' }, sentAt: new Date(now).toISOString(), type: 'text', contentRef: '你好，今天怎么样？', direction: 'incoming', rawEventRef: 'raw-1', mode: 'live' });
+  assert.ok(event);
+  const plan = await engine.ingestPlatformEvent(event); assert.ok(plan?.task); assert.equal(plan.alternatives.length, 3);
+  const alternative = plan.alternatives[0]!;
+  const editedParts = alternative.parts.map(p => ({ type: p.type, content: p.content }));
+  engine.confirmPlan({ conversationId: 'c', planId: plan.id, taskVersion: plan.task.version, planVersion: plan.version, alternativeId: alternative.alternativeId, editedParts, contentHash: contentHash(editedParts), idempotencyKey: 'confirm-1' });
+  const sent = await engine.dispatchNext('c'); assert.equal(sent?.status, 'SUBMITTED');
+  assert.equal(platform.submissionCount, 1);
+  platform.resolveReceipt(sent!.sendKey, 'DELIVERED', sent!.receipt!.platformMessageId!);
+  engine.applyReceipt(platform.events().at(-1)!);
+  assert.equal(engine.getConversation('c').plans[0]?.sends[0]?.status, 'DELIVERED');
+});
+
+test('unsupported inbound stays unsupported and pauses without a reply plan', async () => {
+  const now = Date.parse('2026-09-23T10:00:00Z');
+  const authority = {};
+  const platform = new MockPlatformAdapter({ platform: 'qq', accountId: 'a', authority, clock: () => now });
+  platform.setConnection('RECONCILING'); platform.setConnection('CONNECTED');
+  const store = new MemoryDataContextStore(() => now);
+  const contact = store.createContact({ conversationId: 'c', platformAccountId: 'a', externalContactRef: 'ext', displayName: '测试联系人', enrollmentStatus: 'enrolled' });
+  const ports = createMockIntegrationPorts(store, new Map([['c', contact.id]]), () => now);
+  const engine = new Orchestrator({ ...ports, platform, authority, now: () => now });
+  engine.enrollContact({ contactId: contact.id, conversationId: 'c', accountId: 'a', externalContactRef: 'ext', timezone: 'Asia/Shanghai', goal: '了解对方' });
+  const event = platform.observe({ platformEventId: 'evt-unsupported', platformMessageId: 'msg-unsupported', conversationRef: { accountId: 'a', conversationId: 'c', externalContactRef: 'ext' }, sentAt: new Date(now).toISOString(), type: 'unsupported', direction: 'incoming', rawEventRef: 'raw-unsupported', mode: 'live' });
+  assert.ok(event);
+  const plan = await engine.ingestPlatformEvent(event);
+  assert.equal(plan, undefined);
+  assert.equal(engine.getConversation('c').control.state, 'PAUSED_MEDIA');
+  assert.equal(engine.getConversation('c').plans.length, 0);
+  assert.equal(platform.submissionCount, 0);
+  const projection = store.buildContext({ callerContactId: contact.id, contactId: contact.id, cutoffTime: new Date(now).toISOString(), generation: 1, allowedScopes: ['global', contact.id], policyVersion: 1, mode: 'live' });
+  assert.equal(projection.messages[0]?.type, 'unsupported');
+});
+
+test('unattributed own-account message never becomes contact inbound or owner takeover', async () => {
+  const now = Date.parse('2026-09-23T10:00:00Z');
+  const authority = {};
+  const platform = new MockPlatformAdapter({ platform: 'qq', accountId: 'a', authority, clock: () => now });
+  platform.setConnection('RECONCILING'); platform.setConnection('CONNECTED');
+  const store = new MemoryDataContextStore(() => now);
+  const contact = store.createContact({ conversationId: 'c', platformAccountId: 'a', externalContactRef: 'ext', displayName: '测试联系人', enrollmentStatus: 'enrolled' });
+  const ports = createMockIntegrationPorts(store, new Map([['c', contact.id]]), () => now);
+  const engine = new Orchestrator({ ...ports, platform, authority, now: () => now });
+  engine.enrollContact({ contactId: contact.id, conversationId: 'c', accountId: 'a', externalContactRef: 'ext', timezone: 'Asia/Shanghai', goal: '了解对方' });
+  const event = platform.observe({ platformEventId: 'evt-self', platformMessageId: 'msg-self', conversationRef: { accountId: 'a', conversationId: 'c', externalContactRef: 'ext' }, sentAt: new Date(now).toISOString(), type: 'text', contentRef: '我发的消息', direction: 'self', rawEventRef: 'raw-self', mode: 'live' });
+  assert.equal(event?.eventType, 'PlatformSelfMessageUnattributed');
+  assert.equal(await engine.ingestPlatformEvent(event!), undefined);
+  const current = engine.getConversation('c');
+  assert.equal(current.control.state, 'PAUSED_OWNER');
+  assert.equal(current.plans.length, 0);
+  assert.equal(platform.submissionCount, 0);
+  const messages = store.buildContext({ callerContactId: contact.id, contactId: contact.id, cutoffTime: new Date(now).toISOString(), generation: current.control.generation, allowedScopes: [contact.id], policyVersion: current.policy.version, mode: 'live' }).messages;
+  assert.equal(messages[0]?.actor, 'unknown');
+});

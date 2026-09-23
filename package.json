@@ -1,0 +1,19 @@
+{
+  "name": "personal-chat-agent",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "migrate": "node scripts/migrate.mts",
+    "test:unit": "node --test \"packages/**/*.test.mts\"",
+    "test:contracts": "node --test tests/contracts/*.test.mts",
+    "test:integration": "node --test tests/integration/*.test.mts",
+    "test:e2e": "node --test tests/e2e/*.test.mts",
+    "build:web": "npm --prefix apps/web run build",
+    "owner:password": "node scripts/owner-password.mts",
+    "serve:owner": "node apps/web/server/main.mts",
+    "verify": "npm run test:unit && npm run test:contracts && npm run test:integration && npm run build:web && npm run test:e2e"
+  },
+  "dependencies": { "pg": "^8.16.3" },
+  "devDependencies": { "playwright": "^1.63.0" }
+}

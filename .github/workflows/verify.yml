@@ -1,0 +1,43 @@
+name: verify
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: chat_agent_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chat_agent_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://postgres:${{ github.run_id }}@localhost:5432/chat_agent_test
+      RUN_BROWSER_E2E: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install web dependencies
+        run: npm --prefix apps/web ci
+      - name: Install Chromium for mock mobile UI tests
+        run: npx playwright install chromium --with-deps
+      - name: Unit, contract, real PostgreSQL, mock flow, web build
+        run: npm run verify

@@ -1,0 +1,13 @@
+node_modules/
+apps/web/node_modules/
+apps/web/build/
+.npm-cache/
+.playwright-browsers/
+.pg-local/
+.postgres17-test.zip
+.local-sessions/
+test-results/
+playwright-report/
+.env
+.env.*
+!.env.example

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.ai-chat-agent/contracts/0.3.0/event-envelope",
+  "type": "object",
+  "required": ["eventId", "eventType", "eventVersion", "occurredAt", "correlationId", "causationId", "aggregateId", "aggregateVersion", "payload"],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventType": { "enum": ["PlatformInboundObserved", "PlatformOwnerMessageObserved", "PlatformSelfMessageUnattributed", "PlatformAgentEchoObserved", "PlatformOriginResolved", "PlatformReceiptObserved", "PlatformConnectionChanged", "PlatformMessageMutationObserved", "ContactPolicyChanged", "GlobalPauseChanged", "ContactControlChanged", "FactChanged", "EvidenceInvalidated", "AnalysisChanged", "SkillVersionChanged", "GrantChanged", "ReplyPlanProposed", "ReplyPlanInvalidated", "SendTaskStateChanged"] },
+    "eventVersion": { "type": "integer", "minimum": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": "string", "format": "uuid" },
+    "causationId": { "type": "string", "format": "uuid" },
+    "aggregateId": { "type": "string", "minLength": 1 },
+    "aggregateVersion": { "type": "integer", "minimum": 0 },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}

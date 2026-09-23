@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readdir, readFile } from 'node:fs/promises';
+import { resolve, relative, dirname, extname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+async function sources(directory: string): Promise<string[]> {
+  const entries = await readdir(resolve(root, directory), { withFileTypes: true }).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  });
+  const paths: string[] = [];
+  for (const entry of entries) {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) paths.push(...await sources(path));
+    else if ((extname(entry.name) === '.mts' || extname(entry.name) === '.ts' || extname(entry.name) === '.tsx') && !entry.name.includes('.test.')) paths.push(path);
+  }
+  return paths;
+}
+
+test('04/05/06 production modules cannot import platform send implementation', async () => {
+  for (const directory of ['packages/ai', 'packages/skills', 'apps/web/src']) {
+    for (const path of await sources(directory)) {
+      const content = await readFile(resolve(root, path), 'utf8');
+      for (const match of content.matchAll(/(?:\bfrom\s*|\bimport\s*\()\s*['"]([^'"]+)['"]/g)) {
+        const specifier = match[1]!;
+        if (!specifier.startsWith('.')) continue;
+        const target = relative(root, resolve(root, dirname(path), specifier)).replaceAll('\\', '/');
+        assert.ok(!target.startsWith('packages/platform/') && !target.startsWith('packages/orchestration/dispatch/'), `${path} imports privileged ${target}`);
+      }
+      assert.doesNotMatch(content, /\bsubmitSend\s*\(/, `${path} must not invoke platform sending`);
+    }
+  }
+});
+
+test('global migrations have unique consecutive numbers and never use per-module numbering', async () => {
+  const directory = resolve(root, 'db/migrations');
+  const names = (await readdir(directory)).filter(name => name.endsWith('.sql')).sort();
+  assert.ok(names.length > 0, 'at least one global migration is required');
+  names.forEach((name, index) => assert.match(name, new RegExp(`^${String(index + 1).padStart(4, '0')}_[a-z0-9_]+\\.sql$`)));
+});

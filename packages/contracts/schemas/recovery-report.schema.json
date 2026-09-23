@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.ai-chat-agent/contracts/0.3.0/recovery-report",
+  "type": "object",
+  "required": ["accountId", "bridgeSessionId", "previousCursor", "verifiedFromCursor", "verifiedToCursor", "coverage", "historyComplete", "durableNextCursor", "gaps", "unresolvedSends", "reviewConversationIds", "sourceRef"],
+  "properties": {
+    "accountId": { "type": "string", "minLength": 1 },
+    "bridgeSessionId": { "type": "string", "minLength": 1 },
+    "previousCursor": { "type": ["string", "null"] },
+    "verifiedFromCursor": { "type": ["string", "null"] },
+    "verifiedToCursor": { "type": ["string", "null"] },
+    "coverage": { "enum": ["complete", "partial", "none", "unknown"] },
+    "historyComplete": { "type": "boolean" },
+    "durableNextCursor": { "type": ["string", "null"] },
+    "gaps": { "type": "array", "items": { "type": "object", "required": ["conversationId", "reason"], "properties": { "conversationId": { "type": ["string", "null"] }, "reason": { "type": "string", "minLength": 1 } } } },
+    "unresolvedSends": { "type": "array", "items": { "type": "object", "required": ["conversationId", "sendKey", "evidenceStatus"], "properties": { "conversationId": { "type": "string" }, "sendKey": { "type": "string" }, "evidenceStatus": { "enum": ["unknown", "accepted", "delivered", "definitely_not_sent"] }, "platformMessageId": { "type": "string" } } } },
+    "reviewConversationIds": { "type": "array", "items": { "type": "string" } },
+    "sourceRef": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [{ "if": { "properties": { "historyComplete": { "const": true } } }, "then": { "properties": { "coverage": { "const": "complete" }, "gaps": { "maxItems": 0 } } } }]
+}

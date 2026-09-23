@@ -1,0 +1,19 @@
+name: personal-chat-agent-test
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: chat_agent_test
+      POSTGRES_USER: chat_agent_test
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:?Set POSTGRES_TEST_PASSWORD for the isolated test database}
+    ports:
+      - '127.0.0.1:${TEST_PG_PORT:-5433}:5432'
+    volumes:
+      - pg_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chat_agent_test -d chat_agent_test']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  pg_test_data:
