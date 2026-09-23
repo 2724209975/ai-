@@ -9,7 +9,7 @@
 3. [公共契约](contracts.md)：对象、端口、事件、状态与一致性，唯一公共契约定义。
 4. [开发计划与 42 条验收映射](development-plan.md)：阶段、任务状态、集成门槛。
 5. [决策与待定问题](decisions.md)：D01–D13 的唯一决策登记处。
-6. [真实接入验证](platform-validation.md)：权威状态、能力矩阵、实测步骤；[候选可行性](platforms/feasibility.md)和 [GitHub 复用评审](platforms/github-reuse.md)是补充调研，不改变未验证状态。
+6. [真实接入验证](platform-validation.md)：权威状态、能力矩阵、实测步骤；[候选可行性](platforms/feasibility.md)和 [GitHub 复用评审](platforms/github-reuse.md)是补充调研，不改变未验证状态；[QQ spike 计划](platforms/qq-spike-plan.md) 是 G2 入口的决策清单与执行顺序。
 7. [01 接入](tasks/01-platform.md)、[02 发送控制](tasks/02-orchestration.md)、[03 数据记忆](tasks/03-memory.md)、[04 AI](tasks/04-ai.md)、[05 Skill](tasks/05-skills.md)、[06 网页](tasks/06-web.md)、[07 集成部署](tasks/07-integration.md)：整份内容可复制到独立开发任务。
 
 优先级：本人后续明确决定 > PRD 已确认规则 > 公共契约 > 模块实现。发现冲突先记录影响，不能用技术文档悄悄修改产品范围。PRD 的待定条目不因本文存在而自动确认。

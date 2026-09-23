@@ -8,7 +8,7 @@ QQ 官方机器人文档说明：用户可与“机器人”单独对话，提�
 
 微信方面，本轮未取得可直接支持“个人微信现有好友会话自动收发”的官方资料。企业微信/微信客服、公众号或小程序均属于不同账号/会话形态，除非实测证明满足目标，否则不能拿它们替代个人好友聊天。第三方桌面注入、逆向、协议模拟等路线还涉及封号、条款、稳定性与云端登录风险；在本人明确接受风险且完成隔离测试前，不列为已选方案。
 
-更细的候选对比和只读开源评审见 [platforms/feasibility.md](platforms/feasibility.md) 与 [platforms/github-reuse.md](platforms/github-reuse.md)。其中 QQ 的 NapCat/OneBot、微信的 openclaw-weixin、Wechaty、WeChatFerry 等都只是调查候选：维护者声明、代码可见和开源许可不能证明平台授权、账号稳定或满足本人现有会话。若引入，必须固定版本、复核许可证并走本文件的真实 spike。
+QQ 路线的候选版本、许可与入口缺口已整理为 [QQ spike 计划](platforms/qq-spike-plan.md)（2026-09-24，仅只读查证，未安装、未登录）。更细的候选对比和只读开源评审见 [platforms/feasibility.md](platforms/feasibility.md) 与 [platforms/github-reuse.md](platforms/github-reuse.md)。其中 QQ 的 NapCat/OneBot、微信的 openclaw-weixin、Wechaty、WeChatFerry 等都只是调查候选：维护者声明、代码可见和开源许可不能证明平台授权、账号稳定或满足本人现有会话。若引入，必须固定版本、复核许可证并走本文件的真实 spike。
 
 公开文档会变化，以上只作 spike 输入。每个平台必须保存实验日期、账号类型、客户端/adapter 版本、原始事件（脱敏）、平台响应、视频/日志证据和限制。
 
