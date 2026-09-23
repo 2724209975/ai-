@@ -57,6 +57,7 @@ apps/
   api/                     # 总控启动与路由装配，06 实现管理 API 适配
   worker/                  # 总控装配，02 调度，07 生命周期
   web/                     # 06
+  bridge/                  # 01: QQ OneBot 桥接组合根（已落盘，需外部已登录桥接）
 packages/
   contracts/               # 总控维护 schema、类型、端口、错误、事件
   platform/                # 01: mock/, wechat/, qq/；具体桥接待验证

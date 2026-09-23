@@ -21,7 +21,7 @@
 
 | 专项 | 状态 | 首个输入 | 首个可审查输出 | 主要阻塞 |
 | --- | --- | --- | --- | --- |
-| 01 微信与 QQ | In progress | contracts、platform-validation | mock 与 QQ OneBot 协议、HTTP、媒体/来源/恢复原型；87 项离线测试 | D01、真实桥接/本人来源/回执/关机验证、常在线环境、持久端口 |
+| 01 微信与 QQ | In progress | contracts、platform-validation | mock 与 QQ OneBot 协议、归一化、传输鉴权入口、HTTP、媒体/来源/恢复原型；95 项离线测试 | D01、真实桥接/本人来源/回执/关机验证、常在线环境、持久端口 |
 | 02 会话与发送 | In progress | contracts、mock adapter | 内存确认闭环；PG 持久 provider（`0004_orchestration.sql`）、聚合批次与调度 worker（0006）、reject/resume/策略编辑命令 | 自动模式仍保守转确认；真实平台未接；D04 参数未定为生产值 |
 | 03 数据与记忆 | In progress | contracts、迁移基线 | 隔离上下文、导入/媒体/反馈替身；PG 读写 provider、本人管理端口（facts/media/analyses/audit）与受限角色 RLS 负测通过（0002 + `0003_data_scope_fix.sql`） | 媒体私有存储的生产清理、D05 解析器、D07 生命周期 |
 | 04 AI | In progress | context/skill ports、样本 | fake 决策/候选/检查、03 投影适配、媒体失败与分析草案 | 真实模型/样本与 D06/D08/D10/D11；正式解释存储与 provider |

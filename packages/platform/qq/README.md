@@ -1,6 +1,6 @@
 # QQ OneBot 协议基础（离线可测，未连接真实 QQ）
 
-本目录依据公开 OneBot 11 规范独立实现，没有复制 NapCat/NoneBot 代码，没有第三方依赖。不是已完成的个人 QQ 连接器：已有候选 HTTP 发送传输代码，但没有监听端口、真实桥接连接、账号登录或已验证发送。
+本目录依据公开 OneBot 11 规范独立实现，没有复制 NapCat/NoneBot 代码，没有第三方依赖。仍不是已完成的个人 QQ 连接器：协议层、发送传输与新增的归一化/桥接端口都已离线可测，但没有真实桥接连接、账号登录或已验证发送。可运行的入口组合根在 [apps/bridge](../../../apps/bridge/README.md)；它需要运维提供已登录的 OneBot 端点，并记录在 [A16](../../../docs/decisions.md)。
 
 运行全部平台测试：
 
@@ -29,7 +29,7 @@ node --test packages/platform/mock/adapter.test.mts packages/platform/qq/onebot-
 
 finish 失败时返回 `recorded=false`，保留已观察到的 accepted/platformMessageId；03 的提交意图保持未决，02 必须暂停并修复记录，不能当成平台未发送再试。超时后返回的迟到回包当前不自动升级账本，仍需单独 reconcile；平台结果无法查询时保持未知，不静默推断失败。生产 finish 必须单调迁移，处理矛盾回执。
 
-2026-09-23 全套 87 个离线测试通过；claim/finish 的生产原子性、02 锁、跨进程崩溃恢复仍未验证。
+2026-09-24 全套 95 个离线测试通过（新增 wire→公共事件归一化）；claim/finish 的生产原子性、02 锁、跨进程崩溃恢复仍未验证。真实入口组合根与出站接线见 [apps/bridge](../../../apps/bridge/README.md)。
 
 `onebot-http-transport.mts` 仅为候选桥接的出站 HTTP 实现：固定 `POST /send_private_msg`、Bearer token、无重定向/内部重试、限制回包大小。OneBot HTTP 响应本身不保证带 `echo`，此路径由一次 HTTP 请求对应的响应关联；WS 路径仍要求平台回显 `echo`。两种方式都只把有 `message_id` 的成功回包记为桥接受理。传输异常、非 200、超时和回包不合法都保守记为结果未知。此组件需由 02 授权执行器独占，配置在私有网络内；不能直接对外提供发送 API，也未连接过真实 NapCat。
 
