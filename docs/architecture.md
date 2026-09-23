@@ -1,6 +1,6 @@
 # 架构与工程边界
 
-基线：PRD v1.3；契约版本 0.2.0（设计基线，机器类型包尚未建立）。产品待定项只在 [decisions.md](decisions.md) 定稿。当前状态见 [requirements.md](requirements.md)。
+基线：PRD v1.3；契约版本 0.3.0（`packages/contracts` 已提供首批机器类型与 JSON Schema）。产品待定项只在 [decisions.md](decisions.md) 定稿。当前状态见 [requirements.md](requirements.md)。
 
 ## 1. 技术建议
 

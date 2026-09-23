@@ -1,6 +1,6 @@
 # 平台模块：当前仅离线模拟
 
-遵循 docs/contracts.md v0.1.0 的 PlatformPort 语义、六类事件名和发送状态。此目录已有 QQ 候选 HTTP 传输代码，但没有真实微信/QQ 连接、账号登录或平台调用；未安装外部依赖、未保存凭据。公共 schema 包尚未提供，mock/adapter.mts 的类型是模拟器内部投影，不能作为另一个公共契约发布。待 00 采纳字段细节后替换为 packages/contracts 导入。
+遵循 docs/contracts.md v0.3.0 的 PlatformPort 语义、八类事件名和发送状态。此目录已有 QQ 候选 HTTP 传输代码，但没有真实微信/QQ 连接、账号登录或平台调用；未安装外部依赖、未保存凭据。`packages/contracts` v0.3.0 已提供公共机器契约，但本目录尚未切换为导入它；mock/adapter.mts 的类型仍是模拟器内部投影，不能作为另一个公共契约发布。
 
 ## 运行
 

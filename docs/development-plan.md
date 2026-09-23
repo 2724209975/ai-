@@ -1,6 +1,6 @@
 # 开发计划、依赖和验收映射
 
-状态日期：2026-09-23（G0 基线集成中，首个 Git 提交 `c85929e`）。任务状态只有 `Not started / In progress / Blocked / Done`；只有代码、测试与证据满足门槛才可 Done。01–07 均为 `In progress`（05 已启动骨架，D12/D13 未定）。公共契约 v0.3.0、首批机器 schema、全局迁移 `0001`–`0006`、事务/调度端口、本人登录会话和 07 CI/测试基础已落盘。本机隔离 PostgreSQL 17.11 实跑：175 项模块测试、4 项契约检查、5 项真实 PostgreSQL 用例（含 RLS 负测、本人管理 API、聚合与调度恢复）、8 项 E2E（含 390px Chromium、真实登录与真实 HTTP→PostgreSQL→mock 发送浏览器流程）和网页构建通过，0 fail；尚无远端仓库，因此远程 CI 仍未执行；这些结果不计微信/QQ 验收。
+状态日期：2026-09-23（G0 基线集成中，首个 Git 提交 `c85929e`）。任务状态只有 `Not started / In progress / Blocked / Done`；只有代码、测试与证据满足门槛才可 Done。01–07 均为 `In progress`（05 已启动骨架，D12/D13 未定）。公共契约 v0.3.0、首批机器 schema、全局迁移 `0001`–`0006`、事务/调度端口、本人登录会话和 07 CI/测试基础已落盘。本机隔离 PostgreSQL 17.11 实跑：175 项模块测试、4 项契约检查、6 项真实 PostgreSQL 用例（含 RLS 负测、本人管理 API、聚合与调度恢复、04 持久桥接）、8 项 E2E（含 390px Chromium、真实登录与真实 HTTP→PostgreSQL→mock 发送浏览器流程）和网页构建通过，0 fail；尚无远端仓库，因此远程 CI 仍未执行；这些结果不计微信/QQ 验收。
 
 ## 1. 集成顺序与门槛
 
@@ -27,7 +27,7 @@
 | 04 AI | In progress | context/skill ports、样本 | fake 决策/候选/检查、03 投影适配、媒体失败与分析草案 | 真实模型/样本与 D06/D08/D10/D11；正式解释存储与 provider |
 | 05 Skill | In progress | contracts | 版本库/grant/自动选择/单次指定/试用/调用记录的骨架与 03–04 裁剪投影联测 | 生产持久化与 Skill epoch、公共 REST、D12/D13 |
 | 06 手机网页 | In progress | API schemas | 11 个移动页面、同源 `/api/v1` 消费端、口令登录门禁与退出；390px Chromium 与真实登录→HTTP→PostgreSQL→mock 发送 E2E 通过 | 单设备会话撤销、Skill/导入 provider；D02/D03 |
-| 07 集成部署 | In progress | G0 工程 | CI 配置、5 项真实 PG 用例、8 项 E2E、AC42 证据矩阵、测试 Compose 与运行手册；首个 Git 提交已建立 | 远端仓库与首次远程 CI、生产镜像、备份恢复演练、D01/D06–D08 与真实服务器/平台验证 |
+| 07 集成部署 | In progress | G0 工程 | CI 配置、6 项真实 PG 用例、8 项 E2E、AC42 证据矩阵、测试 Compose 与运行手册；首个 Git 提交已建立 | 远端仓库与首次远程 CI、生产镜像、备份恢复演练、D01/D06–D08 与真实服务器/平台验证 |
 
 ## 3. AC01–AC42 主责映射
 
@@ -92,7 +92,7 @@
 
 ## 6. 2026-09-23 下一轮集成顺序
 
-1. **G0 当前状态**：v0.3.0、`packages/contracts` 首批机器 schema、全局迁移 `0001`–`0006`、PostgreSQL 事务/outbox/inbox/发送账本/同步依赖 epoch 底座、02/03 的持久 provider、本人登录会话与 02 调度 worker 均已落盘（首个 Git 提交 `c85929e`）。本机隔离 PostgreSQL 17.11 上的 5 项真实用例（02 确认发送重启恢复、03 provider/RLS、本人管理 API、聚合与调度、07 inbox-outbox/未知发送）通过。G0 仍待远端仓库上的首次远程 CI 与 01 的真实平台 producer 才能关闭；所有模块须导入统一类型，不能沿用互相冲突的局部定义。
+1. **G0 当前状态**：v0.3.0、`packages/contracts` 首批机器 schema、全局迁移 `0001`–`0006`、PostgreSQL 事务/outbox/inbox/发送账本/同步依赖 epoch 底座、02/03 的持久 provider、本人登录会话与 02 调度 worker 均已落盘（首个 Git 提交 `c85929e`）。本机隔离 PostgreSQL 17.11 上的 6 项真实用例（02 确认发送重启恢复、03 provider/RLS、04 PG 持久桥接、本人管理 API、聚合与调度、07 inbox-outbox/未知发送）通过。G0 仍待远端仓库上的首次远程 CI 与 01 的真实平台 producer 才能关闭；所有模块须导入统一类型，不能沿用互相冲突的局部定义。
 2. **07 已启动**：统一 CI、真实 PostgreSQL/HTTP/移动端 mock E2E 和 AC01–AC42 分栏证据矩阵已建立；跨进程重启恢复、口令登录与真实 HTTP→PostgreSQL→mock 发送浏览器流程已在本机通过。剩余门槛是远端仓库与首次远程 CI 实跑、生产部署（镜像/反代/备份恢复演练），G0/G1 因此仍未判完成。
-3. **接通最小 Owner API**：02 提供待办、确认、暂停与发送状态，03 提供受控查询，06 按已批准 REST schema 接入并做旧确认、重复点击、结果未知、部分发送、单人暂停的 mock E2E。`allowedActions` 与最终权限始终由后端计算。
+3. **接通最小 Owner API**：02 提供待办、确认、暂停与发送状态，03 提供受控查询，06 按已批准 REST schema 接入并做旧确认、重复点击、结果未知、部分发送、单人暂停的 mock E2E。`allowedActions` 与最终权限始终由后端计算。本机组合根已跑通：`scripts/dev-seed.mts` 注入一条合成入站文本后，`npm run serve:owner` 生成待办，确认后由 worker 提交到 mock 适配器并写入回执（仍为 mock，不计平台验收）。详见 [本次交付记录](reports/00-control-g1-local-loop-2026-09-23.md)。
 4. **01 真实平台验证并行继续**：QQ 先固定个人账号桥接候选和测试范围，核查独立常在线环境后实测；微信单独找满足现有好友会话的路径。两平台的本人发言、媒体、回执、断线补齐与关机运行分别出报告。模拟通过不解锁真实自动发送。05 可在公共类型稳定后启动版本库和试用骨架，D12/D13 决定后才定正式导入与执行规则。
