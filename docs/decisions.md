@@ -19,6 +19,8 @@
 | A11 | Partial 2026-09-23 | 批准 06 的 G1 最小 Owner REST 路由和通用可操作资源/命令形状；其余提案路由暂不冻结 | 先让 02 待办/确认/暂停与 06 联调，后端重算 `allowedActions`；鉴权、CSRF、03/05 provider 和其他路由完成后再审。前端现有页面不代表后端能力已交付 |
 | A12 | Accepted 2026-09-23 | 采纳 03 修复后的事实 RLS 策略为全局迁移 `0003_data_scope_fix.sql`：把空字符串 `app.contact_id` 视为无 scope，`USING`/`WITH CHECK` 同时收紧；已应用的 `0002_data.sql` 不改写 | 07/03 在隔离 PostgreSQL 17.11 真实复现“提交后无 scope 仍可读 global fact”；修复后受限非 BYPASSRLS 角色的无 scope 读/写负测通过。历史 `0002` 与可重放的泄漏脚本保留作证据；回滚只能发布后续迁移，不能恢复已证明泄漏的策略 |
 | A13 | Accepted 2026-09-23 | 采纳 02 的确认/发送持久化为全局迁移 `0004_orchestration.sql`（`orch_conversations/plans/confirmation_tasks/send_tasks/owner_commands/control_commands`，含组合外键与唯一键）；02 持久 provider 与 03 `PgDataProvider` 共用同一事务和 advisory 发送边界 | 02 的 `schema.proposed.sql` 由该编号取代，不再作为并列真源；真实 PostgreSQL 的文字确认、逐条发送、worker 重启恢复、依赖 epoch 失效与未知发送阻断用例通过。自动模式、鉴权 Owner API、持久调度与真实平台仍未交付 |
+| A14 | Accepted 2026-09-23 | 单人管理端采用「scrypt 口令哈希 + 服务端会话」：口令用 `node:crypto` scrypt（N=2^15、r=8、p=1，参数随哈希存储并在校验时重新限定上界），会话令牌只存 SHA-256；cookie 为 HttpOnly、SameSite=Strict（HTTPS 下 Secure），写操作要求精确 Origin、与会话绑定的 CSRF 令牌与 JSON 请求体，登录按来源限速并永不区分「用户不存在」与「口令错误」 | 不引入第三方依赖即可满足「成熟口令哈希 + HttpOnly 会话 + CSRF/Origin 校验与限速」的既有要求，口令与令牌明文不入库、不入日志。会话暂存私有目录（`SESSION_DIR`，目录 0700/文件 0600/原子写），可整体撤销；升格为编号迁移表、单设备撤销与登录审计仍是后续独立提案 |
+| A15 | Accepted 2026-09-23 | `0005_orchestration_states.sql` 把持久会话状态词汇补齐到 contracts.md §5（只放宽 CHECK，不改写数据）；`0006_orchestration_scheduling.sql` 增加聚合批次列与到期索引，02 由 worker 定时领取到期批次并提交已批准分条 | 聚合窗口默认 0 表示保持即时生成；窗口大于 0 时批次内容与截止时间持久化，进程崩溃后由 `recover()` 补做，模型调用仍在锁外，提交靠 generation CAS，重复 flush 不产生第二个方案。暂停中的联系人只记录来信、不进入聚合 |
 
 ## PRD D01–D13
 

@@ -76,7 +76,7 @@
 ### 基础设施事务端口（总控与 03 实现）
 
 - `AtomicReceptionPort.commitReceived`：在单个 PostgreSQL 事务中写入经认证的原始事件私有引用、平台/账号/会话命名空间去重键及待处理 outbox；持久提交后 01 才向上游确认接收。业务消费者仍在自身事务内用 inbox 去重并保存消息/状态副作用。
-- 全局迁移顺序为 `db/migrations/0001_core.sql`、`0002_data.sql`、`0003_data_scope_fix.sql`、`0004_orchestration.sql`；脚本维护 checksum，已执行的迁移不可修改。0003 收紧事实策略的 scope 判断（空字符串与未设置同义，历史 0002 保留不改写）；0004 落盘 02 的会话、方案、确认任务、发送任务与幂等命令表。`packages/infrastructure/postgres` 的事务和事件/账本函数、03 的 `PgDataProvider` 与 02 的 `PgConfirmedService` 已共用同一事务边界与 `withDispatchLease` 发送租约；鉴权 Owner API、worker 装配、持久调度和真实平台仍未交付，不能据此称生产闭环已可用。
+- 全局迁移顺序为 `db/migrations/0001_core.sql`、`0002_data.sql`、`0003_data_scope_fix.sql`、`0004_orchestration.sql`、`0005_orchestration_states.sql`、`0006_orchestration_scheduling.sql`；脚本维护 checksum，已执行的迁移不可修改。0003 收紧事实策略的 scope 判断（空字符串与未设置同义，历史 0002 保留不改写）；0004 落盘 02 的会话、方案、确认任务、发送任务与幂等命令表；0005 把持久会话状态词汇补齐到本文件 §5（只放宽 CHECK）；0006 增加聚合批次列与到期索引。`packages/infrastructure/postgres` 的事务和事件/账本函数、03 的 `PgDataProvider`/`PgOwnerDataPort` 与 02 的 `PgConfirmedService` 已共用同一事务边界与 `withDispatchLease` 发送租约，02 的调度 worker 拉取到期批次与已批准分条。生产部署、真实平台与部分管理资源仍缺，不能据此称生产闭环已可用。
 - `DispatchJournal.claim`：与 02 的 `withDispatchLease` 协同，按账号/会话/sendTaskId/sendKey/内容摘要唯一约束写入提交意图；`SUBMITTING` 的崩溃或无法证明未提交一律按 `RESULT_UNKNOWN` 恢复。`finish` 单调保存回执；写入失败保留提交意图并暂停核对，不能视作未发。
 - `withDispatchLease` 由 02 实现，绑定服务身份、conversation generation、global pause epoch、policy/事实/分析/技能版本、确认票据、最终内容摘要及截止时间。租约内串行化同会话的提交边界；网络提交后的新事件只阻止后续分条，不能声称撤回已提交内容。01 不能独自签发或延长租约。
 - `ApprovedAssetPort` 由 03 提供私有读取，返回素材 ID、批准版本、允许平台、格式、字节摘要与字节；02 在发送前检查当前批准，01 提交前核对实际字节/摘要/格式。任何不一致拒绝发送。
@@ -85,7 +85,8 @@
 
 - 查询总览、连接状态、联系人与策略、会话、待办、媒体/识别、事实/记忆、分析证据、Skill/调用、导入、审计和故障。
 - 返回的可操作资源包含后端计算的 `allowedActions`、`version`、失效原因；写入使用上述命令，不允许直接 PATCH 数据库字段。
-- 批准 G1 最小 REST 形状：`GET /api/v1/overview`、`GET /api/v1/tasks`（`{items:[...]}`）、`POST /api/v1/tasks/{taskId}/confirm`（`ConfirmPlanCommand`）、`POST /api/v1/control/pause-all`、`POST /api/v1/contacts/{id}/pauseContact`。查询资源必带 `id,version,status,allowedActions`，可带 `reasonCodes,invalidationReason,correlationId`；命令返回 `resultVersion,correlationId,status?`。具体 provider、登录/CSRF、其余路由仍需 02/03/05/07 集成，不能把 06 提案全表当已实现接口。
+- 批准 G1 最小 REST 形状：`GET /api/v1/overview`、`GET /api/v1/tasks`（`{items:[...]}`）、`POST /api/v1/tasks/{taskId}/confirm`（`ConfirmPlanCommand`）、`POST /api/v1/control/pause-all`、`POST /api/v1/contacts/{id}/pauseContact`。查询资源必带 `id,version,status,allowedActions`，可带 `reasonCodes,invalidationReason,correlationId`；命令返回 `resultVersion,correlationId,status?`。
+- 已按 A14 落地的会话端点：`GET /api/v1/session`、`POST /api/v1/session/login`、`POST /api/v1/session/logout`；登录是唯一的未鉴权写操作，仅受精确 Origin 与限速保护。同一路由层已接入的查询与命令还包括 `/conversations`、`/facts`（含 `confirmFact/correctFact/deleteFact`）、`/analyses`（含 `correctAnalysis`）、`/media`（含 `approveAsset/revokeAsset`）、`/audit`、`/tasks/{id}/reject`、`/control/resume-all`、`/contacts/{id}/resumeContact|updatePolicy`。尚无持久 provider 的资源 `/skills`、`/imports`、`/faults` 返回 501 `NOT_IMPLEMENTED`，不得以空列表伪装；05/03 的 Skill 与导入 provider 就绪前不能把 06 提案全表当已实现接口。
 
 ## 4. 事件目录和失效规则
 
