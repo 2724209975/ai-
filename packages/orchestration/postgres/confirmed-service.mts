@@ -1,5 +1,6 @@
-/** PostgreSQL-backed G1 text confirmation path. This service holds mock send authority only. */
-import type { Event, MockPlatformAdapter, SendResult } from '../../platform/mock/adapter.mts';
+/** PostgreSQL-backed confirmation path: text and reviewed media inbound, confirmation, dispatch. */
+import { messageTypes, type MessageType } from '../../contracts/index.mts';
+import type { Event, SendEnvelope, SendResult } from '../../platform/mock/adapter.mts';
 import { PgDataProvider } from '../../data/postgres/provider.mts';
 import { appendOutbox, consumeOnce } from '../../infrastructure/postgres/event-store.mts';
 import { acquireDispatchBoundary, changeContactPause, changeGlobalPause, finishDispatch, recoverAmbiguous, withDispatchLease, type DispatchClaim } from '../../infrastructure/postgres/dispatch-journal.mts';
@@ -14,12 +15,36 @@ type TaskRow = { id: string; plan_id: string; status: string; version: number | 
 type SendRow = { id: string; plan_id: string; reply_part_id: string; sequence: number; send_key: string; content: string; content_sha256: string; status: string; version: number | string; correlation_id: string; receipt: { status: string; platformMessageId: string | null } | null };
 export type PersistentContext = Awaited<ReturnType<PgDataProvider['buildContext']>>;
 export type PersistentIntelligence = { propose(context: PersistentContext, policy: Policy): Promise<Draft>; checkEdited(context: PersistentContext, policy: Policy, parts: readonly { type: 'text'; content: string }[]): Promise<{ allowed: boolean; reasons: string[] }> };
+/** The platform surface 02 needs for dispatch. Mock and the QQ bridge satisfy it structurally;
+ * authorization, the dispatch lease and the send ledger stay inside 02, so no platform
+ * implementation can submit a send on its own. */
+export type DispatchPlatform = {
+  readonly platform: 'wechat' | 'qq';
+  readonly accountId: string;
+  submitSend(envelope: SendEnvelope, authority: object, preflight: (envelope: SendEnvelope) => Promise<boolean>): Promise<{ status: string; receiptLevel?: string; platformMessageId?: string; correlationId?: string }>;
+};
 
 function fail(code: string): never { throw new Error(code); }
 function requireText(value: unknown): asserts value is string { if (typeof value !== 'string' || !value.trim()) fail('VALIDATION_FAILED'); }
 function toMs(value: unknown): number { return value instanceof Date ? value.getTime() : Date.parse(String(value)); }
 function validAlternatives(alternatives: ProposedAlternative[]): boolean {
   return alternatives.length >= 1 && alternatives.length <= 3 && alternatives.every(a => a.key && a.parts.length > 0 && a.parts.every((p, i) => p.key && p.sequence === i + 1 && p.type === 'text' && p.content.trim()));
+}
+
+/** Only live events for this platform account may touch conversation state. */
+function conversationRefOf(event: Event, payload: Record<string, unknown>, accountId: string) {
+  const ref = payload.conversationRef as { accountId: string; conversationId: string; externalContactRef: string } | undefined;
+  if (!ref || event.aggregateId !== ref.conversationId || ref.accountId !== accountId || payload.mode !== 'live') fail('VALIDATION_FAILED');
+  return ref;
+}
+function observedMessageOf(payload: Record<string, unknown>, row: Row, type: MessageType, actor: 'contact' | 'unknown') {
+  return { contactId: row.contact_id, conversationId: row.conversation_id, platformAccountId: row.account_id,
+    platformMessageId: String(payload.platformMessageId), platformEventId: String(payload.platformEventId), actor, type,
+    contentRef: type === 'text' ? String(payload.contentRef) : undefined,
+    mediaId: typeof payload.mediaId === 'string' && payload.mediaId ? payload.mediaId : undefined,
+    quotedMessageId: typeof payload.quotedMessageId === 'string' && payload.quotedMessageId ? payload.quotedMessageId : undefined,
+    sentAt: String(payload.sentAt), receivedAt: String(payload.receivedAt),
+    provenance: payload.provenance as Record<string, unknown> ?? {}, isAgentGenerated: false, mode: 'live' as const };
 }
 
 /** Removing one pause reason never clears the others: every remaining reason keeps the contact paused. */
@@ -38,10 +63,10 @@ function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode
 
 export class PgConfirmedService {
   readonly #pool: PgPool; readonly #data: PgDataProvider; readonly #ai: PersistentIntelligence;
-  readonly #platform: MockPlatformAdapter; readonly #authority: object; readonly #now: () => number;
+  readonly #platform: DispatchPlatform; readonly #authority: object; readonly #now: () => number;
   readonly #aggregationWindowMs: number; readonly #maxAggregationMs: number;
   #recovered = false;
-  constructor(options: { pool: PgPool; data: PgDataProvider; intelligence: PersistentIntelligence; platform: MockPlatformAdapter; authority: object; now?: () => number; aggregationWindowMs?: number; maxAggregationMs?: number }) {
+  constructor(options: { pool: PgPool; data: PgDataProvider; intelligence: PersistentIntelligence; platform: DispatchPlatform; authority: object; now?: () => number; aggregationWindowMs?: number; maxAggregationMs?: number }) {
     this.#pool = options.pool; this.#data = options.data; this.#ai = options.intelligence; this.#platform = options.platform;
     this.#authority = options.authority; this.#now = options.now ?? Date.now;
     this.#aggregationWindowMs = options.aggregationWindowMs ?? 0;
@@ -64,19 +89,23 @@ export class PgConfirmedService {
   }
 
   async ingestPlatformEvent(event: Event): Promise<{ planId: string; taskId: string } | undefined> {
+    if (event.eventType === 'PlatformSelfMessageUnattributed') return this.#handleOwnerOrigin(event);
+    if (event.eventType === 'PlatformMessageMutationObserved') return this.#handleMutation(event);
     if (event.eventType !== 'PlatformInboundObserved') fail('VALIDATION_FAILED');
     const p = event.payload as Record<string, unknown>;
     const ref = p.conversationRef as { accountId: string; conversationId: string; externalContactRef: string } | undefined;
-    if (!ref || event.aggregateId !== ref.conversationId || ref.accountId !== this.#platform.accountId || p.actor !== 'contact' || p.mode !== 'live' || p.type !== 'text') fail('VALIDATION_FAILED');
+    const type = String(p.type ?? '');
+    if (!ref || event.aggregateId !== ref.conversationId || ref.accountId !== this.#platform.accountId || p.actor !== 'contact' || p.mode !== 'live'
+      || !(messageTypes as readonly string[]).includes(type)) fail('VALIDATION_FAILED');
+    // Text must carry content; media stays non-text and is never relabelled as text.
+    if (type === 'text') requireText(p.contentRef);
     const accepted = await withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
       const result = await consumeOnce(tx, '02-confirmed', event.eventId, async () => {
         const row = await this.#conversation(tx, ref.conversationId, true);
         if (!row) return undefined;
         if (row.account_id !== ref.accountId || row.external_contact_ref !== ref.externalContactRef) fail('VALIDATION_FAILED');
-        const saved = await this.#data.appendObservedMessage(tx, { contactId: row.contact_id, conversationId: row.conversation_id, platformAccountId: row.account_id,
-          platformMessageId: String(p.platformMessageId), platformEventId: String(p.platformEventId), actor: 'contact', type: 'text', contentRef: String(p.contentRef),
-          sentAt: String(p.sentAt), receivedAt: String(p.receivedAt), provenance: p.provenance as Record<string, unknown> ?? {}, isAgentGenerated: false, mode: 'live' }, event.correlationId);
+        const saved = await this.#data.appendObservedMessage(tx, observedMessageOf(p, row, type as MessageType, 'contact'), event.correlationId);
         if (saved.duplicate) return undefined;
         const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
         const generation = Number(control.rows[0]?.generation);
@@ -103,6 +132,50 @@ export class PgConfirmedService {
     });
     if (!accepted || !accepted.flush) return;
     return this.#proposeFor(accepted.row, accepted.generation, accepted.messageIds, event.eventId);
+  }
+
+  /** Unattributed self message: never a contact inbound and never a style fact (contracts.md A08).
+   * Pause the contact, invalidate un-sent plans, keep the raw origin for review. Only the owner
+   * resumes the contact; a later origin correction must not silently resume it either. */
+  async #handleOwnerOrigin(event: Event): Promise<undefined> {
+    const p = event.payload as Record<string, unknown>;
+    const ref = conversationRefOf(event, p, this.#platform.accountId);
+    const type = String(p.type ?? '');
+    if (!(messageTypes as readonly string[]).includes(type)) fail('VALIDATION_FAILED');
+    await withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      await consumeOnce(tx, '02-owner-origin', event.eventId, async () => {
+        const row = await this.#conversation(tx, ref.conversationId, true);
+        if (!row) return; // Outside enrollment: raw evidence only, no business effect.
+        if (row.account_id !== ref.accountId || row.external_contact_ref !== ref.externalContactRef) fail('VALIDATION_FAILED');
+        await this.#data.appendObservedMessage(tx, observedMessageOf(p, row, type as MessageType, 'unknown'), event.correlationId);
+        if (row.pause_reasons.includes('OWNER_ORIGIN')) return;
+        await changeContactPause(tx, row.conversation_id, true);
+        await this.#invalidate(tx, row.conversation_id, 'OWNER_ORIGIN');
+        const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
+        await tx.query(`UPDATE orch_conversations SET generation=$2,state='PAUSED_OWNER',pause_reasons=array_append(pause_reasons,'OWNER_ORIGIN'),version=version+1,updated_at=now() WHERE conversation_id=$1`,
+          [row.conversation_id, Number(control.rows[0]?.generation)]);
+      });
+    });
+    return undefined;
+  }
+
+  /** A platform mutation (recall/edit) can invalidate the evidence a pending plan was built on. */
+  async #handleMutation(event: Event): Promise<undefined> {
+    const p = event.payload as Record<string, unknown>;
+    const ref = conversationRefOf(event, p, this.#platform.accountId);
+    await withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      await consumeOnce(tx, '02-mutation', event.eventId, async () => {
+        const row = await this.#conversation(tx, ref.conversationId, true);
+        if (!row) return;
+        if (row.account_id !== ref.accountId || row.external_contact_ref !== ref.externalContactRef) fail('VALIDATION_FAILED');
+        await this.#invalidate(tx, row.conversation_id, 'PLATFORM_MUTATION');
+        const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
+        await tx.query(`UPDATE orch_conversations SET generation=$2,version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, Number(control.rows[0]?.generation)]);
+      });
+    });
+    return undefined;
   }
 
   async #proposeFor(row: Row, generation: number, messageIds: readonly string[], causationId: string): Promise<{ planId: string; taskId: string } | undefined> {
@@ -271,7 +344,7 @@ export class PgConfirmedService {
       await this.#readProjection(tx, current, p);
     }, async () => {
       const observed = await this.#platform.submitSend({ sendTaskId: send.id, sendKey: send.send_key, conversationRef: { accountId: row.account_id, conversationId, externalContactRef: row.external_contact_ref }, partType: 'text', content: send.content, deadline: new Date(this.#now() + 30_000).toISOString(), mode: 'live', correlationId: send.correlation_id }, this.#authority, async () => true);
-      return { status: observed.status as 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE' | 'RESULT_UNKNOWN', platformMessageId: observed.platformMessageId, receiptLevel: observed.receiptLevel, evidenceRef: observed.status === 'FAILED_DEFINITE' ? `mock:${observed.correlationId}` : undefined };
+      return { status: observed.status as 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE' | 'RESULT_UNKNOWN', platformMessageId: observed.platformMessageId, receiptLevel: observed.receiptLevel, evidenceRef: observed.status === 'FAILED_DEFINITE' ? `${this.#platform.platform}:${observed.correlationId ?? send.correlation_id}` : undefined };
     });
     await withTransaction(this.#pool, async tx => { await acquireDispatchBoundary(tx); await this.#recordSendResult(tx, send.id, result.status, result.platformMessageId ?? null); });
     return { id: send.id, status: result.status };
@@ -286,7 +359,7 @@ export class PgConfirmedService {
         const send = await tx.query<SendRow>('SELECT * FROM orch_send_tasks WHERE id=$1 AND send_key=$2 FOR UPDATE', [receipt.sendTaskId, receipt.sendKey]);
         if (!send.rows[0]) return;
         if (!['SUBMITTED','DELIVERED','FAILED_DEFINITE','RESULT_UNKNOWN'].includes(receipt.status)) fail('VALIDATION_FAILED');
-        await finishDispatch(tx, receipt.sendKey, { status: receipt.status as 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE' | 'RESULT_UNKNOWN', platformMessageId: receipt.platformMessageId, receiptLevel: receipt.receiptLevel, evidenceRef: receipt.status === 'FAILED_DEFINITE' ? `mock:${receipt.correlationId}` : undefined });
+        await finishDispatch(tx, receipt.sendKey, { status: receipt.status as 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE' | 'RESULT_UNKNOWN', platformMessageId: receipt.platformMessageId, receiptLevel: receipt.receiptLevel, evidenceRef: receipt.status === 'FAILED_DEFINITE' ? `${this.#platform.platform}:${receipt.correlationId}` : undefined });
         await this.#recordSendResult(tx, send.rows[0].id, receipt.status, receipt.platformMessageId ?? null);
       });
     });

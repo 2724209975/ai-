@@ -12,6 +12,7 @@
     "build:web": "npm --prefix apps/web run build",
     "owner:password": "node scripts/owner-password.mts",
     "serve:owner": "node apps/web/server/main.mts",
+    "serve:bridge": "node apps/bridge/main.mts",
     "verify": "npm run test:unit && npm run test:contracts && npm run test:integration && npm run build:web && npm run test:e2e"
   },
   "dependencies": { "pg": "^8.16.3" },

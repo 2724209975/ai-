@@ -1,0 +1,173 @@
+/** Real PostgreSQL + a fake OneBot endpoint: the whole QQ bridge path, without any real account.
+ * Proves enrollment gating, transport authentication, atomic raw reception, 02 authorization and
+ * the outbound OneBot request shape. It is NOT platform verification: no QQ account is involved. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { applyMigrations } from '../../packages/infrastructure/postgres/migrate.mts';
+import { changeGlobalPause } from '../../packages/infrastructure/postgres/dispatch-journal.mts';
+import { withTransaction, setContactScope } from '../../packages/infrastructure/postgres/transaction.mts';
+import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
+import { OneBotHttpTransport } from '../../packages/platform/qq/onebot-http-transport.mts';
+import { newId } from '../../packages/orchestration/postgres/ids.mts';
+import { contentHash } from '../../packages/orchestration/conversations/engine.mts';
+import { createQqBridge } from '../../apps/bridge/bridge.mts';
+
+const databaseUrl = process.env.TEST_DATABASE_URL;
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const TOKEN = 'fixture-bridge-token';
+const SELF_ID = '10001';
+
+function listen(server: Server): Promise<number> {
+  return new Promise((ready, failed) => {
+    server.once('error', failed);
+    server.listen(0, '127.0.0.1', () => { server.off('error', failed); const address = server.address(); ready(typeof address === 'object' && address ? address.port : 0); });
+  });
+}
+async function close(server: Server): Promise<void> {
+  await new Promise<void>(done => server.close(() => done()));
+  server.closeAllConnections?.();
+}
+/** A OneBot-shaped private message event, exactly what a bridge would push. */
+function oneBotEvent(text: string, messageId: number, userId = 20002) {
+  return JSON.stringify({ post_type: 'message', message_type: 'private', sub_type: 'friend', self_id: Number(SELF_ID),
+    user_id: userId, message_id: messageId, time: Math.floor(Date.now() / 1000), message: [{ type: 'text', data: { text } }] });
+}
+
+async function setup() {
+  if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required in CI');
+  const { Client, Pool } = await import('pg');
+  const schema = `test_bridge_${randomBytes(8).toString('hex')}`;
+  const admin = new Client({ connectionString: databaseUrl }); await admin.connect();
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  await admin.query(`SET search_path TO ${schema}`);
+  await applyMigrations(admin, resolve(root, 'db/migrations'));
+  // One schema per test file, and the integration suite runs files in parallel: keep the pool small.
+  const pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 2 });
+  const contactId = newId(), conversationId = newId(), accountId = newId();
+  const at = new Date().toISOString();
+  await withTransaction(pool, async tx => {
+    await setContactScope(tx, contactId);
+    await tx.query(`INSERT INTO data_contacts(id,conversation_id,platform_account_id,external_contact_ref,display_name,enrollment_status,version,created_at,updated_at)
+      VALUES($1,$2,$3,'20002','合成联系人','enrolled',1,$4,$4)`, [contactId, conversationId, accountId, at]);
+    await changeGlobalPause(tx, false);
+  });
+
+  const received: { path: string; authorization?: string; body: Record<string, unknown> }[] = [];
+  let outcome: 'ok' | 'failed' = 'ok';
+  const onebot = createServer((request, response) => {
+    let text = '';
+    request.on('data', chunk => { text += chunk.toString(); });
+    request.on('end', () => {
+      received.push({ path: request.url ?? '', authorization: request.headers.authorization, body: JSON.parse(text) as Record<string, unknown> });
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(outcome === 'ok' ? { status: 'ok', retcode: 0, data: { message_id: 90001 } } : { status: 'failed', retcode: 1200, data: null }));
+    });
+  });
+  const onebotPort = await listen(onebot);
+  const rawRoot = await mkdtemp(join(tmpdir(), 'qq-bridge-raw-'));
+  const bridge = createQqBridge({
+    pool, accountId, selfId: SELF_ID, bridgeToken: TOKEN, rawStore: createFileRawEventStore(rawRoot),
+    transport: new OneBotHttpTransport({ baseUrl: `http://127.0.0.1:${onebotPort}/`, accessToken: TOKEN }),
+    workerIntervalMs: 600_000, onError: () => {},
+  });
+  await bridge.start();
+  await bridge.service.enrollContact({ contactId, conversationId, accountId, externalContactRef: '20002', timezone: 'Asia/Shanghai', goal: '了解对方' });
+  const bridgePort = await listen(bridge.server);
+  const base = `http://127.0.0.1:${bridgePort}`;
+  const post = (body: string, authorization = `Bearer ${TOKEN}`) =>
+    fetch(`${base}/onebot/event`, { method: 'POST', headers: { authorization, 'content-type': 'application/json' }, body });
+  const conversation = async () => (await pool.query<{ state: string; pause_reasons: string[] }>('SELECT state,pause_reasons FROM orch_conversations')).rows[0]!;
+
+  return {
+    pool, admin, schema, bridge, received, conversation, contactId, conversationId, accountId, rawRoot, post,
+    setOutcome(value: 'ok' | 'failed') { outcome = value; },
+    async cleanup() {
+      await close(bridge.server);
+      await close(onebot);
+      await pool.end();
+      await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      await admin.end();
+      await rm(rawRoot, { recursive: true, force: true });
+    },
+  };
+}
+
+test('real PostgreSQL + fake OneBot: push in, confirm, authorized send out', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    // 1. Transport authentication and the enrollment gate.
+    assert.equal((await fixture.post(oneBotEvent('你好', 30003), 'Bearer wrong-token')).status, 401);
+    assert.equal((await fixture.post(oneBotEvent('你好', 30003))).status, 204);
+
+    // 2. The original bytes are kept privately and the inbox row records the dedupe key.
+    const inbox = await fixture.pool.query<{ payload_ref: string; payload_sha256: string }>('SELECT payload_ref,payload_sha256 FROM platform_inbox_raw');
+    assert.equal(inbox.rows.length, 1, 'exactly one raw inbox row for the accepted event');
+    const storedBytes = await readFile(join(fixture.rawRoot, inbox.rows[0]!.payload_ref), 'utf8');
+    assert.equal((JSON.parse(storedBytes) as { message_id: number }).message_id, 30003);
+
+    // 3. 02 produced a real pending confirmation from the contact message.
+    const tasks = await fixture.bridge.service.ownerTasks();
+    assert.equal(tasks.items.length, 1, 'the enrolled contact produced one confirmation task');
+    const task = tasks.items[0]!;
+    assert.equal(task.triggerMessages[0]?.text, '你好');
+    assert.deepEqual(task.allowedActions, ['confirmPlan', 'rejectPlan']);
+    assert.equal((await fixture.bridge.service.ownerOverview()).pendingCount, 1);
+
+    // 4. Duplicate delivery is deduplicated before any business effect.
+    assert.equal((await fixture.post(oneBotEvent('你好', 30003))).status, 204);
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1, 'a duplicate delivery must not create a second task');
+
+    // 5. An unenrolled peer keeps only raw discovery evidence: no task, no send.
+    assert.equal((await fixture.post(oneBotEvent('陌生人消息', 30099, 20999))).status, 204);
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1, 'an unenrolled peer must not produce a task');
+    const unmapped = await fixture.pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM platform_inbox_raw WHERE conversation_id LIKE 'unmapped:%'`);
+    assert.equal(unmapped.rows[0]?.n, '1');
+
+    // 6. Confirmation, then the worker submits through 02's dispatch lease.
+    const edited = [{ type: 'text' as const, content: '在的，刚忙完' }];
+    await fixture.bridge.service.confirmTask(task.id, { taskVersion: task.taskVersion, planVersion: task.planVersion,
+      alternativeId: task.alternatives[0]!.alternativeId, editedParts: edited, contentHash: contentHash(edited), idempotencyKey: randomUUID() });
+    const tick = await fixture.bridge.worker.runOnce();
+    assert.equal(tick.dispatched, 1, 'the worker submits exactly one approved part');
+
+    // 7. The bridge received exactly one authorized OneBot request with the edited text.
+    assert.equal(fixture.received.length, 1, 'exactly one OneBot request left the bridge');
+    assert.equal(fixture.received[0]!.path, '/send_private_msg');
+    assert.equal(fixture.received[0]!.authorization, `Bearer ${TOKEN}`);
+    // OneBot's HTTP API takes the parameters as the POST body itself, with no envelope.
+    const params = fixture.received[0]!.body as { user_id: string; message: { type: string; data: { text: string } }[] };
+    assert.equal(params.user_id, '20002');
+    assert.deepEqual(params.message, [{ type: 'text', data: { text: '在的，刚忙完' } }]);
+
+    // 8. The ledger records accepted, not delivered: a bridge reply is not delivery proof.
+    const after = (await fixture.bridge.service.ownerTasks()).items[0]!;
+    assert.equal(after.sends[0]?.status, 'SUBMITTED');
+    assert.equal(after.sends[0]?.receiptLevel, 'accepted');
+    assert.equal(after.sends[0]?.platformMessageId, '90001');
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test('real PostgreSQL + fake OneBot: a media message pauses instead of being guessed at', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    const image = JSON.stringify({ post_type: 'message', message_type: 'private', sub_type: 'friend', self_id: Number(SELF_ID),
+      user_id: 20002, message_id: 40004, time: Math.floor(Date.now() / 1000), message: [{ type: 'image', data: { file: 'cdn://opaque' } }] });
+    assert.equal((await fixture.post(image)).status, 204);
+    const row = await fixture.conversation();
+    assert.equal(row.state, 'PAUSED_MEDIA');
+    assert.deepEqual(row.pause_reasons, ['MEDIA_UNCERTAIN']);
+    // No candidate was produced and nothing was sent.
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 0);
+    assert.equal(fixture.received.length, 0);
+  } finally {
+    await fixture.cleanup();
+  }
+});
