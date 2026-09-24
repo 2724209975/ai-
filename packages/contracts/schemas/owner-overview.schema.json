@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-chat-agent.invalid/schemas/owner-overview.schema.json",
+  "title": "Owner overview projection",
+  "description": "Read-only owner projection (contracts.md §3). The query-status fields are optional for compatibility, but a missing status means unavailable: an empty connections or faults array must never be read as 'connected' or 'no faults'.",
+  "type": "object",
+  "required": ["id", "version", "status", "globalPaused", "allowedActions", "pendingCount", "unknownSendCount"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 0 },
+    "status": { "type": "string", "enum": ["ACTIVE", "PAUSED"] },
+    "globalPaused": { "type": "boolean" },
+    "allowedActions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "pendingCount": { "type": "integer", "minimum": 0 },
+    "unknownSendCount": { "type": "integer", "minimum": 0 },
+    "connectionQueryStatus": { "$ref": "#/$defs/queryStatus" },
+    "faultQueryStatus": { "$ref": "#/$defs/queryStatus" },
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["accountId", "platform", "connectionState"],
+        "properties": {
+          "accountId": { "type": "string", "minLength": 1 },
+          "platform": { "type": "string", "enum": ["wechat", "qq"] },
+          "connectionState": { "$ref": "#/$defs/connectionState" },
+          "capabilitySnapshotId": { "type": "string", "minLength": 1 },
+          "verificationStatus": { "type": "string", "enum": ["documented", "tested", "unsupported", "unknown"] },
+          "lastReconciledAt": { "type": "string", "format": "date-time" },
+          "limitations": { "type": "array", "items": { "type": "string" } },
+          "recovery": {
+            "type": "object",
+            "required": ["status", "historyComplete"],
+            "properties": {
+              "status": { "type": "string", "enum": ["complete", "partial", "none", "unknown"] },
+              "historyComplete": { "type": "boolean", "description": "Only true with real continuous-coverage evidence from 01." },
+              "unresolvedSendCount": { "type": "integer", "minimum": 0, "description": "Controlled aggregate of 01's RecoveryReport.unresolvedSends only." },
+              "gaps": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "summary"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "queryStatus": { "type": "string", "enum": ["ready", "unavailable"] },
+    "connectionState": { "type": "string", "enum": ["disconnected", "connecting", "relogin_required", "reconciling", "connected", "degraded"] }
+  }
+}
