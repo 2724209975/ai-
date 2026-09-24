@@ -58,9 +58,18 @@ export function createQqBridge(options: QqBridgeOptions) {
   const report = options.onError ?? ((_error: unknown, phase: string) => process.stderr.write(`bridge ${phase}\n`));
   const authority = {};
   const platform = createQqPlatformPort({ accountId: options.accountId, transport: options.transport, authority, now });
+  // A send that is not SUBMITTED must say why; otherwise a real spike can only report "unknown".
+  const reportingPlatform = {
+    platform: platform.platform, accountId: platform.accountId,
+    async submitSend(...args: Parameters<typeof platform.submitSend>) {
+      const outcome = await platform.submitSend(...args);
+      if (outcome.status !== 'SUBMITTED') report(new Error(outcome.reason ?? outcome.status), `send-${outcome.status}`);
+      return outcome;
+    },
+  };
   const data = new PgDataProvider();
   const service = new PgConfirmedService({
-    pool: options.pool, data, intelligence: createPgPersistentFakeIntelligence({ pool: options.pool, data }), platform, authority, now,
+    pool: options.pool, data, intelligence: createPgPersistentFakeIntelligence({ pool: options.pool, data }), platform: reportingPlatform, authority, now,
     aggregationWindowMs: options.aggregationWindowMs ?? 0, maxAggregationMs: options.maxAggregationMs ?? 30_000,
   });
   const reception = createPgReceptionPort({
@@ -93,7 +102,7 @@ export function createQqBridge(options: QqBridgeOptions) {
     const url = new URL(request.url ?? '/', 'http://localhost');
     // Spike evidence needs the request outcome, including the early refusals: without this an
     // unauthorised push is indistinguishable from "the platform never sent anything". Only the
-    // path and the auth *scheme* are recorded - never a token or a query string.
+    // known route label and auth *scheme* are recorded - never an attacker-supplied path or token.
     const authScheme = (() => {
       if (request.headers['x-signature'] !== undefined) return 'signature';
       const raw = request.headers.authorization;
@@ -101,8 +110,9 @@ export function createQqBridge(options: QqBridgeOptions) {
       return /^bearer /i.test(raw) ? 'bearer' : 'other';
     })();
     const record = (status: number, detail?: string): void => {
+      const route = url.pathname === '/onebot/event' ? 'onebot-event' : url.pathname === '/healthz' ? 'healthz' : 'other';
       report(new Error(detail ?? String(status)),
-        `ingress ${request.method ?? '?'} ${url.pathname} -> ${status}${detail ? ` code=${detail}` : ''} auth=${authScheme}`);
+        `ingress ${request.method ?? '?'} ${route} -> ${status}${detail ? ` code=${detail}` : ''} auth=${authScheme}`);
     };
     if (request.method === 'GET' && url.pathname === '/healthz') {
       response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });

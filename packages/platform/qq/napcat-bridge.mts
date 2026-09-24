@@ -19,6 +19,8 @@ export type QqSendOutcome = {
   status: 'SUBMITTED' | 'FAILED_DEFINITE' | 'RESULT_UNKNOWN';
   receiptLevel: 'accepted' | 'unknown';
   platformMessageId?: string; correlationId: string;
+  /** Why the bridge could not confirm: the transport/decoder reason, for the operator's record. */
+  reason?: string;
 };
 
 export type QqPlatformPort = {
@@ -77,8 +79,10 @@ export function createQqPlatformPort(options: {
             .catch(() => null),
           timeout,
         ]);
-        if (!observed) return { status: 'RESULT_UNKNOWN', receiptLevel: 'unknown', correlationId: envelope.correlationId };
-        return { status: observed.status, receiptLevel: observed.receiptLevel, platformMessageId: observed.platformMessageId, correlationId: envelope.correlationId };
+        // Never a silent unknown: carry the decoder/transport reason so the spike log can say why.
+        if (!observed) return { status: 'RESULT_UNKNOWN', receiptLevel: 'unknown', correlationId: envelope.correlationId, reason: 'TRANSPORT_TIMEOUT_OR_ERROR' };
+        return { status: observed.status, receiptLevel: observed.receiptLevel, platformMessageId: observed.platformMessageId,
+          correlationId: envelope.correlationId, reason: observed.reason };
       } finally {
         if (timer) clearTimeout(timer);
       }

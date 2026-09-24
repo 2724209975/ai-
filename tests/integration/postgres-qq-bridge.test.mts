@@ -12,13 +12,13 @@ import { fileURLToPath } from 'node:url';
 import { applyMigrations } from '../../packages/infrastructure/postgres/migrate.mts';
 import { changeGlobalPause } from '../../packages/infrastructure/postgres/dispatch-journal.mts';
 import { withTransaction, setContactScope } from '../../packages/infrastructure/postgres/transaction.mts';
-import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
-import { createPgReceptionPort } from '../../packages/infrastructure/postgres/reception.mts';
+import { auditRawEventFiles, createFileRawEventStore, createPgReceptionPort } from '../../packages/infrastructure/postgres/reception.mts';
 import { decodePrivateEvent } from '../../packages/platform/qq/onebot-codec.mts';
 import { OneBotHttpTransport } from '../../packages/platform/qq/onebot-http-transport.mts';
 import { newId } from '../../packages/orchestration/postgres/ids.mts';
 import { contentHash } from '../../packages/orchestration/conversations/engine.mts';
 import { createQqBridge } from '../../apps/bridge/bridge.mts';
+import { createQqOutboxPump } from '../../apps/bridge/outbox-pump.mts';
 import { collectSpikeEvidence } from '../../packages/platform/qq/spike-evidence.mts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -95,6 +95,7 @@ async function setup() {
     pool, admin, schema, bridge, received, conversation, contactId, conversationId, accountId, rawRoot, onebotPort, base, post, failures,
     setOutcome(value: 'ok' | 'failed' | 'disconnect') { outcome = value; },
     async cleanup() {
+      await bridge.outbox.stop();
       await close(bridge.server);
       await close(onebot);
       await pool.end();
@@ -202,13 +203,60 @@ test('real PostgreSQL + fake OneBot: committed outbox survives consumer crash an
     assert.equal(pending.rows.length, 1);
     assert.equal(pending.rows[0]!.published_at, null, 'the failed consumer must leave durable outbox pending');
     assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 0, 'business handling did not complete before the crash');
-    assert.equal(await fixture.bridge.outbox.tick(), 1, 'a restarted pump must replay the committed event');
+    const secondPump = createQqOutboxPump({ pool: fixture.pool, accountId: fixture.accountId,
+      onEvent: event => fixture.bridge.service.ingestPlatformEvent(event) });
+    const delivered = await Promise.all([fixture.bridge.outbox.tick(), secondPump.tick()]);
+    assert.equal(delivered.reduce((sum, value) => sum + value, 0), 1,
+      'two concurrent pumps must claim the committed event once');
     assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1);
     assert.ok((await fixture.pool.query('SELECT published_at FROM event_outbox WHERE id=$1', [pending.rows[0]!.id])).rows[0]?.published_at);
     assert.equal(await reception.commitReceived({ dedupeKey: observation.dedupeKey, rawBytes: bytes, observation }), 'duplicate');
     assert.equal(await fixture.bridge.outbox.tick(), 0);
     assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1, 'duplicate webhook and replay must not create another task');
     assert.equal(fixture.received.length, 0, 'reception and replay cannot submit a send without 02 confirmation');
+  } finally { await fixture.cleanup(); }
+});
+
+test('real PostgreSQL + fake OneBot: unmapped self pauses account and discovery keeps metadata only', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    const discovery = oneBotEvent('未登记联系人的私密正文', 45001, 29999);
+    assert.equal((await fixture.post(discovery)).status, 204);
+    const outside = await fixture.pool.query<{ payload_ref: string }>("SELECT payload_ref FROM platform_inbox_raw WHERE conversation_id='unmapped:29999'");
+    assert.equal(outside.rows[0]?.payload_ref, 'discovery:metadata-only');
+    assert.equal((await auditRawEventFiles(fixture.rawRoot, fixture.pool, fixture.accountId)).files, 0);
+
+    const self = JSON.stringify({ post_type: 'message_sent', message_type: 'private', sub_type: 'friend',
+      self_id: Number(SELF_ID), user_id: Number(SELF_ID), target_id: 20002, message_id: 45002,
+      time: Math.floor(Date.now() / 1000), message: [{ type: 'text', data: { text: '身份无法核实' } }] });
+    assert.equal((await fixture.post(self)).status, 204, 'authenticated but unmapped self event must not be discarded');
+    const unknown = await fixture.pool.query<{ payload_ref: string; conversation_id: string }>("SELECT payload_ref,conversation_id FROM platform_inbox_raw WHERE conversation_id='unmapped:self'");
+    assert.equal(unknown.rows.length, 1);
+    assert.notEqual(unknown.rows[0]!.payload_ref, 'discovery:metadata-only');
+    assert.equal((await readFile(join(fixture.rawRoot, unknown.rows[0]!.payload_ref), 'utf8')), self);
+    const paused = await fixture.conversation();
+    assert.ok(paused.pause_reasons.includes('OWNER_ORIGIN_UNMAPPED'));
+    assert.equal((await fixture.pool.query('SELECT paused FROM dispatch_control')).rows[0]?.paused, true);
+    assert.equal((await fixture.post(self)).status, 204);
+    assert.equal((await fixture.pool.query("SELECT count(*)::int AS n FROM platform_inbox_raw WHERE conversation_id='unmapped:self'")).rows[0]?.n, 1);
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 0);
+    assert.equal(fixture.received.length, 0);
+    assert.deepEqual((await auditRawEventFiles(fixture.rawRoot, fixture.pool, fixture.accountId)).unreferenced, []);
+  } finally { await fixture.cleanup(); }
+});
+
+test('real PostgreSQL + fake OneBot: conflicting replay cannot leave an orphan raw file', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    assert.equal((await fixture.post(oneBotEvent('原始正文', 46001))).status, 204);
+    const before = await auditRawEventFiles(fixture.rawRoot, fixture.pool, fixture.accountId);
+    assert.equal(before.files, 1);
+    assert.deepEqual(before.unreferenced, []);
+    assert.equal((await fixture.post(oneBotEvent('同一键不同正文', 46001))).status, 409);
+    const after = await auditRawEventFiles(fixture.rawRoot, fixture.pool, fixture.accountId);
+    assert.equal(after.files, 1, 'conflicting bytes must be rejected before another raw file is written');
+    assert.deepEqual(after.unreferenced, []);
+    assert.equal((await fixture.pool.query('SELECT count(*)::int AS n FROM platform_inbox_raw')).rows[0]?.n, 1);
   } finally { await fixture.cleanup(); }
 });
 
@@ -257,6 +305,7 @@ test('real PostgreSQL + fake OneBot: mixed body is retained as unsupported and p
 
 test('real PostgreSQL + fake OneBot: transport disconnect leaves unknown and restart does not resend', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
   const fixture = await setup();
+  let restarted: ReturnType<typeof createQqBridge> | undefined;
   try {
     assert.equal((await fixture.post(oneBotEvent('请回复', 60001))).status, 204);
     const task = (await fixture.bridge.service.ownerTasks()).items[0]!;
@@ -270,8 +319,11 @@ test('real PostgreSQL + fake OneBot: transport disconnect leaves unknown and res
     const after = (await fixture.bridge.service.ownerTasks()).items[0]!;
     assert.equal(after.sends[0]?.status, 'RESULT_UNKNOWN');
     assert.equal((await fixture.pool.query('SELECT status FROM dispatch_attempts')).rows[0]?.status, 'RESULT_UNKNOWN');
+    // An unknown send must carry its reason, otherwise a real spike can only report "unknown".
+    assert.ok(fixture.failures.some(entry => entry.includes('send-RESULT_UNKNOWN')),
+      `the send failure reason must be recorded: ${fixture.failures.join(' | ')}`);
 
-    const restarted = createQqBridge({ pool: fixture.pool, accountId: fixture.accountId, selfId: SELF_ID, bridgeToken: TOKEN,
+    restarted = createQqBridge({ pool: fixture.pool, accountId: fixture.accountId, selfId: SELF_ID, bridgeToken: TOKEN,
       rawStore: createFileRawEventStore(fixture.rawRoot),
       transport: new OneBotHttpTransport({ baseUrl: `http://127.0.0.1:${fixture.onebotPort}/`, accessToken: TOKEN }),
       workerIntervalMs: 600_000, outboxIntervalMs: 600_000, onError: () => {} });
@@ -280,7 +332,7 @@ test('real PostgreSQL + fake OneBot: transport disconnect leaves unknown and res
     assert.equal((await restarted.worker.runOnce()).dispatched, 0);
     assert.equal(fixture.received.length, 1, 'recovery must not submit a second OneBot request');
     assert.equal((await restarted.service.ownerTasks()).items[0]?.sends[0]?.status, 'RESULT_UNKNOWN');
-  } finally { await fixture.cleanup(); }
+  } finally { await restarted?.outbox.stop(); await fixture.cleanup(); }
 });
 
 test('real PostgreSQL + fake OneBot: a media message pauses instead of being guessed at', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
@@ -380,5 +432,24 @@ test('real PostgreSQL + fake OneBot: a signed push is accepted and a tampered on
 
     const rows = await fixture.pool.query<{ n: string }>('SELECT count(*)::text AS n FROM platform_inbox_raw');
     assert.equal(rows.rows[0]?.n, '1', 'only the correctly signed delivery is recorded, once');
+  } finally { await fixture.cleanup(); }
+});
+
+/** QQ reports message times in whole seconds, so a platform timestamp can lead our own clock by up
+ * to a second. Using only "now" as the decision cutoff made buildContext reject the trigger message
+ * as NOT_FOUND, which surfaced as HTTP 503 and produced no candidate at all. */
+test('real PostgreSQL + fake OneBot: a platform time slightly ahead of our clock still yields a candidate', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    const ahead = Math.floor(Date.now() / 1000) + 3;
+    const body = JSON.stringify({ post_type: 'message', message_type: 'private', sub_type: 'friend', self_id: Number(SELF_ID),
+      user_id: 20002, message_id: 71001, time: ahead, message: [{ type: 'text', data: { text: '未来时间戳' } }] });
+    const accepted = await fixture.post(body);
+    assert.equal(accepted.status, 204, `push must be accepted: ${fixture.failures.join(' | ')}`);
+    assert.equal((await fixture.pool.query('SELECT sent_at FROM data_messages')).rows.length, 1, 'the message keeps the platform timestamp');
+    const tasks = await fixture.bridge.service.ownerTasks();
+    assert.equal(tasks.items.length, 1, `a candidate must exist even when the platform clock leads ours: ${fixture.failures.join(' | ')}`);
+    assert.ok((tasks.items[0]?.allowedActions ?? []).includes('confirmPlan'));
+    assert.equal(fixture.received.length, 0, 'receiving a candidate must not send anything');
   } finally { await fixture.cleanup(); }
 });

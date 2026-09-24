@@ -163,6 +163,35 @@ export class PgConfirmedService {
     return this.#proposeFor(accepted.row, accepted.generation, accepted.messageIds, event.eventId);
   }
 
+  /** 05 has already raised skill_epoch in its command transaction. Make stale Owner tasks
+   * visibly invalid as soon as the durable event is delivered, including after a restart. */
+  async consumeSkillEvent(event: Event): Promise<undefined> {
+    if (event.eventType !== 'SkillVersionChanged' && event.eventType !== 'GrantChanged') fail('VALIDATION_FAILED');
+    const payload = event.payload as Record<string, unknown>;
+    const skillId = payload.skillId;
+    const version = event.eventType === 'SkillVersionChanged' ? payload.newVersion : payload.grantVersion;
+    const contactId = event.eventType === 'GrantChanged' ? payload.contactId : undefined;
+    if (event.eventVersion !== 1 || !UUID_PATTERN.test(String(skillId)) || event.aggregateId !== skillId ||
+      !Number.isSafeInteger(version) || Number(version) < 1 ||
+      (contactId !== undefined && !UUID_PATTERN.test(String(contactId))) ||
+      (event.eventType === 'GrantChanged' && contactId === undefined)) fail('VALIDATION_FAILED');
+    await withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      await consumeOnce(tx, '02-skill', event.eventId, async () => {
+        const rows = await tx.query<{ conversation_id: string; skill_epoch: string | number }>(`SELECT c.conversation_id,dc.skill_epoch FROM orch_conversations c
+          JOIN dispatch_control dc ON dc.conversation_id=c.conversation_id
+          WHERE ($1::uuid IS NULL OR c.contact_id=$1::uuid)
+            AND EXISTS (SELECT 1 FROM orch_plans p WHERE p.conversation_id=c.conversation_id
+              AND p.status IN ('AWAITING_CONFIRMATION','APPROVED','PARTIALLY_SENT')
+              AND p.skill_epoch<dc.skill_epoch)
+          ORDER BY c.conversation_id FOR UPDATE OF c`, [contactId ?? null]);
+        const reason = event.eventType === 'SkillVersionChanged' ? 'SKILL_VERSION_CHANGED' : 'GRANT_CHANGED';
+        for (const row of rows.rows) await this.#invalidate(tx, row.conversation_id, reason, Number(row.skill_epoch));
+      });
+    });
+    return undefined;
+  }
+
   /** Unattributed self message: never a contact inbound and never a style fact (contracts.md A08).
    * Pause the contact, invalidate un-sent plans, keep the raw origin for review. Only the owner
    * resumes the contact; a later origin correction must not silently resume it either. */
@@ -212,16 +241,11 @@ export class PgConfirmedService {
           mutation: mutation as 'recall' | 'edit', rawEventRef, receivedAt: String(p.receivedAt),
         }, event.correlationId);
         await this.#invalidate(tx, row.conversation_id, outcome.status === 'unmatched' ? 'PLATFORM_MUTATION_UNVERIFIED' : 'PLATFORM_MUTATION');
-        const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
-        const generation = Number(control.rows[0]?.generation);
         // Applied or not, the old evidence is no longer trustworthy: pause until the owner reviews.
         // Nothing here ever resumes the contact automatically.
-        if (row.pause_reasons.includes('PLATFORM_MUTATION_UNVERIFIED')) {
-          await tx.query(`UPDATE orch_conversations SET generation=$2,version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation]);
-        } else {
-          await changeContactPause(tx, row.conversation_id, true);
-          await tx.query(`UPDATE orch_conversations SET generation=$2,state='PAUSED_FAILURE',pause_reasons=array_append(pause_reasons,'PLATFORM_MUTATION_UNVERIFIED'),version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation]);
-        }
+        if (!row.pause_reasons.includes('PLATFORM_MUTATION_UNVERIFIED')) await changeContactPause(tx, row.conversation_id, true);
+        const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
+        await tx.query(`UPDATE orch_conversations SET generation=$2,state='PAUSED_FAILURE',pause_reasons=CASE WHEN 'PLATFORM_MUTATION_UNVERIFIED'=ANY(pause_reasons) THEN pause_reasons ELSE array_append(pause_reasons,'PLATFORM_MUTATION_UNVERIFIED') END,collection_started_at=NULL,collection_due_at=NULL,collection_message_ids='{}'::uuid[],version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, Number(control.rows[0]?.generation)]);
       });
     });
     return undefined;
@@ -230,7 +254,17 @@ export class PgConfirmedService {
   async #proposeFor(row: Row, generation: number, messageIds: readonly string[], causationId: string): Promise<{ planId: string; taskId: string } | undefined> {
     const messageId = messageIds.at(-1);
     if (!messageId) fail('VALIDATION_FAILED');
-    const projection = await withTransaction(this.#pool, tx => this.#data.buildContext(tx, { callerContactId: row.contact_id, contactId: row.contact_id, generation, policyVersion: Number(row.policy_version), allowedScopes: row.policy.factScopes, cutoffTime: new Date(this.#now()).toISOString(), cutoffMessageId: messageId, mode: 'live' }));
+    // The snapshot must include the messages that triggered it. A platform timestamp with second
+    // precision can lead our own clock by up to a second (QQ reports time in whole seconds), and
+    // taking only "now" as the cutoff made buildContext reject the trigger message as NOT_FOUND.
+    const projection = await withTransaction(this.#pool, async tx => {
+      const newest = await tx.query<{ sent_at: Date | string }>('SELECT sent_at FROM data_messages WHERE id=$1 AND contact_id=$2', [messageId, row.contact_id]);
+      const sentAt = newest.rows[0] ? toMs(newest.rows[0].sent_at) : Number.NaN;
+      const cutoffMs = Number.isFinite(sentAt) ? Math.max(this.#now(), sentAt) : this.#now();
+      return this.#data.buildContext(tx, { callerContactId: row.contact_id, contactId: row.contact_id, generation,
+        policyVersion: Number(row.policy_version), allowedScopes: row.policy.factScopes,
+        cutoffTime: new Date(cutoffMs).toISOString(), cutoffMessageId: messageId, mode: 'live' });
+    });
     let draft: Draft;
     try { draft = await this.#ai.propose(projection, row.policy); }
     catch (error) {
@@ -725,8 +759,8 @@ export class PgConfirmedService {
     }
   }
 
-  async #invalidate(tx: PgClient, conversationId: string, reason: string): Promise<void> {
-    const plans = await tx.query<{ id: string; version: string | number }>(`UPDATE orch_plans SET status='INVALIDATED',invalidation_reasons=array_append(invalidation_reasons,$2),version=version+1,updated_at=now() WHERE conversation_id=$1 AND status IN ('AWAITING_CONFIRMATION','APPROVED','PARTIALLY_SENT') RETURNING id,version`, [conversationId, reason]);
+  async #invalidate(tx: PgClient, conversationId: string, reason: string, staleSkillEpoch?: number): Promise<void> {
+    const plans = await tx.query<{ id: string; version: string | number }>(`UPDATE orch_plans SET status='INVALIDATED',invalidation_reasons=array_append(invalidation_reasons,$2),version=version+1,updated_at=now() WHERE conversation_id=$1 AND status IN ('AWAITING_CONFIRMATION','APPROVED','PARTIALLY_SENT') AND ($3::bigint IS NULL OR skill_epoch<$3::bigint) RETURNING id,version`, [conversationId, reason, staleSkillEpoch ?? null]);
     for (const p of plans.rows) {
       await tx.query(`UPDATE orch_confirmation_tasks SET status='INVALIDATED',version=version+1 WHERE plan_id=$1 AND status='PENDING'`, [p.id]);
       await tx.query(`UPDATE orch_send_tasks SET status='CANCELLED_PRE_SUBMIT',version=version+1 WHERE plan_id=$1 AND status='CREATED'`, [p.id]);
