@@ -53,7 +53,7 @@
 ### 03 DataContextPort
 
 - `appendObservedMessage`、`storeMedia`、`buildContext(contactId,cutoff,generation,allowedScopes)`、`queryFacts(contactId,asOf,allowedScopes)`、`readContextProjection({callerContactId,contactId,snapshotId,allowedScopes})`、`getDependencyEpoch(contactId)`。`buildContext` 同时返回不可变 Snapshot 与已裁剪 Projection；`readContextProjection` 同步复核引用版本、有效期、删除和 scope，失效返回 `STALE_CONTEXT`。02 在每条发送的同一数据库事务/租约内读取依赖 epoch 并复核，异步失效事件不是发送授权。调用方身份/联系人相符才可返回正文。相同时间按有证据的稳定顺序键、平台消息 ID、内部 ID 固定排序，不引入截止点后的内容。
-- `confirm/correct/expire/deleteFact`、`storeAnalysisSnapshot`、`invalidateDependencies`、`recordFeedback`、`previewImport/commitImport`。
+- `confirm/correct/expire/deleteFact`、`storeAnalysisSnapshot`、`invalidateDependencies`、`recordFeedback`、`previewImport/commitImport`。`invalidatePlatformMessage(tx,{contactId,conversationId,platformAccountId,platformMessageId,platformEventId,mutation,rawEventRef,receivedAt},correlationId)`（审计表见 `0009`）：只按 live+账号+会话+平台消息 ID 定位并加锁，返回 `applied/duplicate/unmatched`；撤回/编辑一律按旧证据不可信处理，不读取也不猜测新正文，`unmatched` 同样保留审计并要求人工核对。`listUnknownOrigins({contactIds})` 供 Owner 只读投影使用，只返回 messageId/contactId/originStatus/originEvidenceRefs。
 - 必须先按 contact/scope 过滤再检索；调用方传入另一个联系人 ID 不能获得私密数据。
 - `OwnerDataQueryPort` 与上述联系人裁剪端口分离，仅供已鉴权的本人管理 API 使用；不能把浏览器自报 `callerContactId` 当身份。正式 PostgreSQL 表使用受限运行角色、事务级联系人 scope 与 RLS；管理查询使用独立鉴权角色/端口。
 
@@ -71,7 +71,7 @@
 
 - `enrollContact`、`updatePolicy`、`pauseContact/resumeContact`、`pauseAll/resumeAll`。
 - `ingestPlatformEvent`、`confirmPlan`、`rejectPlan`、`submitOwnerReply`、`cancelPlan`、`scheduleActiveContact`。
-- `confirmPlan` 必须带 `taskVersion,planVersion,alternativeId,editedParts,contentHash,idempotencyKey`。后端重新计算 allowedAction，不能信任前端布尔值。
+- `confirmPlan` 必须带 `taskVersion,planVersion,alternativeId,editedParts,contentHash,idempotencyKey`。后端重新计算 allowedAction，不能信任前端布尔值。`pauseAccountForUnmappedSelf(accountId,{rawEventRef,correlationId})` 由 01 在无法以受信来源确定对端时调用：02 在发送边界锁下暂停该账号已登记会话、失效候选与未提交发送并标记 `OWNER_ORIGIN_UNMAPPED`，不虚造 contactId 或消息，后续只能由本人核对后显式恢复。
 
 ### 基础设施事务端口（总控与 03 实现）
 
@@ -86,6 +86,7 @@
 - 查询总览、连接状态、联系人与策略、会话、待办、媒体/识别、事实/记忆、分析证据、Skill/调用、导入、审计和故障。
 - 返回的可操作资源包含后端计算的 `allowedActions`、`version`、失效原因；写入使用上述命令，不允许直接 PATCH 数据库字段。
 - 批准 G1 最小 REST 形状：`GET /api/v1/overview`、`GET /api/v1/tasks`（`{items:[...]}`）、`POST /api/v1/tasks/{taskId}/confirm`（`ConfirmPlanCommand`）、`POST /api/v1/control/pause-all`、`POST /api/v1/contacts/{id}/pauseContact`。查询资源必带 `id,version,status,allowedActions`，可带 `reasonCodes,invalidationReason,correlationId`；命令返回 `resultVersion,correlationId,status?`。
+- G2/G3 只读投影新增可选字段：`connectionQueryStatus`、`faultQueryStatus` 取 `ready|unavailable`（字段缺失按 unavailable）；只有 ready 且数组为空才可显示「无记录」，服务失败仍返回 503；`connections[]` 含 accountId、platform、connectionState、verificationStatus、lastReconciledAt、limitations[] 与 `recovery:{status,historyComplete,gaps[],unresolvedSendCount}`；会话消息在 `actor=unknown` 时可带 `originStatus`、`originEvidenceRefs`。`historyComplete` 只能取 01 的真实 RecoveryReport 证据，`unresolvedSendCount` 只能是该报告未决发送的受控聚合。`approvalSource` 仍为 02/06 私有投影，不是公共字段。
 - 已按 A14 落地的会话端点：`GET /api/v1/session`、`POST /api/v1/session/login`、`POST /api/v1/session/logout`；登录是唯一的未鉴权写操作，仅受精确 Origin 与限速保护。同一路由层已接入的查询与命令还包括 `/conversations`、`/facts`（含 `confirmFact/correctFact/deleteFact`）、`/analyses`（含 `correctAnalysis`）、`/media`（含 `approveAsset/revokeAsset`）、`/audit`、`/tasks/{id}/reject`、`/control/resume-all`、`/contacts/{id}/resumeContact|updatePolicy`。尚无持久 provider 的资源 `/skills`、`/imports`、`/faults` 返回 501 `NOT_IMPLEMENTED`，不得以空列表伪装；05/03 的 Skill 与导入 provider 就绪前不能把 06 提案全表当已实现接口。
 
 ## 4. 事件目录和失效规则

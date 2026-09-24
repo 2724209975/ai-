@@ -53,3 +53,11 @@
 已把 02 provider 路径与测试结果送 06 任务，请其接 07 鉴权的最小 Owner HTTP API 并将浏览器 fixture 换为真实 HTTP 联调。该 API 和 HTTP 浏览器验收不属于本段通过证据。后续还需策略/暂停的完整持久 Owner 命令、生成窗口的持久调度、发送前截止时间和 Skill/素材版本逐项复核、真实平台接入与 07 故障注入。
 
 应 06 的最小 API 接线请求，02 随后补 `ownerOverview()`、`ownerTasks()`、`ownerContacts()`、`confirmTask()`、`pauseAll()`、`pauseContact()`。待办投影返回最近 100 个任务和真实分条状态，仅有效待确认任务提供 `confirmPlan`；暂停命令检查期望版本和持久幂等键，失效旧方案并更新 dispatch 暂停 epoch。确认及暂停仍须经 06/07 鉴权 HTTP adapter 才能暴露。真实 PostgreSQL 用例再次 **1 pass / 0 fail**，新增投影、分条未知状态、全局与联系人暂停幂等断言；签名和验证结果已通知 06。
+
+## 续作：0004 与 AC04 mock 自动纵切（2026-09-24）
+
+前文关于迁移待编号及 RLS 失败是当时快照，已由后续事实覆盖：总控将 03 RLS 修复、02 持久表及状态/调度分别编号为 `0003`、`0004`、`0005`、`0006`；`0004_orchestration.sql` 对联系人、会话、快照做复合引用约束，并限制状态值。03 完整投影现传给 04 的正式桥接；02 仍独占发送租约。07 的 CLI 和 06 的鉴权 HTTP 流程由对应专项集成。
+
+总控批准了 [AC04 私有接口提案](02-mock-auto-proposal-2026-09-24.md)的 `0007_mock_auto_approval.sql`。02 增加默认关闭的 `mockAutoEnabled`；只有构造参数显式开启、01 适配器确为 `MockPlatformAdapter`、持久策略为 auto、触发消息全为 live 文字、04 返回可回复且无非 ordinary 风险/Skill 版本时，才在同一事务保存方案、`orch_mock_auto_approvals` 证据及固定分条 SendTask。自动方案没有本人 ConfirmationTask，也暂不发布旧版 `ReplyPlanProposed` 事件；会话发送投影标示 `approvalSource=mock_auto`。每条仍经 `withDispatchLease` 复核 03 快照、策略/依赖/暂停版本、内容 hash 和上一条结果。关闭开关或换用 QQ/微信桥接后，未提交的自动分条在发送前被拒绝。
+
+`tests/integration/postgres-mock-auto.test.mts` 在隔离 PostgreSQL 17 + 01 mock 上通过：低风险两条自动提交与重启、默认关闭和非 mock 启用拒绝、约见回确认、媒体回确认、缺事实暂停、策略改变/本人接管失效、重复入站、未知结果阻断、已提交一条后第二条未知的部分发送、模型故障暂停。`TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/chat_agent_test npm run verify` 的最终结果：**193 unit pass、4 contract pass、12 PostgreSQL integration pass、web build pass、5 E2E pass**；备份恢复用例因缺 `PG_DUMP_BIN/PG_RESTORE_BIN` 跳过 1 项，浏览器 Chromium 用例未设置 `RUN_BROWSER_E2E` 跳过 3 项。这些只证明开发 mock 路径，不是 QQ/微信真实自动发送验收。D03/D04 生产时序参数未固化，真实自动发送继续关闭。

@@ -1,8 +1,8 @@
 # QQ 真实接入 Spike 计划（G2 前置）
 
-日期：2026-09-24。状态：**待本人决策与账号输入**；本次未安装、未下载候选代码、未登录任何账号、未连接任何真实平台、未修改 01 代码。基线：PRD v1.3、公共契约 v0.3.0、[platform-validation.md](../platform-validation.md)、[aliyun-readiness.md](aliyun-readiness.md)、[packages/platform/qq](../../packages/platform/qq/README.md)。
+日期：2026-09-24。状态：**QQ 非主力测试账号路线及非官方风险已由本人接受；账号、知情测试联系人、宿主参数及登录方式仍待具体确认**。未安装、未登录或连接真实平台，未真实发送。服务器按本人要求最后核查。基线：PRD v1.3、公共契约 v0.3.0、[platform-validation.md](../platform-validation.md)、[aliyun-readiness.md](aliyun-readiness.md)、[packages/platform/qq](../../packages/platform/qq/README.md)。下一阶段的只接收步骤、证据和停机条件见 [qq-receive-only-runbook.md](qq-receive-only-runbook.md)。
 
-本页把 G2 入口的不可外包项（路线、风险接受、账号、常在线宿主）与工程缺口分开列出，使 spike 一旦拿到账号即可执行。公开资料只作 spike 输入，不构成能力验证。
+本页把 G2 入口的账号、知情联系人与常在线宿主条件及工程缺口分开列出。公开资料只作 spike 输入，不构成能力验证。
 
 ## 1. 为什么先做 QQ
 
@@ -13,7 +13,7 @@
 | 项 | 事实 | 对本项目的影响 |
 | --- | --- | --- |
 | 版本 | NapCat 最新发布 `v4.18.28`（2026-09-14），仓库仍在活跃维护（2026-09-23 有提交），约 1.07 万 stars | 版本可固定；维护活跃不等于稳定性承诺 |
-| 许可 | **不是开源许可**。许可证为 “Limited Redistribution License for NapCat”，正文声明未经作者明确许可禁止使用、复制、修改或分发本代码，仅在包含完整许可文本与来源声明时允许再分发；GitHub 识别为 `NOASSERTION` | 引入需本人明确接受受限许可：不能随本项目再分发其代码，交付或开源前需另行处理。**这是 D01 的风险项之一，不能默认为已接受** |
+| 许可 | **不是标准开源许可**。[v4.18.28 固定版本许可](https://github.com/NapNeko/NapCatQQ/blob/v4.18.28/LICENSE)同时写有未经作者明确许可不得使用等条款和附条件再分发条款；适用范围需进一步核清 | 本人已接受评估风险，但这不代替许可证授权。不得把其代码复制进本仓库或随本项目分发；安装前确认具体个人测试用法是否获许可，必要时向作者核实 |
 | 网络模型 | 支持 HTTP 服务端（NapCat 收）、HTTP 客户端（NapCat 把事件推给应用）、正向与反向 WebSocket | 01 的入口按事件推送设计，对应 HTTP 客户端模式或反向 WS |
 | 鉴权 | HTTP 客户端配置项为 `name`/`url`/`messagePostFormat`/`reportSelfMessage`/`token`/`enableForcePushEvent`，**未见签名密钥或 HMAC 字段** | 01 的 `verifyWebhook`（HMAC-SHA1）在这条路线上不成立。入口安全模型必须改为私有网络加 token 且不暴露公网，或改用反向 WS 复用 token。该结论需在 spike 实测确认，并据此更新 [contract-proposals.md](contract-proposals.md) 中关于验签的表述 |
 | 消息格式 | `messagePostFormat` 可配置为数组格式 | 满足 01 解码器只解析数组、拒绝 CQ 字符串的前提 |
@@ -21,7 +21,7 @@
 | 本机载体 | 本机已装 QQ NT 9.9.30（Windows），但**本机没有 Docker** | 本机可做只读对照，不适合作为常在线宿主 |
 | 常在线宿主 | 尚无已核查宿主；已建议阿里云 ECS Ubuntu 24.04 加 Docker，现有实例参数未核实 | AC23（本人电脑关机后持续运行）必须落在独立在线宿主，且桥接与核心同址或在私有网络内 |
 
-## 3. 01 侧代码缺口（spike 前必须补）
+## 3. 01 侧实现现状与阻塞
 
 已有（离线、无真实连接）：私聊事件解码、wire→公共事件归一化、传输层鉴权入口、媒体指针采集与私有存储接口、自身来源分类端口、恢复评估、发送执行器、OneBot 出站 HTTP 传输、95 项离线测试。
 
@@ -31,19 +31,13 @@
 2. **原子接纳的 PostgreSQL 实现**：`packages/infrastructure/postgres/reception.mts` 落盘，含私有原始事件文件存储（0700 目录 / 0600 文件 / 原子写）。
 3. **出站接线**：02 的平台依赖改为结构化端口 `DispatchPlatform`，QQ 侧由 `packages/platform/qq/napcat-bridge.mts` 提供；发送仍只在 02 的 `withDispatchLease` 内发生。
 
-仍然缺：
-
-1. **入口进程**：没有监听端口。需要一个组合根把 NapCat 事件推送、传输鉴权、`decodePrivateEvent`、原子接纳（PostgreSQL inbox/pending/outbox 同事务）与 02 的 `ingestPlatformEvent` 接起来。当前唯一的真实组合根是 `apps/web/server/main.mts`，而它接的是 mock 适配器。
-2. **原子接纳的 PostgreSQL 实现**：`AtomicReceptionPort` 只有依赖形状，没有生产存储实现；需要把 `packages/infrastructure/postgres/event-store.mts` 的 `commitReceived` 与原始事件私有引用、pending/outbox 同事务接起来。
-3. **出站接线**：把 02 的 dispatch 租约接到 `QqSendExecutor` 与 `OneBotHttpTransport`（现在只有 mock 平台被接进 worker）。
-4. **结构决定**：新增组合根（例如 `apps/bridge/`）属于架构变化，按项目规则应先登记决策再改代码。
+当前缺口：真实登录和账号验证；自身消息的经审核 peer mapper；媒体原件下载与 03 私有存储；outbox 发布器；已批准表情素材读取；真实历史连续覆盖与发送核对。`apps/bridge` 默认已改为只接收，只有显式 `QQ_ENABLE_OUTBOUND=1` 才会配置真实发送传输与启动 worker。归一化遇混合消息或空白文字会保留为 `unsupported` 并要求人工处理，不再吞掉有效 wire 事件。`packages/infrastructure/postgres/reception.mts` 的名单外完整原始事件保存和 outbox 持续投递仍需 00/03 协调解决，不能把现有代码称为长期稳定接收。
 
 ## 4. 需要本人决定或提供
 
-1. **路线确认**：QQ 个人账号加 OneBot（NapCat）。不同意则回到产品决策，不进入 spike。
-2. **风险接受**（必须明确，不得含糊）：非官方路线可能违反腾讯条款；账号可能被限制或封禁；需要长期保持登录的客户端；依赖为非开源且限制使用的许可。
-3. **测试账号与联系人**：一个可接受风险的 QQ 号（建议非主力号）和一名愿意配合的测试联系人。沙箱阶段不使用主号。
-4. **常在线宿主**：现有阿里云实例（需先只读核查参数），还是新建实例或其他常开设备。
+1. **测试账号与联系人**：本人指定一个非主力 QQ 测试号及一名知情测试好友；只需描述账号类型与可用性，不在聊天或仓库提供号码、凭据或聊天记录。
+2. **常在线宿主**：目前已知有阿里云服务器，本人要求最后核查。待进入真实测试阶段，先只读确认系统、架构、资源、有无既有业务及是否可隔离部署。
+3. **登录配合**：本人在受控宿主完成扫码/确认，并决定测试时间窗；应用不代读客户端凭据。许可证的具体使用范围在安装前核清。
 
 ## 5. 执行顺序（每步产出可复验证据）
 
@@ -59,6 +53,6 @@
 
 ## 6. 本轮完成与未做
 
-完成：路线候选事实查证（版本、许可、网络模型、鉴权、消息格式、自身消息）、01 侧代码缺口清单、spike 执行顺序与证据要求。
+完成：路线候选事实查证（版本、许可、网络模型、鉴权、消息格式、自身消息）、桥接组合根与测试、默认只接收护栏、spike 执行顺序与证据要求。
 
 未做（截至本行更新时）：未安装或下载 NapCat，未登录任何账号，未产生任何真实收发。桥接入口与出站接线已在 2026-09-24 落盘并用「假 OneBot 端点 + 真实 PostgreSQL」验证（见 A16），但那只是本机闭环，不计平台验收。

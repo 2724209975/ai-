@@ -1,5 +1,11 @@
 # 验证步骤、结果与授权边界
 
+## 2026-09-24 QQ G2 只接收准备更新
+
+`apps/bridge/main.mts` 现默认只接收，必须显式 `QQ_ENABLE_OUTBOUND=1` 才创建真实发送传输和启动 worker；出站所需 `QQ_ONEBOT_BASE_URL` 在只接收模式不再必填。QQ 混合消息或空白文字在 wire 解码成功后归一为 `unsupported` 并要求人工处理，保留原始事件引用，避免归一化抛错后已提交 inbox 却没有业务事件。对应 01 单测已通过；`npm run test:unit` 本次为 191 pass、0 fail、1 skipped，`npm run test:contracts` 为 4 pass、0 fail，`git diff --check` 通过。新增真实 PostgreSQL + 假 OneBot 集成用例检查混合消息去重和 `PAUSED_MEDIA`，但本次环境没有 `TEST_DATABASE_URL`，该文件 5 项均 skipped，**不能算该新用例通过**。
+
+QQ 真实只接收验证步骤见 [qq-receive-only-runbook.md](qq-receive-only-runbook.md)，脱敏记录见 [platform-qq-receive-only-template.md](../reports/platform-qq-receive-only-template.md)。尚未实际登录、接收或发送；QQ 与微信 AC23 均未通过。自身消息 peer mapper、outbox 重投、名单外完整原事件保存、媒体原件获取、长期恢复与连接状态受控投影仍有缺口；需分别由 01/00/02/03/07 协作。历史各节是当时快照，不能代替本节现状。
+
 日期：2026-09-22。公共基线 contracts v0.1.0。阶段 A：完成资料分析/验证计划，真实能力 blocked。阶段 B：可运行模块模拟原型，尚未公共 schema/02/03 集成。阶段 C：未开始真实登录与收发。
 
 ## 2026-09-23 续作结果
