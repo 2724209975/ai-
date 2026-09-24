@@ -39,7 +39,9 @@ QQ 路线的候选版本、许可与入口缺口已整理为 [QQ spike 计划](p
 | 第三方协议/桌面自动化/注入 | 本轮未采信供应商声明 | 可能表面匹配，但关机、封号、回执、本人识别风险高 | 不选择；若评估需单独风险决策 |
 | 专用常在线设备桥接 | 取决于具体实现 | 可能匹配，但“本人电脑关机”不等于无设备 | 候选架构，需本人接受并实测 |
 
-2026-09-24 复查（GitHub API 可用后）：微信侧能匹配「本人个人账号 + 既有好友会话」的候选只剩非官方 Hook 或 UI 自动化，分别受**无许可文件**、**GPL-3.0 传染性**、客户端版本强耦合与**必须另备常开 Windows/macOS 宿主**的限制；原先两条主力路线已失效（WeChatFerry 归档、Wechaty 微信 puppet 停更四年）。完整事实、更正与三个决策选项见 [wechat-route-options.md](platforms/wechat-route-options.md)。在本人选择前，微信半场保持未验证。
+2026-09-24 复查（GitHub API 可用后）：微信侧能匹配「本人个人账号 + 既有好友会话」的候选只剩非官方 Hook 或 UI 自动化，分别受**无许可文件**、**GPL-3.0 传染性**、客户端版本强耦合与**必须另备常开 Windows/macOS 宿主**的限制；原先两条主力路线已失效（WeChatFerry 归档、Wechaty 微信 puppet 停更四年）。完整事实、更正与三个决策选项见 [wechat-route-options.md](platforms/wechat-route-options.md)。
+
+2026-09-24 当晚进展：本人选定 **wxhelper** 路线。上游三份偏移表在本机 `WeChatWin.dll`（腾讯签名有效的 3.9.11.25，SHA-256 `2058A926…`）上都崩宿主，离线核查证明那是**同版本号的另一个构建**；随后按本人授权完成**离线偏移移植**（自建 Capstone 反汇编工具链，定位并交叉验证 `kDoAddMsg=0x230ef30`、`kGetAccountServiceMgr=0x1b557d0`，并确认 `AddMsg` 字段偏移与上游一致），注入后**只接收实测通过**：`checkLogin` 返回 `code=1`、`hookSyncMsg` 返回 `code=0`，知情好友发来的 5 条事件全部捕获且 5/5 带平台消息 ID（文字×2、图片、语音、type 51『拍一拍』），微信未崩溃。因此微信侧不再是"未验证"：`receive_types` 为 `tested`，发送/回执/本人回显/历史补齐/媒体完整获取仍为 `unknown`。记录见 [platform-wechat-wxhelper-2026-09-24.md](reports/platform-wechat-wxhelper-2026-09-24.md)。注意：**其余 83 个偏移仍是上游值，调用其它接口可能崩宿主**；微信每次更新都要重做偏移移植。
 
 ## 4. Spike 执行与报告
 

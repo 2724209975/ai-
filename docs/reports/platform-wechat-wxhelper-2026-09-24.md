@@ -1,6 +1,6 @@
 # 微信 wxhelper 路线：第 0.5 步（注入与偏移兼容性）实测记录
 
-日期：2026-09-24。范围：**只做到"注入 + 调用一个只读接口"**。本记录**不包含**任何消息收发、媒体、回执或历史能力结论——微信能力快照仍是六族 `unknown`（[platform-wechat-capability-snapshot-2026-09-24.json](platform-wechat-capability-snapshot-2026-09-24.json)）。
+日期：2026-09-24。范围：**注入 → 偏移移植 → 只接收 spike**。本记录只覆盖接收侧实测；发送、回执、本人/系统回显、历史补齐、媒体完整获取都不在其中，仍为 `unknown`（[platform-wechat-capability-snapshot-2026-09-24.json](platform-wechat-capability-snapshot-2026-09-24.json) 只有 `receive_types` 一族是 `tested`，总体按契约推导仍为 `unknown`）。
 
 ## 结论
 
@@ -187,3 +187,31 @@ Windows 应用程序日志（本机时间）显示 `WeChat.exe` 3.9.11.17 在 **
 重新编译得到 `wxhelper.dll`（SHA-256 `F67EFF42E774A689EFC13F5963DAC50D9F9D4792C3D3383906C3D0BB967125F4`），已记录到本地构建清单。
 
 **验证阶段的风险边界（必须遵守）**：本次只移植了"接收链路 + 登录检查"两个偏移；其余 83 个常量仍是上游值，**任何调用其它接口的请求都可能崩宿主**。因此注入后的验证只允许：`/api/checkLogin` → `/api/hookSyncMsg` →（必要时 `/api/unhookSyncMsg`）；不得调用通讯录、发送、收藏、朋友圈等任何接口。此外初始化流程（`WeChatDb::Init`）只用 `kGPInstance` 等常量且**不在注入时调用**，所以注入本身不依赖它们。
+
+## 只接收实测（2026-09-24 18:27–18:29）：接收链路打通
+
+移植后的 DLL（SHA-256 `F67EFF42…`）注入微信 3.9.11.25 后：
+
+1. `POST /api/checkLogin` → `{"code":1}`，微信存活（此前同一步骤会崩，这就是移植生效的直接证据）；
+2. `POST /api/hookSyncMsg` → `{"code":0}`（Detours 附加成功）；
+3. **内存佐证**：`WeChatWin base + 0x230ef30` 处字节由磁盘上的 `48 89 5c 24 20 55 56 57 …`（`mov [rsp+0x20],rbx; push …`）变为 `e9 43 12 fe bf 55 56 57 …`，即入口被改写成一条 `jmp`，其余字节一致——hook 精确挂在 `SyncMgr::doAddMsg` 入口。
+
+知情测试好友从原客户端发出后，本机接收端 `scripts/wechat-capture.mts`（`127.0.0.1:19099`）共捕获 **5 条**事件，原始字节私密留在 `.local-wechat-spike/raw/`（gitignored），索引只记录去敏字段：
+
+| # | 接收时间(UTC) | type | 形态（仅标签结构） | 内联媒体 | msgId |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 10:28:23 | 51 | `<msg><op>/<name>/<arg>/<username>` → **『拍一拍』** | 无 | 有 |
+| 2 | 10:28:35 | 1 | 文字 | 无 | 有 |
+| 3 | 10:28:39 | 3 | 图片（`<img>`，含 fileid/md5/hdmd5 等） | **约 4.3 KB base64（缩略图量级）** | 有 |
+| 4 | 10:28:48 | 34 | 语音（`<voicemsg>`） | 无 | 有 |
+| 5 | 10:28:50 | 1 | 文字 | 无 | 有 |
+
+汇总（去敏）：5 条 / 重复 0 / 解析失败 0 / **5 条全部带平台消息 ID**、`createTime`、`msgSequence`；DLL 日志同步出现 5 次 `add http msg work:true` 与 1 次 `encode size:4320`（图片内联字节）。全程微信未崩溃，注入后接口持续可用。
+
+**仍未覆盖 / 不能据此宣称的部分**：
+
+- **表情（贴纸 type 47）本轮没有出现**，因此 `receiveTypes` 不声明 `sticker_static/sticker_animated`；那条 `type 51` 按 `unsupported` 处理，不当作表情；
+- 图片只有**缩略图级别的内联字节**，原图/原语音/动态表情的完整获取属 `media_fetch`，仍 `unknown`；
+- 每类型只有 1 条样本；重复投递、乱序、断线补齐、24h 关机运行都未验证；
+- 接收端是**独立脚本**，尚未接入 `apps/bridge` 与 `packages/platform/wechat`；`accountId` 仍是占位（测试小号尚未登记为 PlatformAccount）；
+- 其余 83 个偏移仍是上游值，**其它接口一律不得调用**。

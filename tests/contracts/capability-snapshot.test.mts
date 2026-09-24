@@ -80,15 +80,28 @@ test('both platform snapshots exist, validate, and match their platform', async 
     const snapshot = JSON.parse(await readFile(path, 'utf8')) as PlatformCapabilitySnapshot;
     assert.doesNotThrow(() => assertCapabilitySnapshot(snapshot), `${platform} snapshot must satisfy the contract`);
     assert.equal(snapshot.platform, platform);
-    // Only a platform that was actually exercised may carry measured families.
-    if (platform === 'wechat') assert.ok(snapshot.evidence.every(item => item.status !== 'tested'), 'no WeChat route exists, so nothing is measured');
+    // Only a platform that was actually exercised may carry measured families. Since the
+    // 2026-09-24 receive-only spike the WeChat route *was* exercised, but only its inbound
+    // path: exactly one family may be `tested` there and everything else stays unknown.
+    if (platform === 'wechat') {
+      assert.deepEqual(snapshot.evidence.filter(item => item.status === 'tested').map(item => item.capability), ['receive_types'],
+        'only the receive path has been measured on WeChat');
+    }
     // A platform we cannot verify must not look better than "unknown" overall.
     assert.equal(snapshot.verificationStatus, capabilityOverallStatus(snapshot.evidence));
   }
   const wechat = JSON.parse(await readFile(snapshots.wechat, 'utf8')) as PlatformCapabilitySnapshot;
-  assert.ok(wechat.evidence.every(item => item.status === 'unknown'), 'with no candidate route every WeChat capability stays unknown');
-  assert.match(wechat.accountId, /^unassigned/, 'WeChat has no test account yet, so its snapshot keeps the placeholder');
-  assert.ok(wechat.evidence.every(item => item.unavailableReason), 'each WeChat gap must state what is missing');
+  // The 2026-09-24 spike received real messages from an informed friend through a locally
+  // ported wxhelper build, so receive_types is measured; nothing else was.
+  const wechatMeasured = wechat.evidence.filter(item => item.status === 'tested');
+  assert.deepEqual(wechatMeasured.map(item => item.capability), ['receive_types'],
+    'only the receive path may be tested on WeChat');
+  assert.ok(wechatMeasured.every(item => !/^https?:\/\//i.test(item.sourceRef)),
+    'the measured WeChat family must cite this project own run, never a vendor page');
+  assert.ok(wechat.evidence.filter(item => item.status !== 'tested')
+    .every(item => item.status === 'unknown' && item.unavailableReason),
+  'every WeChat capability that was not measured stays unknown and says what is missing');
+  assert.match(wechat.accountId, /^unassigned/, 'the WeChat test account is not registered as a PlatformAccount yet');
 });
 
 /** A declared capability must be one the adapter can actually produce or accept. Without this the

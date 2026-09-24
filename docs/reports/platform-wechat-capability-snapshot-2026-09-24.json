@@ -1,76 +1,81 @@
 {
   "accountId": "unassigned-test-account",
   "platform": "wechat",
-  "adapterVersion": "no-verified-candidate",
-  "observedAt": "2026-09-24T00:00:00.000Z",
-  "receiveTypes": ["unsupported"],
+  "adapterVersion": "wxhelper-dev-3.9.11.25-ported-f67eff42",
+  "observedAt": "2026-09-24T10:28:50.548Z",
+  "receiveTypes": ["text", "image", "voice", "unsupported"],
   "sendTypes": [],
   "receiptLevels": [],
   "ownerMessageSignal": "unknown",
   "historySync": "unknown",
   "mediaFetch": "unknown",
   "constraints": [
-    "尚未选定候选路线：没有找到能支持'个人微信现有好友一对一自动收发'的官方资料，企业微信/微信客服/公众号属于不同账号形态，不能替代目标场景",
-    "第三方桌面注入、逆向与协议模拟路线涉及封号、条款与云端登录风险，未经本人明确接受风险前不进入备选",
-    "accountId 为占位值：路线与测试账号确定后必须换成已登记 PlatformAccount 的内部 UUID 并重新签发",
-    "本文件只记录现状，不构成任何微信能力结论",
-    "候选路线与许可/维护事实见 docs/platforms/wechat-route-options.md（2026-09-24 只读核查）"
+    "路线：wxhelper（Windows 注入 Hook）＋本机自建偏移表。只在 WeChatWin.dll 3.9.11.25（SHA-256 2058A926…，腾讯签名有效）上离线移植了两个偏移：kDoAddMsg=0x230ef30、kGetAccountServiceMgr=0x1b557d0；其余 83 个常量仍是上游值，调用其它接口可能崩宿主，所以验证期只允许 checkLogin / hookSyncMsg / unhookSyncMsg",
+    "只接收阶段的推送目标是本机 127.0.0.1:19099 的自建接收端 scripts/wechat-capture.mts，原始字节私密留在 .local-wechat-spike/（gitignored）。接收端尚未接入 apps/bridge 与 packages/platform/wechat，因此本文件只是平台侧实测证据，不代表已接入本项目管道",
+    "accountId 仍为占位值：测试小号尚未登记为 PlatformAccount，内部 UUID 待 03 登记后替换",
+    "本轮只覆盖接收侧；发送、回执级别、本人/系统回显区分、历史补齐、媒体完整获取都未测",
+    "注入不是持久化的：退出微信即卸载，不写注册表或启动项；微信安装目录内留有 config.ini（把 API 限制在 127.0.0.1）"
   ],
   "verificationStatus": "unknown",
   "evidence": [
     {
       "capability": "receive_types",
-      "status": "unknown",
-      "sourceRef": "docs/platform-validation.md",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "no-verified-candidate",
-      "constraints": [],
-      "unavailableReason": "无候选可测：公开资料未提供个人账号现有好友会话的接收能力证据，未做任何实测"
+      "status": "tested",
+      "sourceRef": "run:wechat-receive-only-2026-09-24",
+      "observedAt": "2026-09-24T10:28:50.548Z",
+      "adapterVersion": "wxhelper-dev-3.9.11.25-ported-f67eff42",
+      "constraints": [
+        "本机实测：知情测试好友从原客户端发出，接收端共捕获 5 条事件并私密留存原始字节，5/5 带平台消息 ID（msgId）以及 createTime/msgSequence",
+        "已确认类型：文字（type 1，2 条）、图片（type 3，1 条，报文含 fileid/md5/hdmd5，并带约 4.3 KB 内联 base64，属缩略图量级）、语音（type 34，1 条，含 <voicemsg> 元数据）",
+        "未确认：表情（贴纸 type 47）本轮未出现，因此 receiveTypes 不声明 sticker_static/sticker_animated；另捕获 1 条 type 51『拍一拍』（<op>/<name>/<arg>/<username>），本适配器按 unsupported 处理",
+        "每类型仅 1 条样本；重复投递、乱序、断线补齐与 24h 关机运行都未在真实账号上验证",
+        "媒体只到缩略图级别：原图、原语音与动态表情的完整获取属于 media_fetch，仍是 unknown"
+      ]
     },
     {
       "capability": "send_types",
       "status": "unknown",
-      "sourceRef": "docs/platform-validation.md",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "no-verified-candidate",
+      "sourceRef": "docs/reports/platform-wechat-wxhelper-2026-09-24.md",
+      "observedAt": "2026-09-24T10:28:50.548Z",
+      "adapterVersion": "wxhelper-dev-3.9.11.25-ported-f67eff42",
       "constraints": [],
-      "unavailableReason": "无候选可测：没有任何已验证的出站路径，也没有窗口/频率/幂等键证据"
+      "unavailableReason": "只接收阶段没有发送：发送路径的偏移（kSendTextMsg/kGetSendMessageMgr/kFreeChatMsg）尚未移植，也没有窗口/频率/幂等键证据"
     },
     {
       "capability": "receipt_levels",
       "status": "unknown",
-      "sourceRef": "docs/platform-validation.md",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "no-verified-candidate",
+      "sourceRef": "docs/reports/platform-wechat-wxhelper-2026-09-24.md",
+      "observedAt": "2026-09-24T10:28:50.548Z",
+      "adapterVersion": "wxhelper-dev-3.9.11.25-ported-f67eff42",
       "constraints": [],
-      "unavailableReason": "无候选可测：无法区分平台受理与对方可见，未知结果也无法按 sendKey 核对"
+      "unavailableReason": "没有发送就没有受理/送达之分；接收侧只证明本地收到了平台推送，不能反推回执级别"
     },
     {
       "capability": "owner_message_signal",
       "status": "unknown",
-      "sourceRef": "docs/platform-validation.md",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "no-verified-candidate",
+      "sourceRef": "docs/reports/platform-wechat-wxhelper-2026-09-24.md",
+      "observedAt": "2026-09-24T10:28:50.548Z",
+      "adapterVersion": "wxhelper-dev-3.9.11.25-ported-f67eff42",
       "constraints": [],
-      "unavailableReason": "无候选可测：本人手发、系统发送与平台回显的区分没有可用信号，接管判定无从建立"
+      "unavailableReason": "本轮没有区分『本人手发』与『系统回显』：hook 挂在消息接收路径上，样本全部来自对端好友，未被要求由系统发送任何消息"
     },
     {
       "capability": "history_sync",
       "status": "unknown",
-      "sourceRef": "docs/platform-validation.md",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "no-verified-candidate",
+      "sourceRef": "docs/reports/platform-wechat-wxhelper-2026-09-24.md",
+      "observedAt": "2026-09-24T10:28:50.548Z",
+      "adapterVersion": "wxhelper-dev-3.9.11.25-ported-f67eff42",
       "constraints": [],
-      "unavailableReason": "无候选可测：没有游标或补齐机制证据，RecoveryReport.historyComplete 只能为 false"
+      "unavailableReason": "没有连续覆盖游标或断线补齐证据；本轮没有做重启/断网演练，RecoveryReport.historyComplete 只能为 false"
     },
     {
       "capability": "media_fetch",
       "status": "unknown",
-      "sourceRef": "docs/platform-validation.md",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "no-verified-candidate",
+      "sourceRef": "docs/reports/platform-wechat-wxhelper-2026-09-24.md",
+      "observedAt": "2026-09-24T10:28:50.548Z",
+      "adapterVersion": "wxhelper-dev-3.9.11.25-ported-f67eff42",
       "constraints": [],
-      "unavailableReason": "无候选可测：原图、原语音与动态表情的完整获取方式均未验证"
+      "unavailableReason": "图片只拿到约 4.3 KB 内联字节（缩略图量级），原图、原语音与动态表情的完整获取路径尚未移植或验证"
     }
   ]
 }

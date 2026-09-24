@@ -1,6 +1,6 @@
 # 微信 wxhelper 路线计划
 
-日期：2026-09-24。状态：**路线已由本人选定，但尚未通过第 0 步**。在此之前不下载、不安装、不注入、不登录、不发送。本文件是计划与中止条件，不是能力结论；微信能力仍以 [platform-wechat-capability-snapshot-2026-09-24.json](../reports/platform-wechat-capability-snapshot-2026-09-24.json) 的六族 `unknown` 为准。
+日期：2026-09-24。状态：**只接收已实测通过（偏移移植后），发送侧未做**。本文件是计划与中止条件；能力结论只以 [platform-wechat-capability-snapshot-2026-09-24.json](../reports/platform-wechat-capability-snapshot-2026-09-24.json) 为准——目前只有 `receive_types` 是 `tested`，总体仍 `unknown`。完整过程、崩溃记录与偏移移植细节见 [platform-wechat-wxhelper-2026-09-24.md](../reports/platform-wechat-wxhelper-2026-09-24.md)。
 
 ## 0. 第一道门禁：先过登录，再过版本（登录已由本机实测解除）
 

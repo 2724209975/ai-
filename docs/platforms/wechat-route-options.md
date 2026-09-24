@@ -1,6 +1,6 @@
 # 微信路线候选事实与决策包
 
-日期：2026-09-24。方式：GitHub API 与许可文件的**只读**核查；未安装、未下载运行、未登录、未发送。这是 G2 微信半场的决策输入，不是能力结论；能力状态见 [platform-wechat-capability-snapshot-2026-09-24.json](../reports/platform-wechat-capability-snapshot-2026-09-24.json)（六个能力族全为 `unknown`）。
+日期：2026-09-24。方式：GitHub API 与许可文件的**只读**核查（本页当日为决策输入）；后续进展与实测结论见 [platform-wechat-wxhelper-2026-09-24.md](../reports/platform-wechat-wxhelper-2026-09-24.md) 与 [platform-wechat-capability-snapshot-2026-09-24.json](../reports/platform-wechat-capability-snapshot-2026-09-24.json)。**当日结论更新**：本人选定 wxhelper 路线，上游偏移表与本机二进制不匹配（同版本号不同构建），经离线偏移移植后**只接收实测通过**——只捕获到文字/图片/语音与一条『拍一拍』，表情（贴纸）未出现；发送、回执、媒体完整获取仍 `unknown`。
 
 ## 结论先行
 
