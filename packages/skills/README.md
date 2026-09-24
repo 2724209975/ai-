@@ -10,10 +10,10 @@
 - 内存 registry 的 `getDependencyEpoch(contactId)` 与 `isSkillDependencyCurrent` 可在事件未投递前拒绝旧版本/旧 grant 调用，仅用于骨架验证；生产复核需在 02 发送租约内完成。
 - `trials/trial.mts`：只接受已认证 owner 的 `mode=trial` 夹具，输出版本化建议和空 `sideEffects`。无事实写端、发送端或 live 上下文参数。
 
-导入内容、对方消息、OCR、转写均无 owner 命令能力。导入文件不能包含脚本、代码围栏、网络请求或不支持字段。当前只支持受限 JSON；Markdown、格式大小上限、完整内置内容待 D12。全局 Skill 暂拒绝任何案例，避免无法核验私密来源；联系人限定案例必须标同一 contactId。声明式规则只有枚举，不执行导入文本。联系人消息中的词只用于适用性匹配，不能变更 Skill 或权限。
+导入内容、对方消息、OCR、转写均无 owner 命令能力。导入文件不能包含脚本、代码围栏、网络请求或不支持字段。当前只支持受限 JSON；Markdown、格式大小上限、完整内置内容待 D12。0009 只允许 global 定义，preview/import/store 对非 global scope 返回 `PRIVATE_SCOPE_NOT_ENABLED`；全局 Skill 暂拒绝任何案例，避免无法核验私密来源。声明式规则只有枚举，不执行导入文本。联系人消息中的词只用于适用性匹配，不能变更 Skill 或权限。
 
 ## 尚需集成
 
-当前库与 journal 是内存骨架，不提供跨进程持久化。不可变版本、grant 与同步 skill epoch 先做接口协调；公共迁移和完整 REST 定型暂缓。02 仍须在未发方案失效及每条发送前复核版本，04/06 后续接入各自端口。`skillEventAffectsPendingPlan` 只是 02 消费事件的纯判断助手，不能替代同步 epoch。试用要在 API 和数据库层继续隔离。详见 05 提案和交付记录。
+内存 registry/journal 用于骨架验证；PG store 已能跨进程保存版本、grant、epoch 和调用记录。完整 REST 定型仍暂缓。02 仍须在未发方案失效及每条发送前复核版本，04/06 后续接入各自端口。`skillEventAffectsPendingPlan` 只是 02 消费事件的纯判断助手，不能替代同步 epoch。试用要在 API 和数据库层继续隔离。详见 05 提案和交付记录。
 
-`registry/pg-store.mts` 与 `db/migrations/0009_skills.sql` 是持久化纵切（RLS 已按审查修订：FORCE + 覆盖各命令策略）。写方法必须由调用方放在同一 PostgreSQL 事务内，版本/grant、02 现有 `dispatch_control.skill_epoch`、outbox 和 owner 命令回放记录共同提交。全局迁移号为 0009（0007 归 02，0008 归 03，编号必须连续），已写入 `db/migrations/0009_skills.sql`。本地夹具验证回滚；隔离 PostgreSQL 用例已验证断开重连后的读取、事件/epoch 和受限角色 RLS。数据库服务重启与 02 失效消费者尚未联测。
+`registry/pg-store.mts` 与 `db/migrations/0009_skills.sql` 是持久化纵切（grant/invocation 的 RLS 为 FORCE + 覆盖各命令策略）。写方法必须由调用方放在同一 PostgreSQL 事务内，版本/grant、02 现有 `dispatch_control.skill_epoch`、outbox 和 owner 命令回放记录共同提交。0009 已应用，不可原地修改。独立非 BYPASSRLS owner/runtime 角色的权限与 direct SQL 负测在隔离 PostgreSQL 上通过；生产角色配置仍需总控接入。联系人私有定义及历史版本 RLS 位于 `registry/0011_skills_scope.proposed.sql`，只是候选，不在全局迁移序列中。

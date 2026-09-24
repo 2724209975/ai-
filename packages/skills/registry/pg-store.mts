@@ -1,4 +1,4 @@
-/** 05 PostgreSQL persistence proposal. Requires schema.proposed.sql after G0 review. */
+/** 05 PostgreSQL port for the approved 0009 global-only Skill storage. */
 import { createHash } from 'node:crypto';
 import { setContactScope, type PgClient } from '../../infrastructure/postgres/transaction.mts';
 import { acquireDispatchBoundary } from '../../infrastructure/postgres/dispatch-journal.mts';
@@ -137,6 +137,7 @@ export class PgSkillStore {
   async setGrant(tx: PgClient, input: { command: OwnerCommand; contactId: string; skillId: string; min: number; max: number; enabled: boolean; expectedVersion?: number }): Promise<ContactSkillGrant> {
     assertOwner(input.command);
     if (!input.contactId || !Number.isSafeInteger(input.min) || !Number.isSafeInteger(input.max) || input.min < 1 || input.max < input.min) fail('VALIDATION_FAILED');
+    await setContactScope(tx, input.contactId);
     await acquireDispatchBoundary(tx);
     const requestHash = commandHash('setGrant', input);
     const duplicate = await this.#receipt<ContactSkillGrant>(tx, input.command, requestHash);

@@ -20,6 +20,7 @@ export function previewDraft(raw: unknown): Preview {
   if (!Array.isArray(r.examples) || r.examples.length > 5 || r.examples.some((x: any) => !x || !text(x.input) || !text(x.output) || Object.keys(x).some(k => !['input', 'output', 'contactId'].includes(k)) || (x.contactId !== undefined && !text(x.contactId, 100)))) errors.push('UNSAFE_EXAMPLE');
   if (r.outputContract !== 'advice-v1') errors.push('UNSUPPORTED_OUTPUT');
   if (!text(r.visibilityScope, 100)) errors.push('INVALID_SCOPE');
+  else if (r.visibilityScope !== 'global') errors.push('PRIVATE_SCOPE_NOT_ENABLED');
   if (Array.isArray(r.examples) && r.examples.some((x: any) => x?.contactId && x.contactId !== r.visibilityScope)) errors.push('CROSS_CONTACT_EXAMPLE');
   if (r.visibilityScope === 'global' && Array.isArray(r.examples) && r.examples.some((x: any) => x?.contactId)) errors.push('PRIVATE_EXAMPLE_IN_GLOBAL');
   if (r.visibilityScope === 'global' && Array.isArray(r.examples) && r.examples.length) errors.push('GLOBAL_EXAMPLES_REQUIRE_REVIEW');

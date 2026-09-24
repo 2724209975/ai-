@@ -1,0 +1,322 @@
+
+> verify
+> npm run test:unit && npm run test:contracts && npm run test:integration && npm run build:web && npm run test:e2e
+
+
+> test:unit
+> node --test "packages/**/*.test.mts"
+
+✔ mock G1: decision -> 3 candidates including a two-part alternative -> advisory check (5.6916ms)
+✔ 04 handoff retains source refs, uncertainty and prompt version without granting dispatch (0.7509ms)
+✔ missing personal schedule stays missing and yields no candidate (0.5102ms)
+✔ unrelated confirmed fact does not satisfy a current schedule question (0.3395ms)
+✔ stop request is surfaced and no proposal is generated (0.2055ms)
+✔ meeting commitment and relationship claim demand review even in auto mode (0.2168ms)
+✔ scope and time cutoff reject cross-contact and future evidence (0.1961ms)
+✔ draft analysis excludes agent-generated speech as relationship evidence (0.3378ms)
+✔ valid analysis hint is cited but does not mutate policy (0.4413ms)
+✔ analysis hint with out of snapshot evidence is ignored (0.3081ms)
+✔ media without complete verified meaning fails closed (0.2488ms)
+✔ provider malformed, unavailable and timeout produce no sendable plan (27.6291ms)
+✔ provider candidate with unsupported personal claim is rejected before proposal (0.8564ms)
+✔ pending batch checks every message and never treats unsupported as text (0.2121ms)
+✔ all media types require complete, type appropriate coverage and cite interpretations (0.291ms)
+✔ earlier unresolved media in pending batch blocks a later readable text (0.1398ms)
+✔ 03 scoped projection adapter retains cutoff and unsupported type (19.8514ms)
+✔ 03 PostgreSQL shaped projection is adapted without losing refs or source (0.4565ms)
+✔ draft claims carry support, counter evidence, alternatives and uncertainty (0.4519ms)
+✔ 02 handoff keeps no-reply and all checked alternatives separate from authorization (0.4269ms)
+✔ proposal triggers only the current contact batch after the last owner reply (0.3355ms)
+✔ expired and unrelated facts cannot support a personal schedule claim (0.2422ms)
+✔ agent-authored evidence cannot activate an analysis strategy hint (0.3071ms)
+✔ media gateway rejects malformed, partial and unsupported outputs without a usable draft (0.4537ms)
+✔ media gateway timeout aborts and explicit fallback records actual interpreter (40.2066ms)
+✔ candidate gateway records its own model and prompt versions (0.4875ms)
+✔ replaceable text provider records version and usage without storing message content (1.4804ms)
+✔ provider failure records only an error outcome and yields no candidate (0.4286ms)
+✔ 02 PersistentIntelligence gets 03 scoped text and returns checked structured candidates (26.3663ms)
+✔ contact, policy and snapshot mismatch are rejected (2.4849ms)
+✔ uninterpreted media yields media_uncertain without a reply plan (0.6506ms)
+✔ wire schema and exported literals agree on event and message taxonomy (10.4584ms)
+✔ unknown event type and non-live send fail closed (0.7285ms)
+✔ owner overview schema, literals and runtime assertion agree (2.0461ms)
+✔ a missing or malformed availability is never read as ready (0.2809ms)
+✔ message ingestion is idempotent by platform key and refuses conflicting content (13.4714ms)
+✔ storage query and snapshot projection both enforce contact and fact scope (2.0679ms)
+✔ fact expiry excludes boundary and makes an old projection stale (0.5058ms)
+✔ fact correction and deletion use CAS, erase body and invalidate dependent snapshot (0.9477ms)
+✔ message deletion invalidates dependent facts, analysis and context without keeping body (1.6325ms)
+✔ candidate/inference/agent content cannot silently become confirmed owner facts (0.6463ms)
+✔ future messages and trial/replay messages do not enter live context (1.0249ms)
+✔ new fact and scope revocation invalidate or deny a previous context (0.995ms)
+✔ unknown own-account origin needs evidence and invalidates old context when resolved (1.3927ms)
+✔ fact search scopes before matching and correction invalidates dependent analysis (0.6379ms)
+✔ feedback persists, deduplicates and stays scoped to the plan contact (17.0118ms)
+✔ preview requires identity mapping, import is isolated from live and repeated source is idempotent (15.1991ms)
+✔ private media persists across instances and approved read checks contact/platform/version (27.9616ms)
+✔ PostgreSQL adapter refuses forged caller before query and filters scope in SQL (2.7852ms)
+✔ unknown origin owner projection scopes contacts and emits only vetted opaque refs (2.7637ms)
+✔ live message and dependency event use the same transaction client; duplicate has no second side effect (4.889ms)
+✔ forged caller is rejected before any scoped data query (0.5491ms)
+✔ platform mutation uses scoped live key and fails closed on unmatched or repeated evidence (2.7049ms)
+✔ password hashes are salted scrypt values that reject wrong or tampered input (336.8683ms)
+✔ login issues an httpOnly session cookie and never stores the token itself (166.4617ms)
+✔ logout, idle timeout and absolute timeout all stop authorizing the session (366.7172ms)
+✔ repeated wrong passwords are rate limited while the correct one still counts once (513.2051ms)
+✔ write verification requires an allowed origin, a JSON body and the session CSRF token (131.7185ms)
+✔ the file store survives a restart and revocation can cover every session (252.3994ms)
+✔ cookie parsing ignores malformed and duplicate entries (0.6074ms)
+✔ new contact is confirmation only and does not enable proactive permissions (1.6695ms)
+✔ mock inbound → candidate → edited confirmation → receipt, with duplicate guard (17.3142ms)
+✔ old confirmation cannot send after a new message; outside enrollment does not invoke AI (1.5379ms)
+✔ owner intervention invalidates pending confirmation and requires explicit resume (0.7613ms)
+✔ unknown submit result blocks this contact without blocking another (1.0197ms)
+✔ second reply part is cancelled if a new message arrives after first submission (0.8908ms)
+✔ risk policy never upgrades permissions from a model suggestion (0.6076ms)
+✔ same idempotency key with different edited content is rejected (1.0825ms)
+✔ global pause cancels pre-submit work; contact pause is isolated (1.1188ms)
+✔ auto policy still routes to confirmation until independent review exists (1.2587ms)
+✔ virtual clock aggregates consecutive messages once and caps the collection window (1.1757ms)
+✔ new message invalidates the prior plan and starts a new collection (0.6735ms)
+✔ pause after platform acceptance never restores ready state or dispatches a later part (1.7837ms)
+✔ historical import cannot invalidate a live confirmation or trigger generation (3.42ms)
+✔ message arriving while model runs discards its stale proposal (1.2579ms)
+✔ event conversation identity and actor must match enrolled contact (1.54ms)
+✔ unknown send resolved by receipt still requires explicit resume (2.7778ms)
+✔ contradictory receipt after accepted send is rejected (3.8314ms)
+✔ 01 mock, 03 context, 04 fake, 02 confirmation and receipt interoperate (23.1407ms)
+✔ unsupported inbound stays unsupported and pauses without a reply plan (1.4619ms)
+✔ unattributed own-account message never becomes contact inbound or owner takeover (0.8698ms)
+✔ wechat: capabilities never claim real verification (4.1127ms)
+✔ wechat: repeated platform event/message emits once without relying on nickname (1.1342ms)
+✔ wechat: ledger echo is agent, including when owner hint conflicts (11.3304ms)
+✔ wechat: verified owner fixture emits takeover signal, ambiguous self does not (0.5019ms)
+✔ wechat: timeout does not resubmit; new key cannot bypass conversation block (1.3287ms)
+✔ qq: capabilities never claim real verification (0.2647ms)
+✔ qq: repeated platform event/message emits once without relying on nickname (0.4374ms)
+✔ qq: ledger echo is agent, including when owner hint conflicts (0.9967ms)
+✔ qq: verified owner fixture emits takeover signal, ambiguous self does not (0.9789ms)
+✔ qq: timeout does not resubmit; new key cannot bypass conversation block (1.0626ms)
+✔ unauthorized caller, missing 02 preflight, non-live and expired requests fail closed (1.1218ms)
+✔ concurrent same-key calls submit once, changed payload conflicts (1.1026ms)
+✔ same task cannot use different keys in concurrent calls (0.4269ms)
+✔ unordered messages retain both source times; recall is separate and deduped (0.2985ms)
+✔ dynamic sticker single frame and unavailable media never report complete (0.3016ms)
+✔ approved sticker platform check and ordinary image refusal (1.4542ms)
+✔ disconnect during preflight invalidates submit; recovery does not send old replies (0.9203ms)
+✔ incoming event during awaited preflight prevents stale send (0.5074ms)
+✔ 02 pause between reply parts rejects remaining part, keeps submitted result (1.4462ms)
+✔ snapshot restore preserves unknown sends and event dedupe (simulated restart) (1.5548ms)
+✔ crash at SUBMITTING becomes unknown and cannot cancel submitted operation (0.6092ms)
+✔ late evidence resolves unknown; duplicate and older receipts do not downgrade delivered (0.7596ms)
+✔ one conversation unknown does not block a different conversation (0.4831ms)
+✔ invalid media/missing IDs/unknown enums fail; special send key does not alter prototype (0.4986ms)
+✔ definite failure stays explicit, retryability never means adapter auto-retry (0.4327ms)
+✔ relogin state is explicit; connect cannot skip reconciliation (0.3592ms)
+✔ trial dedupe cannot suppress later live event (0.3576ms)
+✔ capability loss rejects send explicitly (0.4893ms)
+✔ sticker approval revoked during 02 preflight is checked at submit (0.5363ms)
+✔ snapshot cannot be restored into another platform or account (0.4521ms)
+✔ QQ bridge starts receive-only by default, even when a worker flag is absent (1.4967ms)
+✔ outbound and its worker require an explicit opt-in (0.5913ms)
+✔ fetched GIF bytes are stored with digest but animated completeness stays unknown (2.013ms)
+✔ thumbnail, single frame and transcoded voice are marked partial, never complete (0.3575ms)
+✔ missing, empty and oversized artifacts never reach private storage (0.3825ms)
+✔ scope denial prevents source read and store write (0.2017ms)
+✔ store failure is sanitized and cannot be reported as fetched (0.3011ms)
+✔ only the media segment bound to the raw event may be acquired (0.6307ms)
+✔ contact text becomes a live inbound event with its evidence (2.651ms)
+✔ quoted contact text keeps the platform reply id and stays a text message (0.3559ms)
+✔ a media part is never rewritten as text (0.2571ms)
+✔ a native face is not claimed to be a platform sticker (0.1927ms)
+✔ a recall becomes a mutation event, not a new inbound message (0.1713ms)
+✔ an unattributed self message never becomes a contact inbound message (0.1917ms)
+✔ space-only text and multi-body messages stay unsupported instead of being guessed (0.2781ms)
+✔ an unenrolled peer produces no business event at all (0.1813ms)
+✔ private friend identity is numeric ID; changing nickname does not change dedupe key (2.4654ms)
+✔ mixed segments retain order, reference and unknown segment with raw pointer (0.9463ms)
+✔ message_sent never automatically becomes owner; peer mapping is mandatory (0.2001ms)
+✔ wrong account, groups and temporary chats are rejected (0.5566ms)
+✔ CQ string input is rejected rather than flattened to text (0.1807ms)
+✔ unsafe numeric IDs rejected; large string IDs retained losslessly (0.1626ms)
+✔ missing IDs, malformed segments, timestamps and empty messages rejected (0.2512ms)
+✔ recall gets a distinct key; self recall with ambiguous peer rejected (0.232ms)
+✔ webhook verifies original bytes before parsing (0.992ms)
+✔ correctly signed malformed JSON returns sanitized error, not body or token (0.3595ms)
+✔ text encoding cannot inject CQ commands; IDs and quote are retained (0.5705ms)
+✔ only approved sticker bytes bound to version and hash become image segment (0.5841ms)
+✔ revoked, wrong platform, version or asset reference blocked (0.368ms)
+✔ replaced bytes/hash and unverified animation format blocked (0.4438ms)
+✔ local text/media size budgets enforced; ordinary image send unsupported (0.2008ms)
+✔ success means bridge accepted, never delivered or read (0.1819ms)
+✔ HTTP response is correlated by its request, without inventing a bridge echo (0.1344ms)
+✔ async, missing ID, failed, malformed and mismatched RPC all keep outcome unknown (0.1836ms)
+✔ HTTP transport posts only send_private_msg with bearer auth and request/response correlation (24.8913ms)
+✔ redirect, malformed body and oversized body never become accepted evidence or trigger a retry (2.1096ms)
+✔ invalid endpoint or token rejected before any request (0.5023ms)
+✔ guarded executor accepts one HTTP reply without echo and records it before replay (15.1339ms)
+✔ the raw shape never echoes values that could identify a person or carry content (1.4831ms)
+✔ the raw shape reports exactly what the runbook needs to decide (1.1532ms)
+✔ unknown and malformed events are described as such instead of guessed (0.3575ms)
+✔ recall notices keep their shape without carrying the message body (0.1817ms)
+✔ reconnect without proven gap coverage does not advance cursor or permit preflight (0.8427ms)
+✔ wrong account and relogin requirement keep dispatch closed (0.1532ms)
+✔ old pre-submit tasks are invalidated; accepted evidence is not a resend instruction (0.6886ms)
+✔ unknown result blocks its conversation but not an unrelated new preflight (0.1599ms)
+✔ accepted evidence without platform ID is still unknown; confirmed unsent is reported separately (0.153ms)
+✔ invalid or conflicting recovery evidence fails instead of silently opening dispatch (0.8763ms)
+✔ durable exact platform ID match classifies agent echo ahead of owner hint (2.9314ms)
+✔ unmatched self message stays unknown despite forged owner field and matching text (0.3474ms)
+✔ independent verified origin can classify owner when no agent ID exists (0.3809ms)
+✔ conflicting ledger scope cannot be converted to owner (0.2678ms)
+✔ ledger or verifier failure keeps provenance unknown without leaking errors (0.5678ms)
+✔ durable intent precedes one transport submit and accepted evidence is persisted (12.9956ms)
+✔ concurrent same key invokes transport once using atomic claim (1.3007ms)
+✔ timeout remains unknown; same key and replacement key never blindly resend (26.5496ms)
+✔ throw after transport side effect does not become definite failure (0.909ms)
+✔ unauthorized or wrong-account call and denied 02 gate never claim or submit (0.8239ms)
+✔ claim failure prevents any platform submission (0.524ms)
+✔ receipt storage failure preserves observed success and blocks replay through intent (0.7342ms)
+✔ old deadline and other actions rejected before dispatch (0.4462ms)
+✔ different content under same key is rejected (0.891ms)
+✔ caller mutation while gate runs cannot replace snapshotted wire content (0.5773ms)
+✔ unsupported message segments and ordinary images cannot bypass encoder restrictions (0.6585ms)
+✔ sticker submission requires asset version/hash and unchanged inline bytes (0.9786ms)
+✔ the spike summary keeps only aggregates and states its limits (2.9096ms)
+✔ receive-only posture refuses anything that could send or expose the listener (0.9922ms)
+✔ the report carries every section the runbook requires (1.0149ms)
+✔ the report never invents a verdict and rejects anything outside the four (0.6289ms)
+✔ notes and contract proposals are carried through when present (0.1969ms)
+✔ signed duplicate callbacks persist once and never return quick reply (4.8781ms)
+✔ ack waits for atomic store completion (0.4893ms)
+✔ store failure is sanitized and not acknowledged; retry can commit (0.4846ms)
+✔ invalid auth/account/schema never reaches persistence (0.5161ms)
+✔ same ID in different peer conversation does not collapse (0.4404ms)
+✔ authenticated self event without verified peer is persisted as private unmapped evidence, never contact inbound (0.2534ms)
+✔ replay after handler recreation relies on shared store; signature alone is not freshness (0.2236ms)
+✔ real PostgreSQL isolated schema: 05 versions/grants/epoch/outbox/invocations survive reconnect (609.1753ms)
+✔ 0011 proposal: runtime direct SQL cannot read another contact private definition or old version (498.5305ms)
+✔ 05 PostgreSQL port: immutable version, grant, epoch, invocation and restart-shaped reads (18.5956ms)
+✔ 05 PostgreSQL port rolls back version, epoch and outbox together (1.7663ms)
+✔ 05 PostgreSQL port stores scoped invocation refs and rejects non-live/replay/cross-contact reads (3.5416ms)
+✔ migration 0009 keeps immutable versions and contact-scoped rules without SendTask DDL (6.0909ms)
+✔ AC35 preview rejects malicious import, missing fields, conflicts and private examples; save never grants (6.6006ms)
+✔ AC36 automatic selection only uses current active version inside a contact grant (1.0524ms)
+✔ AC37 manual selection is task scoped and leaves grants unchanged (0.53ms)
+✔ AC39 cross-contact projection and imported message cannot manage or select skills (0.6281ms)
+✔ AC40/41 immutable status event, version refs and missing fact fallback (1.1734ms)
+✔ AC42 trial is pure and cannot accept live mode or imported private scope (0.5938ms)
+✔ AC41 failed skill records base fallback without unchecked output (0.4547ms)
+✔ selection becoming stale before invocation emits no advice (0.6279ms)
+✔ manual selection cannot be replayed for another task or contact (0.6149ms)
+✔ contact grant epoch does not change an unrelated contact (0.4998ms)
+✔ forged selection cannot inject rules or cross-contact advice (0.7235ms)
+✔ AC12/38 invitation advice remains subject to 02 meeting confirmation (0.6424ms)
+✔ 03 scoped projection -> 05 advice -> 04 checks retains meeting risk and contact isolation (18.1088ms)
+✔ 05 synchronous development epoch invalidates pending invocation before event delivery (0.9463ms)
+ℹ tests 208
+ℹ suites 0
+ℹ pass 208
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2605.5385
+
+> test:contracts
+> node --test tests/contracts/*.test.mts
+
+✔ AC01–AC42 evidence matrix has owners and independent mock/WeChat/QQ results (5.3325ms)
+✔ 04/05/06 production modules cannot import platform send implementation (24.2049ms)
+✔ global migrations have unique consecutive numbers and never use per-module numbering (0.964ms)
+✔ the shipped QQ snapshot is honest: measured items cite a run, the rest stay unclear (6.8264ms)
+✔ a capability snapshot cannot overstate what was measured (2.1598ms)
+✔ measured evidence is what lifts the overall status (1.0335ms)
+✔ both platform snapshots exist, validate, and match their platform (2.1843ms)
+✔ the QQ snapshot declares only the types this adapter can really produce and accept (16.6502ms)
+✔ source and deployment templates contain no high-confidence credential patterns (54.4892ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 335.5257
+
+> test:integration
+> node --test tests/integration/*.test.mts
+
+✔ real PostgreSQL: database and raw-event backup restores into a separate database with dispatch paused (5771.6481ms)
+✔ real PostgreSQL: text confirmation and two parts survive worker restart (1392.3545ms)
+✔ real PostgreSQL: 03 provider transactions and scoped RLS (1386.9703ms)
+✔ real PostgreSQL: PG-persistent 04 bridge turns an inbound text into a pending confirmation (1393.5296ms)
+✔ AC04 real PostgreSQL: mock low-risk auto only, restart, fallback and unknown blocking (1897.3817ms)
+✔ real PostgreSQL: bridge outbox pump delivers pending events once and retries failures (1695.2439ms)
+✔ real PostgreSQL: owner API covers reject, resume, policy, facts, media and analysis corrections (1957.1391ms)
+✔ real PostgreSQL: owner overview matches the machine contract and reports unavailable (1886.9591ms)
+✔ real PostgreSQL: platform mutation audit, replay dedupe, cross-contact rejection (2035.1129ms)
+✔ real PostgreSQL + fake OneBot: push in, confirm, authorized send out (2390.6436ms)
+✔ real PostgreSQL + fake OneBot: committed outbox survives consumer crash and duplicate webhook (519.8612ms)
+✔ real PostgreSQL + fake OneBot: unmapped self pauses account and discovery keeps metadata only (413.5419ms)
+✔ real PostgreSQL + fake OneBot: conflicting replay cannot leave an orphan raw file (452.7473ms)
+✔ real PostgreSQL + fake OneBot: duplicate and out-of-order push keep one durable row per platform ID (521.8739ms)
+✔ real PostgreSQL + fake OneBot: mixed body is retained as unsupported and pauses the contact (604.0243ms)
+✔ real PostgreSQL + fake OneBot: transport disconnect leaves unknown and restart does not resend (424.3593ms)
+✔ real PostgreSQL + fake OneBot: a media message pauses instead of being guessed at (382.5856ms)
+✔ real PostgreSQL + fake OneBot: voice and native faces map as unsupported material, not text (399.5011ms)
+✔ real PostgreSQL + fake OneBot: a quoted text keeps the reply id and a recall tombstones it (517.8727ms)
+✔ real PostgreSQL + fake OneBot: a signed push is accepted and a tampered one is refused (381.3531ms)
+✔ real PostgreSQL: transactional inbox/outbox and unknown-send recovery across worker connections (2835.0869ms)
+✔ real PostgreSQL: aggregation batches, restart recovery and the dispatch worker (3681.3675ms)
+✔ real PostgreSQL: skill and grant events invalidate stale plans by epoch and scope (2504.2035ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8043.4696
+
+> build:web
+> npm --prefix apps/web run build
+
+
+> personal-chat-agent-web@0.0.1 build
+> tsc --noEmit --incremental false && vite build --outDir build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 30 modules transformed.
+rendering chunks...
+computing gzip size...
+build/index.html                   0.41 kB │ gzip:  0.30 kB
+build/assets/index-BFSTK32t.css    3.13 kB │ gzip:  1.25 kB
+build/assets/index-Cv6KGETT.js   249.00 kB │ gzip: 78.12 kB
+✓ built in 759ms
+
+> test:e2e
+> node --test tests/e2e/*.test.mts
+
+✔ mock: inbound → context → edited confirmation → send → delivered receipt (28.7074ms)
+✔ mock: new message invalidates old mobile confirmation before submit (3.1296ms)
+✔ mock: timeout leaves send unknown, blocks further dispatch and needs manual resolution (1.753ms)
+✔ mock mobile Chromium: edited confirmation payload and result-unknown display (1391.76ms)
+✔ mock mobile Chromium: stale confirmation reports no send and refreshes version (872.4863ms)
+✔ management app enforces login, CSRF/Origin and revocation over real HTTP (741.5748ms)
+✔ Owner HTTP rejects missing/forged session and missing or foreign CSRF before command (64.6941ms)
+✔ real HTTP + PostgreSQL + mock send: edited confirmation and stale 409 (2482.348ms)
+✔ Owner HTTP denies missing session and CSRF before reaching 02 (71.994ms)
+✔ Owner HTTP preserves 409 and does not claim a send (15.0645ms)
+✔ 320px: unprovided connection/fault status, auto fallback and stale 409 (1463.1262ms)
+✔ 390px: 503 remains a failure and 501 pages are unavailable (931.6886ms)
+✔ 390px: new connection projection displays recovery gaps without claiming readiness (722.5027ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3628.4537

@@ -6,6 +6,8 @@
 
 `npm run serve:owner` 启动 `apps/web/server/main.mts`：PostgreSQL 持久层 + mock 平台适配器 + deterministic fake 智能 + 调度 worker，默认只监听 `127.0.0.1`。它用来验证登录、待办、确认与调度链路，**不会也不能收发真实微信/QQ 消息**。必填环境变量为 `DATABASE_URL`、`OWNER_ID`、`OWNER_PASSWORD_HASH`（用 `npm run owner:password` 从 stdin 生成）、`PUBLIC_ORIGIN`；`SESSION_DIR` 必须位于私有卷且不入仓库。启动前先执行 `npm run migrate`——缺少迁移时进程会直接退出并提示，而不是带病运行。
 
+本地管理端启动时先调用独立的 Skill outbox pump 处理 05 的 `SkillVersionChanged`/`GrantChanged`，然后周期运行，停止时先等待 pump 退出再关闭数据库连接。消费成功后才给 outbox 标记 `published_at`；坏事件保留 pending 并输出无正文的故障提示。QQ 桥接的 pump 只处理平台事件，不能替代 Skill 消费。当前仅在此 **mock 组合根**接线；未来生产 API/worker 组合根必须另接同一内部 pump 并验证生命周期，不能把这段本地验证计为真实平台运行时已消费。
+
 生产部署仍按下节执行：真实 adapter、HTTPS 反代、受限数据库角色与备份恢复都不属于本地组合根。
 
 ## 启动与升级
@@ -27,7 +29,7 @@
 - 备份需包含数据库、媒体文件和与之对应的版本/哈希清单；凭据与备份加密密钥不能放仓库。D07 未定前不能承诺具体保留和清除期限。
 - 在独立空环境恢复：先阻断发送，恢复数据库和媒体，校验消息、事实版本、outbox 未投递项、发送账本和媒体哈希；用 mock adapter 跑 smoke。真实 adapter 仍需单独 reconcile，不能把备份中的旧任务直接发送。
 - 2026-09-24 已在隔离 PostgreSQL 17.11 用 `pg_dump --format=custom`/`pg_restore` 恢复到另一空数据库，并复制私有 raw-event 目录；核对了字节与 SHA-256、消息/版本、outbox、发送账本及全局暂停。恢复后的 `SUBMITTING` 经 `recoverAmbiguous` 成为 `RESULT_UNKNOWN`，未解决 key 仍阻断。见 `docs/reports/07-g2-integration-2026-09-24.md` 和 `tests/integration/postgres-backup-restore.test.mts`。
-- 该演练未覆盖媒体目录、会话目录、凭据、整机、增量/定期备份或真实 adapter reconcile；这些仍是发布阻塞。入站事务提交后至内联业务消费前崩溃时，当前桥接尚缺 outbox pump，必须先完成持久重放与去重验证，再按上述顺序恢复 dispatch。
+- 该演练未覆盖媒体目录、会话目录、凭据、整机、增量/定期备份或真实 adapter reconcile；这些仍是发布阻塞。QQ fake OneBot 已用真实 PostgreSQL 验证接收入站提交后消费失败、重启 pump 重放和双 pump 并发去重；真实 QQ 桥接与多日运行仍需只接收试验，恢复时仍先维持 dispatch 关闭。
 
 ## 观测与退出
 

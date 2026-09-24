@@ -18,6 +18,7 @@
     "spike:report": "node scripts/qq-spike-report.mts",
     "spike:shape": "node scripts/qq-raw-shape.mts",
     "spike:summary": "node scripts/qq-spike-summary.mts summary",
+    "spike:manifest": "node scripts/qq-spike-manifest.mts",
     "verify": "npm run test:unit && npm run test:contracts && npm run test:integration && npm run build:web && npm run test:e2e"
   },
   "dependencies": { "pg": "^8.16.3" },

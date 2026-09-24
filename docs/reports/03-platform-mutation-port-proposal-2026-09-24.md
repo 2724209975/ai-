@@ -1,4 +1,6 @@
-# 03 平台撤回/编辑的同事务失效端口提案（待总控审核）
+# 03 平台撤回/编辑的同事务失效端口提案与 A19 落地
+
+当前状态：总控已在 `docs/decisions.md` 接受 A19，并分配 `0008_platform_message_mutations.sql`。以下先保留审批前提案，再记录已落地版本；以末节为准。
 
 ## 已确认缺口
 
@@ -39,4 +41,25 @@ invalidatePlatformMessage(tx, {
 4. 平台消息 ID 无法关联：审计行为 `unmatched`，不误改其他联系人；02 保留 `PAUSED_*` 待核状态并取消未提交发送。不能把「没有查到消息」判定成安全恢复。
 5. 已删除消息再次收到变更、乱序 edit/recall、同一消息不同事件键的多次变更：第一版按 fail closed，仅追加审计并保持旧上下文不可用，绝不复活正文或自动解除暂停。
 
-本文件是接口、字段和测试提案，尚未新增迁移或实现端口。D09 编辑/撤回格式仍待 01 的真实样本；D07 私有文件与备份清除仍待生命周期决定。
+以上为审批前的提案状态。D09 编辑/撤回格式仍待 01 的真实样本；D07 私有文件与备份清除仍待生命周期决定。
+
+## 2026-09-24 总控批准的最小端口落地
+
+总控先批准不依赖新迁移的最小失效方向。03 已在 `PgDataProvider.invalidatePlatformMutation` 落地如下签名，供 02 当前事务调用：
+
+```ts
+invalidatePlatformMutation(tx, {
+  callerContactId, contactId, conversationId, platformAccountId,
+  platformMessageId, mutation: 'recall' | 'edit',
+}, correlationId): Promise<{ linked: boolean; messageId?: string }>
+```
+
+它先验证调用联系人 scope 和联系人/会话/账号绑定，再按 live/account/conversation/platformMessageId 加锁查找。未找到只返回 `linked:false`，不改猜测消息；找到且仍 active 时复用 `deleteMessage` 的消息正文墓碑、关联事实墓碑、分析/快照失效、dependency epoch 与 `EvidenceInvalidated` outbox，同一事务完成。重复命中已删除消息返回 linked=true，不二次提升 epoch/outbox。`mutation` 仅进入 outbox 的失效原因 `platform_recall/platform_edit`，编辑的新正文不会进入上下文。
+
+受限角色 PostgreSQL 用例 `node packages/data/postgres/provider.integration.mts` 已退出 0，覆盖 A/B 同平台消息 ID、跨联系人伪造、匹配失效、旧快照同步复核、事实墓碑、重复与未匹配不二次提升 epoch；03 单测 `node --test packages/data/postgres/*.test.mts` 为 5 pass。此时的最小端口尚无只追加 mutation 审计表；随后总控接受 A19，见下节。
+
+## A19 已批准的审计端口与迁移
+
+总控分配全局 `0008_platform_message_mutations.sql`，03 已落地 `PgDataProvider.invalidatePlatformMessage(tx,{callerContactId,contactId,conversationId,platformAccountId,platformMessageId,platformEventId,mutation,rawEventRef,receivedAt},correlationId)`。按平台事件键读只追加审计表；相同键同内容返回 `duplicate`，冲突返回 `CONFLICT_VERSION`；精确关联 live 消息时调用保守墓碑端口并追加 `applied` 审计，找不到则追加 `unmatched` 审计。`0008` 表只存引用/版本/状态，启用强制 RLS。02 当前调用此已批准接口，编辑新正文仍不进入上下文。
+
+07 在隔离 PostgreSQL 17.11 `127.0.0.1:55418/chat_agent_test` 已运行最新统一集成门禁，报告 20 pass / 0 fail / 0 skip，包含平台 mutation 审计/重放/跨联系人和 fake OneBot recall。03 将以此连接再跑本专项门禁并记录。D09 真实平台编辑语义与 D07 文件/备份清除仍未完成。

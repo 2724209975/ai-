@@ -1,18 +1,18 @@
 # 05 Skill 持久化纵切交付记录
 
-日期：2026-09-24。基线 PRD v1.3、公共契约 v0.3.0、D12/D13 Open。按总控协调，**候选全局迁移号为 0009**（0007 归 02、0008 归 03）；本次没有写入 `db/migrations`、`packages/contracts` 或 REST 路由。
+日期：2026-09-24。基线 PRD v1.3、公共契约 v0.3.0、D12/D13 Open。总控已批准 `db/migrations/0009_skills.sql`（A18）；本轮没有修改已应用迁移、公共类型或 REST 路由。`0011_skills_scope.proposed.sql` 只在 05 模块内作为候选，0010 已预留给 03。
 
 ## 变更
 
-- `packages/skills/registry/schema.proposed.sql`：定义当前 Skill、不可变版本、联系人 grant、调用记录、owner 命令回放表，包含约束和联系人读取 RLS 草案。没有发送任务或 live 事实表。
+- `db/migrations/0009_skills.sql`：已批准的 global-only Skill 当前表、不可变版本、联系人 grant、调用记录、owner 命令回放表。没有发送任务或 live 事实表。
 - `packages/skills/registry/pg-store.mts`：事务内的版本创建/停用/删除、grant、同步 skill epoch、outbox、调用日志和受限读取。共享 02 的 dispatch boundary；不持有平台发送端口。
 - `packages/skills/registry/pg-store.test.mts`：隔离事务夹具验证不可变历史、grant 联系人 epoch、命令幂等、outbox 失败回滚、重建 provider 后读取、日志与 trial/cross-contact 拒绝。
-- `packages/skills/registry/pg-store.real.test.mts`：独立 schema 的真实 PostgreSQL 用例，覆盖迁移草案、断开重连后读取、事件/epoch、调用记录及受限数据库角色的联系人 RLS。
-- `packages/skills/README.md`、[接口提案](05-skills-contract-proposal-2026-09-23.md)：同步补充候选 0008、02/06 对接、兼容与回滚。
+- `packages/skills/registry/pg-store.real.test.mts`：独立 schema 的真实 PostgreSQL 用例，覆盖已批准迁移、断开重连后读取、事件/epoch、调用记录及受限数据库角色的联系人 RLS；新增 owner 表写权限及 receipts 直读负测。
+- `packages/skills/registry/0011_skills_scope.proposed.sql` 与 [安全提案](05-skills-scope-proposal-2026-09-24.md)：联系人私有定义的可替换扩展，总控未批准，未进入全局迁移。
 
 ## 验证
 
-在 07 提供的隔离 PostgreSQL 测试库上，`node --test packages/skills/registry/pg-store.real.test.mts`：**1 pass / 0 fail**；`npm run test:unit`：**195 pass / 0 fail**；`npm run test:contracts`：**4 pass / 0 fail**。真实 PG 用例在随机独立 schema 中执行 0001–0007 已有迁移与 05 SQL 草案，验证断开数据库连接再读取、历史版本、联系人 grant、同步 epoch、outbox、调用记录，以及非表拥有者角色下 A/B 的 RLS 隔离。测试后清除随机 schema 和角色。
+在 07 提供的隔离 PostgreSQL 测试库上，`node --test packages/skills/registry/registry.test.mts packages/skills/registry/pg-store.test.mts packages/skills/registry/pg-store.real.test.mts`：**18 pass / 0 fail**。真实 PG 用例在随机独立 schema 中执行现有全局迁移；0011 仅在另一隔离 schema 中临时应用作候选验证。受限角色无 current/versions/receipts 写权限，receipts 直读也被拒；候选下无 scope、A/B 与私有历史版本的 direct SQL 隔离通过。测试后清除随机 schema 和角色。
 
 本机未安装 `tsc`，静态编译未验证。真实 PG 测试验证的是客户端断开重连，**没有重启 PostgreSQL 服务**；真实 PG outbox INSERT 故障注入验证版本、epoch 和事件一同回滚。无 02 消费 05 事件后显式更新 plan 状态的联测。
 
@@ -23,3 +23,5 @@ AC35/36：版本和 grant 存储草案有事务/命令重放验证；保存后�
 02 需审查 `skill_epoch` 更新、事件消费后的 plan 状态写入，以及 lease 内精确版本/grant 复核；06 需审查最小 Owner 查询/命令投影、鉴权、CSRF 和 `allowedActions`，无 URL 定稿。03 仍提供已裁剪上下文；04 只接收 05 建议并运行检查。D12 的导入格式/内置内容和 D13 的组合/执行规则仍是未决产品选择；JSON、枚举规则和单阶段一个 Skill 仍只是开发默认值。
 
 当前 `setStatus(...,'deleted')` 是逻辑墓碑，历史版本定义仍保留供追溯。D07 的正文/备份清除期限尚未确定；正式删除策略须由总控审定，不能把逻辑删除称为物理清除。
+
+2026-09-24 安全复审补充：0009 只支持 global 定义，非 global 的 preview/import/store 现明确返回 `PRIVATE_SCOPE_NOT_ENABLED`，避免数据库 CHECK 意外失败。`SkillVersionChanged`/`GrantChanged` v1 outbox 只携带 skillId、可选 contactId、版本和原因，不含定义、示例或原始输入；02 消费端需验证事件后按 epoch 失效未发送方案。真实库测试中，独立非 BYPASSRLS owner 角色可创建版本、在目标联系人 scope 下更改 grant；runtime 无三张 owner 表写权限或 receipts 读权限。生产尚未配置相应角色，部署角色映射和 0011 增量迁移仍需总控协调。06 的 Skill REST/鉴权/CSRF/allowedActions 仍待统一接口批准。

@@ -61,3 +61,13 @@
 总控批准了 [AC04 私有接口提案](02-mock-auto-proposal-2026-09-24.md)的 `0007_mock_auto_approval.sql`。02 增加默认关闭的 `mockAutoEnabled`；只有构造参数显式开启、01 适配器确为 `MockPlatformAdapter`、持久策略为 auto、触发消息全为 live 文字、04 返回可回复且无非 ordinary 风险/Skill 版本时，才在同一事务保存方案、`orch_mock_auto_approvals` 证据及固定分条 SendTask。自动方案没有本人 ConfirmationTask，也暂不发布旧版 `ReplyPlanProposed` 事件；会话发送投影标示 `approvalSource=mock_auto`。每条仍经 `withDispatchLease` 复核 03 快照、策略/依赖/暂停版本、内容 hash 和上一条结果。关闭开关或换用 QQ/微信桥接后，未提交的自动分条在发送前被拒绝。
 
 `tests/integration/postgres-mock-auto.test.mts` 在隔离 PostgreSQL 17 + 01 mock 上通过：低风险两条自动提交与重启、默认关闭和非 mock 启用拒绝、约见回确认、媒体回确认、缺事实暂停、策略改变/本人接管失效、重复入站、未知结果阻断、已提交一条后第二条未知的部分发送、模型故障暂停。`TEST_DATABASE_URL=postgres://postgres@127.0.0.1:55432/chat_agent_test npm run verify` 的最终结果：**193 unit pass、4 contract pass、12 PostgreSQL integration pass、web build pass、5 E2E pass**；备份恢复用例因缺 `PG_DUMP_BIN/PG_RESTORE_BIN` 跳过 1 项，浏览器 Chromium 用例未设置 `RUN_BROWSER_E2E` 跳过 3 项。这些只证明开发 mock 路径，不是 QQ/微信真实自动发送验收。D03/D04 生产时序参数未固化，真实自动发送继续关闭。
+
+## 续作：G2 入站安全门禁与 05 技能事件（2026-09-24）
+
+01 对已鉴权但无法可靠映射对端的自身消息，在原始证据入库同一事务调用 02 的 `pauseAccountForUnmappedSelf(tx,accountId,{rawEventRef,correlationId})`。02 按账号锁定全部已登记会话、失效方案和未提交分条、提升暂停代际并记录 `OWNER_ORIGIN_UNMAPPED`；回滚与重放联测确认不会部分生效，也不会虚造联系人消息。03 的 `listUnknownOrigins` 只给 Owner 投影已裁剪引用，02 仅按联系人和消息 ID 合并，不带出私有路径。无可信连接/故障汇总 provider 时，Owner 查询状态明确为 `unavailable`。
+
+02 对平台撤回/编辑在同一事务调用 03 已批准的 `invalidatePlatformMessage`（0008 追加式审计），精确关联 live 消息并失效事实、分析、快照；找不到关联也失效未发送方案并置 `PLATFORM_MUTATION_UNVERIFIED`，保持暂停待本人审查。重复事件无二次副作用，跨联系人引用拒绝；已提交发送不重写。详见 [G2 接口记录](02-g2-ingress-safety-proposal-2026-09-24.md)及 03 的审计交付记录。
+
+按总控与 05 确认的 v1 payload，02 增加 `consumeSkillEvent`。05 的版本/grant 命令已经同步提升 `dispatch_control.skill_epoch`；02 在派发边界与 inbox 幂等保护下，把作用范围内 epoch 已过期的未完成方案显式置 `INVALIDATED`，取消确认票和仍为 `CREATED` 的分条，发布 `ReplyPlanInvalidated`。联系人 grant 只影响目标会话，全局 Skill 版本影响所有过期会话；较晚到达的旧事件不会失效在新 epoch 下生成的方案。已提交分条及历史 Skill 调用保留，发送租约和确认命令在事件投递前仍同步核对 epoch。07 负责把 05 的内部 outbox 事件投递到这个消费者，不能依赖只筛 QQ 账号事件的 01 pump；运行时接线联测尚在 07。
+
+隔离 PostgreSQL 17.11 的 `postgres-mock-auto`、`postgres-platform-mutation`、`postgres-skill-invalidation` 联测分别通过。完整命令设置 `TEST_DATABASE_URL`、PG17 `PG_DUMP_BIN/PG_RESTORE_BIN`、`RUN_BROWSER_E2E=1`、工作区 Chromium 路径后执行 `npm run verify`：**208 unit、9 contract、23 real-PG integration、13 E2E 通过，0 fail、0 skip，网页构建通过**。原始输出见 [02 G2 验证日志](02-g2-verify-2026-09-24.log)。真实 HTTP 与浏览器联测已包含在 E2E；平台发送仍仅限开发 mock/fake OneBot，真实 QQ/微信自动发送保持关闭。

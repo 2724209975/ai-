@@ -1,6 +1,6 @@
 # 01 QQ 桥接组合根
 
-把 NapCat 一类 OneBot 11 桥接推来的私聊事件接进 02/03/04，并把 02 授权后的分条发回桥接。它**不登录 QQ、不保存平台凭据、不暴露公网**；真实账号登录与桥接本体由运维（本人在服务器上）提供。
+把 NapCat 一类 OneBot 11 桥接推来的私聊事件接进 02/03/04，并把 02 授权后的分条发回桥接。它**不登录 QQ、不保存平台凭据、不暴露公网**；客户端登录与桥接本体由本人在本机测试环境操作，独立在线宿主留待后续验证。
 
 ```powershell
 $env:DATABASE_URL='postgres://...'
@@ -18,11 +18,11 @@ node apps/bridge/main.mts
 
 ## 这条路径上做了什么、没做什么
 
-入站顺序固定为：传输鉴权 → 01 解码 → 原始字节私密落盘 + inbox 去重 + outbox 事件（同一事务）→ 02 业务消费。名单外的联系人目前仍被原始存储实现完整留存原事件字节，不产生分析、方案或发送；这项隐私最小化缺口须由 00/03 修正。已在册联系人的图片/语音等非文字消息会作为对应类型入库并由 02/04 判为需要人工处理（`PAUSED_MEDIA`），**不会被改写成文字**；混合或空白内容保留为 `unsupported`。
+入站顺序固定为：鉴权 → 01 解码 → 已登记事件的原始字节私密落盘 + inbox 去重 + outbox 事件（同一事务）→ 02 业务消费。名单外只写发现元数据与摘要，不留聊天原文、不产生分析、方案或发送。已鉴权但无法确认对端的自身消息按内部 `unmapped_self` 私密留证，并在同一事务内由 02 暂停该账号的已登记会话；它不会冒充公共 `PlatformOwnerMessageObserved` 或联系人入站。图片/语音等非文字消息由 02/04 判为需要人工处理（`PAUSED_MEDIA`），**不会被改写成文字**；混合或空白内容保留为 `unsupported`。
 
 出站只能由 02 的 dispatch 租约发起；桥接只负责把已经授权的分条编码成一次 OneBot 请求并如实回报结果。桥接明确失败或超时都保守记为结果未知，绝不重发；`accepted` 只代表桥接受理，不代表送达。
 
-尚未接线：真实账号登录与桥接安装（D01 spike 范围）、媒体下载与 03 私有存储、本人发言的经审核 peer mapper、`X-Self-ID` 实测、outbox 发布器、已批准表情发送（需要 03 的素材读取端口）。目前 outbox 在提交后尝试 inline 消费；若消费失败，重放事件仍去重，待发布器未补齐前不能宣称可靠交付。NapCat 的许可与风险见 [QQ spike 计划](../../docs/platforms/qq-spike-plan.md)，只接收试验见 [runbook](../../docs/platforms/qq-receive-only-runbook.md)。
+本机真实账号已完成一次**只接收** spike，结论和未测项见[脱敏报告](../../docs/reports/platform-qq-2026-09-24.md)。已接线的 outbox pump 在启动及常驻运行时重投待处理的 01 事件，只有 02 消费提交后才标记 `published_at`；重复推送由 inbox 去重。仍缺媒体原件下载与 03 私有存储、本人发言的经审核 peer mapper、已批准表情发送、平台历史连续覆盖与独立宿主关机验证。NapCat 的许可与风险见 [QQ spike 计划](../../docs/platforms/qq-spike-plan.md)，复现步骤见 [runbook](../../docs/platforms/qq-receive-only-runbook.md)。
 
 ## 只接收采证用的两个命令
 

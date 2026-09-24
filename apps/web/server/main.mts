@@ -11,6 +11,7 @@ import { PgDataProvider } from '../../../packages/data/postgres/provider.mts';
 import { PgOwnerDataPort } from '../../../packages/data/postgres/owner-data-port.mts';
 import { PgConfirmedService } from '../../../packages/orchestration/postgres/confirmed-service.mts';
 import { createDispatchWorker } from '../../../packages/orchestration/postgres/worker.mts';
+import { createSkillOutboxPump } from '../../../packages/infrastructure/postgres/skill-outbox-pump.mts';
 import { MockPlatformAdapter } from '../../../packages/platform/mock/adapter.mts';
 import { createPgPersistentFakeIntelligence } from '../../../packages/ai/index.mts';
 import { createPgOwnerPort } from './pg-owner-port.mts';
@@ -68,6 +69,12 @@ const service = new PgConfirmedService({
   maxAggregationMs: integer('MAX_AGGREGATION_MS', 30_000),
 });
 await service.recover();
+const skillOutbox = createSkillOutboxPump({ pool, onEvent: event => service.consumeSkillEvent(event),
+  intervalMs: integer('SKILL_OUTBOX_INTERVAL_MS', 2_000),
+  onError: () => process.stderr.write('skill outbox delivery failed; event remains pending\n') });
+try { await skillOutbox.tick(); }
+catch { process.stderr.write('skill outbox startup replay failed; event remains pending\n'); }
+skillOutbox.start();
 const worker = createDispatchWorker({
   pool, service,
   intervalMs: integer('WORKER_INTERVAL_MS', 2_000),
@@ -101,6 +108,7 @@ const shutdown = async (signal: string): Promise<void> => {
   closing = true;
   process.stdout.write(`shutting down (${signal})\n`);
   await new Promise<void>(done => server.close(() => done()));
+  await skillOutbox.stop();
   await worker.stop();
   await pool.end();
 };

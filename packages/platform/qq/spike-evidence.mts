@@ -6,6 +6,9 @@
  */
 import { auditRawEventFiles } from '../../infrastructure/postgres/reception.mts';
 import { withTransaction, type PgPool } from '../../infrastructure/postgres/transaction.mts';
+import { createHash } from 'node:crypto';
+import { readFile, realpath } from 'node:fs/promises';
+import { isAbsolute, relative, resolve } from 'node:path';
 
 export type SpikeEvidenceInput = {
   /** Inbox rows classified without exposing the peer. */
@@ -29,6 +32,66 @@ export type SpikeSummary = SpikeEvidenceInput & {
   /** What this summary cannot prove, so it is never read as platform acceptance. */
   limitations: string[];
 };
+
+/** Private local index for independently tracing aggregate claims back to DB rows. Paths and
+ * hashes are used internally for integrity checking but never returned or logged. */
+export async function collectSpikeManifest(pool: PgPool, accountId: string, rawRoot?: string): Promise<{
+  evidenceId: string; observedAt: string; scope: 'enrolled' | 'discovery_only' | 'unmapped_self';
+  eventType: string | null; messageType: string | null; rawIntegrity: 'verified' | 'missing' | 'mismatch' | 'not_applicable' | 'not_checked';
+}[]> {
+  if (!accountId) throw new Error('ACCOUNT_ID_REQUIRED');
+  const rows = await withTransaction(pool, async tx => {
+    const rows = await tx.query<{ evidence_id: string; observed_at: Date | string; scope: string;
+      event_type: string | null; message_type: string | null; payload_ref: string; payload_sha256: string }>(`SELECT
+        i.id::text AS evidence_id, i.received_at AS observed_at,
+        CASE WHEN i.conversation_id='unmapped:self' THEN 'unmapped_self'
+             WHEN i.conversation_id LIKE 'unmapped:%' OR i.payload_ref LIKE 'discovery:%' THEN 'discovery_only'
+             ELSE 'enrolled' END AS scope,
+        o.event_type, m.type AS message_type, i.payload_ref, i.payload_sha256
+      FROM platform_inbox_raw i
+      LEFT JOIN LATERAL (
+        SELECT event_type FROM event_outbox
+        WHERE envelope->>'causationId'=i.event_key
+          AND envelope->'payload'->>'accountId'=i.account_id
+        ORDER BY id LIMIT 1
+      ) o ON true
+      LEFT JOIN LATERAL (
+        SELECT type FROM data_messages
+        WHERE platform_account_id::text=i.account_id
+          AND platform_event_id=i.event_key
+        ORDER BY id LIMIT 1
+      ) m ON true
+      WHERE i.platform='qq' AND i.account_id=$1
+      ORDER BY i.received_at,i.id`, [accountId]);
+    return rows.rows;
+  });
+  const base = rawRoot ? await realpath(resolve(rawRoot)) : undefined;
+  return Promise.all(rows.map(async row => {
+    let rawIntegrity: 'verified' | 'missing' | 'mismatch' | 'not_applicable' | 'not_checked';
+    if (row.payload_ref.startsWith('discovery:')) rawIntegrity = 'not_applicable';
+    else if (!base) rawIntegrity = 'not_checked';
+    else {
+      const target = resolve(base, row.payload_ref);
+      const rel = relative(base, target);
+      if (rel === '..' || rel.startsWith(`..\\`) || rel.startsWith('../') || rel === '' || isAbsolute(rel)) {
+        rawIntegrity = 'mismatch';
+      } else {
+        try {
+          const actual = await realpath(target);
+          const actualRel = relative(base, actual);
+          if (actualRel === '..' || actualRel.startsWith(`..\\`) || actualRel.startsWith('../') || isAbsolute(actualRel)) throw new Error('RAW_REF_OUTSIDE_ROOT');
+          const bytes = await readFile(actual);
+          rawIntegrity = createHash('sha256').update(bytes).digest('hex') === row.payload_sha256 ? 'verified' : 'mismatch';
+        } catch (error) {
+          rawIntegrity = (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'mismatch';
+        }
+      }
+    }
+    return { evidenceId: row.evidence_id, observedAt: new Date(row.observed_at).toISOString(),
+      scope: row.scope as 'enrolled' | 'discovery_only' | 'unmapped_self', eventType: row.event_type,
+      messageType: row.message_type, rawIntegrity };
+  }));
+}
 
 function tally(values: readonly string[]): Record<string, number> {
   const out: Record<string, number> = {};

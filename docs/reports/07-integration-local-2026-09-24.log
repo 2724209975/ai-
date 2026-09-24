@@ -2,44 +2,31 @@
 > test:integration
 > node --test tests/integration/*.test.mts
 
-✔ real PostgreSQL: database and raw-event backup restores into a separate database with dispatch paused (2413.3056ms)
-✔ real PostgreSQL: text confirmation and two parts survive worker restart (1075.5306ms)
-✔ real PostgreSQL: 03 provider transactions and scoped RLS (880.7827ms)
-✔ real PostgreSQL: PG-persistent 04 bridge turns an inbound text into a pending confirmation (947.8283ms)
-✔ AC04 real PostgreSQL: mock low-risk auto only, restart, fallback and unknown blocking (1442.7992ms)
-✔ real PostgreSQL: owner API covers reject, resume, policy, facts, media and analysis corrections (1379.1062ms)
-✖ real PostgreSQL + fake OneBot: push in, confirm, authorized send out (1486.753ms)
-✔ real PostgreSQL + fake OneBot: duplicate and out-of-order push keep one durable row per platform ID (474.614ms)
-✔ real PostgreSQL + fake OneBot: mixed body is retained as unsupported and pauses the contact (355.9126ms)
-✔ real PostgreSQL + fake OneBot: transport disconnect leaves unknown and restart does not resend (498.7875ms)
-✔ real PostgreSQL + fake OneBot: a media message pauses instead of being guessed at (358.6333ms)
-✔ real PostgreSQL: transactional inbox/outbox and unknown-send recovery across worker connections (1757.6269ms)
-✔ real PostgreSQL: aggregation batches, restart recovery and the dispatch worker (2568.205ms)
-ℹ tests 13
+✔ real PostgreSQL: database and raw-event backup restores into a separate database with dispatch paused (3209.0726ms)
+✔ real PostgreSQL: text confirmation and two parts survive worker restart (1536.0014ms)
+✔ real PostgreSQL: 03 provider transactions and scoped RLS (1513.3838ms)
+✔ real PostgreSQL: PG-persistent 04 bridge turns an inbound text into a pending confirmation (1555.3551ms)
+✔ AC04 real PostgreSQL: mock low-risk auto only, restart, fallback and unknown blocking (2484.4004ms)
+✔ real PostgreSQL: bridge outbox pump delivers pending events once and retries failures (1730.4444ms)
+✔ real PostgreSQL: owner API covers reject, resume, policy, facts, media and analysis corrections (2341.1459ms)
+✔ real PostgreSQL: owner overview matches the machine contract and reports unavailable (2232.3074ms)
+✔ real PostgreSQL: platform mutation audit, replay dedupe, cross-contact rejection (2439.3665ms)
+✔ real PostgreSQL + fake OneBot: push in, confirm, authorized send out (2857.6624ms)
+✔ real PostgreSQL + fake OneBot: committed outbox survives consumer crash and duplicate webhook (410.2656ms)
+✔ real PostgreSQL + fake OneBot: duplicate and out-of-order push keep one durable row per platform ID (420.4671ms)
+✔ real PostgreSQL + fake OneBot: mixed body is retained as unsupported and pauses the contact (398.4234ms)
+✔ real PostgreSQL + fake OneBot: transport disconnect leaves unknown and restart does not resend (458.1396ms)
+✔ real PostgreSQL + fake OneBot: a media message pauses instead of being guessed at (592.7929ms)
+✔ real PostgreSQL + fake OneBot: voice and native faces map as unsupported material, not text (496.1585ms)
+✔ real PostgreSQL + fake OneBot: a quoted text keeps the reply id and a recall tombstones it (405.7448ms)
+✔ real PostgreSQL + fake OneBot: a signed push is accepted and a tampered one is refused (399.6195ms)
+✔ real PostgreSQL: transactional inbox/outbox and unknown-send recovery across worker connections (3054.1515ms)
+✔ real PostgreSQL: aggregation batches, restart recovery and the dispatch worker (3884.9772ms)
+ℹ tests 20
 ℹ suites 0
-ℹ pass 12
-ℹ fail 1
+ℹ pass 20
+ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 3693.7897
-
-✖ failing tests:
-
-test at tests\integration\postgres-qq-bridge.test.mts:102:1
-✖ real PostgreSQL + fake OneBot: push in, confirm, authorized send out (1486.753ms)
-  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  
-  503 !== 204
-  
-      at TestContext.<anonymous> (file:///C:/1/ai%E4%BB%A3%E8%81%8A/tests/integration/postgres-qq-bridge.test.mts:124:12)
-      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
-      at async Test.run (node:internal/test_runner/test:1208:7)
-      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
-    generatedMessage: true,
-    code: 'ERR_ASSERTION',
-    actual: 503,
-    expected: 204,
-    operator: 'strictEqual',
-    diff: 'simple'
-  }
+ℹ duration_ms 7341.8971

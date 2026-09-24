@@ -89,7 +89,7 @@ test('G2 fake OneBot data gate: raw link, replay, contact scope, unmapped self a
       assert.deepEqual((await pool.query('SELECT generation,dependency_epoch FROM dispatch_control WHERE conversation_id=$1',
         [contacts[0]!.conversationId])).rows, before.rows);
       assert.equal(Number((await pool.query<{ n: string }>('SELECT count(*)::text AS n FROM event_outbox')).rows[0]!.n), outboxBefore);
-      assert.equal((await post(wire(41001, 20002, '相同平台键但内容变更'))).status, 503);
+      assert.equal((await post(wire(41001, 20002, '相同平台键但内容变更'))).status, 409);
       assert.deepEqual((await pool.query('SELECT generation,dependency_epoch FROM dispatch_control WHERE conversation_id=$1',
         [contacts[0]!.conversationId])).rows, before.rows);
 
