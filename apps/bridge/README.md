@@ -23,3 +23,12 @@ node apps/bridge/main.mts
 出站只能由 02 的 dispatch 租约发起；桥接只负责把已经授权的分条编码成一次 OneBot 请求并如实回报结果。桥接明确失败或超时都保守记为结果未知，绝不重发；`accepted` 只代表桥接受理，不代表送达。
 
 尚未接线：真实账号登录与桥接安装（D01 spike 范围）、媒体下载与 03 私有存储、本人发言的经审核 peer mapper、`X-Self-ID` 实测、outbox 发布器、已批准表情发送（需要 03 的素材读取端口）。目前 outbox 在提交后尝试 inline 消费；若消费失败，重放事件仍去重，待发布器未补齐前不能宣称可靠交付。NapCat 的许可与风险见 [QQ spike 计划](../../docs/platforms/qq-spike-plan.md)，只接收试验见 [runbook](../../docs/platforms/qq-receive-only-runbook.md)。
+
+## 只接收采证用的两个命令
+
+```powershell
+npm run spike:posture   # 校验只接收姿态：出站与 worker 必须关闭、监听必须留在 loopback、token 已配置
+npm run spike:summary   # 去敏聚合：入站分类计数、消息类型计数、会话/暂停/待办/发送状态、未发布 outbox、原始文件审计
+```
+
+`spike:summary` 只查询聚合列，不读取正文、媒体或平台标识；输出附适用边界（不证明登录、补齐或送达），可与能力快照一起归档为 G2 证据。完整步骤见 [QQ 只接收验证步骤](../../docs/platforms/qq-receive-only-runbook.md)。

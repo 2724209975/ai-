@@ -19,6 +19,7 @@ import { OneBotHttpTransport } from '../../packages/platform/qq/onebot-http-tran
 import { newId } from '../../packages/orchestration/postgres/ids.mts';
 import { contentHash } from '../../packages/orchestration/conversations/engine.mts';
 import { createQqBridge } from '../../apps/bridge/bridge.mts';
+import { collectSpikeEvidence } from '../../packages/platform/qq/spike-evidence.mts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -153,6 +154,17 @@ test('real PostgreSQL + fake OneBot: push in, confirm, authorized send out', { s
     assert.equal(after.sends[0]?.status, 'SUBMITTED');
     assert.equal(after.sends[0]?.receiptLevel, 'accepted');
     assert.equal(after.sends[0]?.platformMessageId, '90001');
+
+    // 9. The operator's redacted evidence view must match what actually happened.
+    const summary = await collectSpikeEvidence(fixture.pool, { accountId: fixture.accountId, rawRoot: fixture.rawRoot });
+    assert.equal(summary.inbox.enrolled, 1);
+    assert.equal(summary.inbox.discovery_only, 1, 'the unenrolled peer is counted as discovery only');
+    assert.equal(summary.messagesByType.text, 1, 'a discovery-only event must not create a message row');
+    assert.equal(summary.duplicateMessageRows, 0);
+    assert.equal(summary.tasks.pending, 0);
+    assert.equal(summary.sends.SUBMITTED, 1);
+    assert.equal(summary.rawFiles.files, 1, 'only the enrolled event keeps raw bytes');
+    assert.equal(summary.rawFiles.unreferenced, 0);
   } finally {
     await fixture.cleanup();
   }
