@@ -46,10 +46,11 @@ test('a capability snapshot cannot overstate what was measured', async () => {
     const copy = structuredClone(snapshot); change(copy); return copy;
   };
   // A vendor page is documentation, never our own measurement.
-  const documented = snapshot.evidence.find(item => item.status === 'documented')!;
-  assert.ok(documented, 'the QQ snapshot keeps documented families for comparison');
+  const measured = snapshot.evidence.find(item => item.status === 'tested');
+  assert.ok(measured, 'the QQ run measured at least one family');
   assert.throws(() => assertCapabilitySnapshot(patch(copy => {
-    const item = copy.evidence.find(entry => entry.capability === documented.capability)!; item.status = 'tested'; })), /VALIDATION_FAILED/);
+    const item = copy.evidence.find(entry => entry.capability === measured!.capability)!;
+    item.sourceRef = 'https://napneko.github.io/develop/event'; })), /VALIDATION_FAILED/);
   // The overall status must equal the derived one.
   assert.throws(() => assertCapabilitySnapshot(patch(copy => { copy.verificationStatus = 'documented'; })), /VALIDATION_FAILED/);
   // Coverage matters: dropping a family cannot leave the overall status unchanged.

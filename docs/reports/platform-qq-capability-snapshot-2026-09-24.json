@@ -30,21 +30,23 @@
     },
     {
       "capability": "send_types",
-      "status": "documented",
-      "sourceRef": "https://napneko.github.io/config/basic",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "napcat-v4.18.28-candidate",
-      "constraints": ["send_private_msg 为文档声明；发送窗口、频率限制与幂等键均未实测",
-        "本适配器当前只声明 text：已批准表情发送需要 03 的素材读取端口，未接线前对 approved_sticker 一律返回 UNSUPPORTED_CAPABILITY，因此不声明 sticker 发送能力"]
+      "status": "tested",
+      "sourceRef": "run:qq-controlled-send-2026-09-24",
+      "observedAt": "2026-09-24T08:53:25.713Z",
+      "adapterVersion": "napcat-v4.18.28",
+      "constraints": ["本机实测：本人授权后经管理端确认，向知情测试好友真实发送 1 条文字；桥接返回 accepted 并给出平台消息 ID（记录在本地发送账本），收件人确认收到",
+        "发送前检查全部通过：live 模式、全局与联系人未暂停、计划/票据/内容哈希与依赖版本一致；发送仍只发生在 02 的 dispatch 租约内",
+        "本次只测文字：已批准表情发送未接线（当前对 approved_sticker 返回 UNSUPPORTED_CAPABILITY）；发送窗口、频率限制与桥接幂等键仍无平台证据"]
     },
     {
       "capability": "receipt_levels",
-      "status": "unknown",
-      "sourceRef": "https://napneko.github.io/develop/event",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "napcat-v4.18.28-candidate",
-      "constraints": [],
-      "unavailableReason": "无实测：当前只能把桥接成功回包记为 accepted，无法区分 accepted 与 delivered，也无法按 sendKey 查询超时后的结果"
+      "status": "tested",
+      "sourceRef": "run:qq-controlled-send-2026-09-24",
+      "observedAt": "2026-09-24T08:53:25.713Z",
+      "adapterVersion": "napcat-v4.18.28",
+      "constraints": ["实测只取得 accepted 级：桥接回包给出平台消息 ID，可与发送账本关联",
+        "delivered 级无平台证据：本次由收件人人工确认收到，系统不据此自动升级为送达；按 sendKey 查询超时结果的能力同样不存在",
+        "同一路径的两次实测划出边界：第一次回包无法配对时记为 RESULT_UNKNOWN（不重发、暂停联系人待人工核对），修复后取得 accepted + 平台消息 ID"]
     },
     {
       "capability": "owner_message_signal",
