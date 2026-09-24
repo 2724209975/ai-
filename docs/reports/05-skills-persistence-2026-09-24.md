@@ -1,6 +1,6 @@
 # 05 Skill 持久化纵切交付记录
 
-日期：2026-09-24。基线 PRD v1.3、公共契约 v0.3.0、D12/D13 Open。按总控协调，**0008 只是候选全局迁移号**；本次没有写入 `db/migrations`、`packages/contracts` 或 REST 路由。
+日期：2026-09-24。基线 PRD v1.3、公共契约 v0.3.0、D12/D13 Open。按总控协调，**候选全局迁移号为 0009**（0007 归 02、0008 归 03）；本次没有写入 `db/migrations`、`packages/contracts` 或 REST 路由。
 
 ## 变更
 

@@ -1,6 +1,6 @@
 # 总控审查：05 Skill 持久化与该模块 0008 候选迁移
 
-日期：2026-09-24。审查对象：[schema.proposed.sql](../../packages/skills/registry/schema.proposed.sql)、[pg-store.mts](../../packages/skills/registry/pg-store.mts)、[05 交付记录](05-skills-persistence-2026-09-24.md)、[接口提案](05-skills-contract-proposal-2026-09-23.md)。基线：PRD v1.3、公共契约 v0.3.0。结论：**未通过，`0008` 继续只是候选，不得写入 `db/migrations`。**
+日期：2026-09-24。审查对象：[schema.proposed.sql](../../packages/skills/registry/schema.proposed.sql)、[pg-store.mts](../../packages/skills/registry/pg-store.mts)、[05 交付记录](05-skills-persistence-2026-09-24.md)、[接口提案](05-skills-contract-proposal-2026-09-23.md)。基线：PRD v1.3、公共契约 v0.3.0。结论：**未通过，05 的候选迁移（现编号 `0009`；`0008` 已归 03 的平台变更审计）不得写入 `db/migrations`。**
 
 ## 结论摘要
 
@@ -49,4 +49,4 @@ restricted role read count: 1
 
 ## 后续
 
-修订后由 05 重跑真实库用例（含受限角色的写入路径），交回总控复审；复审通过才把该 SQL 以全局编号 `0008` 写入 `db/migrations`（`applyMigrations` 要求编号连续，且已应用文件不可修改）。在此之前 [decisions.md](../decisions.md) 的 A18 保持 Candidate。
+修订后由 05 重跑真实库用例（含受限角色的写入路径），交回总控复审；复审通过才把该 SQL 以全局编号 `0009` 写入 `db/migrations`（`applyMigrations` 要求编号连续，且已应用文件不可修改）。在此之前 [decisions.md](../decisions.md) 的 A18 保持 Candidate。
