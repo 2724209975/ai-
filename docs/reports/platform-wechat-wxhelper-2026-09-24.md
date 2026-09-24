@@ -158,3 +158,32 @@ Windows 应用程序日志（本机时间）显示 `WeChat.exe` 3.9.11.17 在 **
 3. 把结果维护成**属于这份二进制的偏移块**，每个入口都要有"填充+序言"或"调用点同型"证据；离线自证完成后再单独申请一次注入验证。
 
 工具都留在 `.local-wxhelper/`（gitignored）：`find-strings.mjs`、`dump-strings.mjs`、`grep-strings.mjs`、`find-function.mjs`、`call-targets.mjs`、`check-offsets.ps1`、`dump-pdata.ps1`、`read-mem.ps1`、`disasm/`（Capstone 工具）、`inject.ps1`。
+
+## 偏移移植第三阶段（2026-09-24 晚）：偏移已移植并重建 DLL，等待一次注入验证
+
+### 消息结构字段偏移：**与上游假设一致，handler 无需修改**
+
+把日志格式串 `"doAddMsg srvid: %d, msgtyp: %d,cTime:%d,msgseq: %d from : %s to %s"`（`0x4f201c0`）的取值代码与 `SyncMgr::ConvertAddMsgToChatMsg` 的读取逐项对照，`AddMsg`（hook 的 `param2`）在本机布局为：
+
+| 字段 | 偏移 | 证据 |
+| --- | --- | --- |
+| 消息类型（dword） | **+0x24** | `movsxd rax, dword [rsi+0x14]`（`rsi = param2+0x10`）即 `param2+0x24`，对应日志第 2 个参数 `msgtyp`；转换函数把它写入 `ChatMsg+0x38` |
+| 创建时间（dword） | **+0x58** | 同上，对应日志参数 `cTime`（`[rsi+0x48]`） |
+| 消息序号（dword） | **+0x5C** | 同上，对应日志参数 `msgseq`（`[rsi+0x4c]`） |
+| 消息 ID（qword） | **+0x60** | `mov rax, qword [rsi+0x50]` 即 `param2+0x60`，被写入 `ChatMsg+0x30` |
+| 文本内容 | **+0x30** | 转换函数经 `[rsi+0x20]` 读取并按 `std::string` SSO 规则（`cmp qword [rax+0x18], 0x10`）取数据指针 |
+
+四项独立吻合 → 上游 handler 使用的 `+0x18/+0x28/+0x30/+0x24/+0x40/+0x48/+0x50/+0x58/+0x5C/+0x60` **在本机构建上同样成立**，因此**只改函数地址，不改 handler**。
+
+### 已移植并重建
+
+在 `V_3_9_11_25` 偏移块内改两处（`offset.h`，本地 gitignored 副本，原文件另存 `.orig.bak`）：
+
+| 常量 | 原值（上游） | 新值（本机实测推导） |
+| --- | --- | --- |
+| `kDoAddMsg` | 0x230a3e0 | **0x230ef30** |
+| `kGetAccountServiceMgr` | 0x1b50d00 | **0x1b557d0** |
+
+重新编译得到 `wxhelper.dll`（SHA-256 `F67EFF42E774A689EFC13F5963DAC50D9F9D4792C3D3383906C3D0BB967125F4`），已记录到本地构建清单。
+
+**验证阶段的风险边界（必须遵守）**：本次只移植了"接收链路 + 登录检查"两个偏移；其余 83 个常量仍是上游值，**任何调用其它接口的请求都可能崩宿主**。因此注入后的验证只允许：`/api/checkLogin` → `/api/hookSyncMsg` →（必要时 `/api/unhookSyncMsg`）；不得调用通讯录、发送、收藏、朋友圈等任何接口。此外初始化流程（`WeChatDb::Init`）只用 `kGPInstance` 等常量且**不在注入时调用**，所以注入本身不依赖它们。
