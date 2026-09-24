@@ -29,6 +29,7 @@ node apps/bridge/main.mts
 ```powershell
 npm run spike:posture   # 校验只接收姿态：出站与 worker 必须关闭、监听必须留在 loopback、token 已配置
 npm run spike:summary   # 去敏聚合：入站分类计数、消息类型计数、会话/暂停/待办/发送状态、未发布 outbox、原始文件审计
+npm run spike:shape -- <原始事件文件或目录>   # 只读字段形状（无取值、无文件名），用于判定 message_sent 的对端字段
 ```
 
 `spike:summary` 只查询聚合列，不读取正文、媒体或平台标识；输出附适用边界（不证明登录、补齐或送达），可与能力快照一起归档为 G2 证据。完整步骤见 [QQ 只接收验证步骤](../../docs/platforms/qq-receive-only-runbook.md)。
