@@ -42,3 +42,19 @@ QQ 官方 Bot：官方文档证明用户可与机器人单聊，作为“本人 
 mock 的 30 个离线测试覆盖去重、来源、回执、媒体失败、发送拒绝及模拟恢复；QQ 内部协议、传输、媒体、来源分类与恢复评估另有 57 个离线测试。mock 的 getCapabilities 使用 verificationStatus=unknown 并声明 fixture_only/NO_NETWORK，不表示微信或 QQ 有这些真实能力。总计 87 个离线测试通过，真实能力仍按上表 unknown/blocked 记录。
 
 逐项状态的正式机器表达、未知来源事件和媒体完整性字段仍需 00 在公共 schema 落定。当前没有生产能力快照，不能把此矩阵的 documented 字段直接用于启用自动模式。
+
+## 2026-09-24 实测更新（覆盖上表的 `unknown`）
+
+上表是 2026-09-22 的候选评估矩阵，逐项状态**已由两轮真实 spike 部分取代**，以各平台快照为准：
+
+| 能力 | QQ（[快照](../reports/platform-qq-capability-snapshot-2026-09-24.json)） | 微信（[快照](../reports/platform-wechat-capability-snapshot-2026-09-24.json)） |
+| --- | --- | --- |
+| 文字接收 | `tested`（真实好友私聊） | `tested`（2 条） |
+| 图片接收 | `tested`（1 条，原始字节私密留存） | `tested`（1 条；**仅约 4.3 KB 缩略图级别内联字节**） |
+| 语音接收 | `tested`（1 条） | `tested`（1 条，`<voicemsg>` 元数据） |
+| 表情（贴纸）接收 | 段类型记为 `unsupported`，未声明静态/动态表情 | **未观测到**（type 47 未出现，故不声明） |
+| 文字发送 | `tested`（受控真实发送两次，`accepted` 级回执 + 平台消息 ID） | `unknown`（发送路径偏移未移植） |
+| 回执级别 | `tested`（只到 `accepted`） | `unknown` |
+| 本人/系统回显、历史补齐、媒体完整获取 | `unknown` | `unknown` |
+
+两项都**没有**达到 `GO_CONFIRM_ONLY`：QQ 还缺批准表情发送、本人/回显区分与 AC23；微信只完成了接收侧，且其偏移表是**针对本机这一个二进制移植的**，微信更新后必须重做。

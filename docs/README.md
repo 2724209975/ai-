@@ -1,6 +1,8 @@
 # 工程协作基线
 
-需求基线为根目录《个人聊天代理 AI PRD v1.3.md》。截至 2026-09-23，01–07 均在开发（05 已启动骨架，D12/D13 未定）；公共契约 v0.3.0、G0 PostgreSQL 底座与全局迁移 `0001`–`0006` 已落盘，本机隔离 PostgreSQL 17.11 的 6 项真实用例通过。尚无微信/QQ 真实接入或生产部署验收，最新状态见开发计划。
+需求基线为根目录《个人聊天代理 AI PRD v1.3.md》。截至 2026-09-23，01–07 均在开发（05 已启动骨架，D12/D13 未定）；公共契约 v0.3.0、G0 PostgreSQL 底座与全局迁移 `0001`–`0006` 已落盘，本机隔离 PostgreSQL 17.11 的 6 项真实用例通过。
+
+**2026-09-24 平台实测更新**：QQ 侧只接收 + 两次受控真实发送已实测，判定 CONDITIONAL（[报告](reports/platform-qq-2026-09-24.md)）；微信侧经**离线偏移移植**后只接收实测通过——捕获文字/图片/语音并全部带平台消息 ID，能力快照只有 `receive_types` 为 `tested`、总体仍 `unknown`（[记录](reports/platform-wechat-wxhelper-2026-09-24.md)｜[快照](reports/platform-wechat-capability-snapshot-2026-09-24.json)）。生产部署与 AC23 关机运行仍未验收，最新状态见开发计划与 [decisions.md](decisions.md)。
 
 阅读顺序：
 

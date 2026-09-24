@@ -2,6 +2,8 @@
 
 状态日期：2026-09-23（G0 基线集成中，首个 Git 提交 `c85929e`）。任务状态只有 `Not started / In progress / Blocked / Done`；只有代码、测试与证据满足门槛才可 Done。01–07 均为 `In progress`（05 已启动骨架，D12/D13 未定）。公共契约 v0.3.0、首批机器 schema、全局迁移 `0001`–`0006`、事务/调度端口、本人登录会话和 07 CI/测试基础已落盘。本机隔离 PostgreSQL 17.11 实跑：175 项模块测试、4 项契约检查、6 项真实 PostgreSQL 用例（含 RLS 负测、本人管理 API、聚合与调度恢复、04 持久桥接）、8 项 E2E（含 390px Chromium、真实登录与真实 HTTP→PostgreSQL→mock 发送浏览器流程）和网页构建通过，0 fail；尚无远端仓库，因此远程 CI 仍未执行；这些结果不计微信/QQ 验收。
 
+**2026-09-24 状态补充（平台实测）**：QQ 完成只接收 + 两次受控真实发送，判定 CONDITIONAL；微信在完成**离线偏移移植**后只接收实测通过（文字/图片/语音，5/5 带平台消息 ID），`receive_types` 为 `tested`、其余五族 `unknown`。两平台的发送/回执完整验证、本人回显、媒体完整获取与 AC23 关机运行都仍未完成；微信偏移表绑定本机单个二进制，客户端更新即失效。
+
 ## 1. 集成顺序与门槛
 
 | 阶段 | 交付 | 可并行 | 退出门槛 |
@@ -31,7 +33,7 @@
 
 ## 3. AC01–AC42 主责映射
 
-01 的 [初次交接](reports/platform-01-handoff-2026-09-22.md)提出 P01–P06；[9 月 23 日续作](reports/platform-01-progress-2026-09-23.md)新增 QQ 离线协议、发送、来源和恢复原型。初版语义审入 v0.2.0；[来源/恢复提案](platforms/contract-proposals.md)、[03 同步依赖与迁移提案](reports/03-data-contract-proposal-2026-09-23.md)、[04 媒体错误路由提案](reports/04-ai-continuation-2026-09-23.md)及 [06 Owner REST 提案](reports/web-06-api-proposal-2026-09-23.md)已按 [A08–A11](decisions.md)审定到 v0.3.0，其中 06 只批准 G1 最小路由；[A12](decisions.md)批准 RLS 修复迁移 `0003`，[A13](decisions.md)批准 02 持久化迁移 `0004`。机器 schema、全局 SQL、事务端口、02 发送租约和本机真实 PostgreSQL 用例已就位；生产登录/会话、其余 Owner API provider、持久调度、真实桥接和平台验收仍缺。微信/QQ 均未验证。
+01 的 [初次交接](reports/platform-01-handoff-2026-09-22.md)提出 P01–P06；[9 月 23 日续作](reports/platform-01-progress-2026-09-23.md)新增 QQ 离线协议、发送、来源和恢复原型。初版语义审入 v0.2.0；[来源/恢复提案](platforms/contract-proposals.md)、[03 同步依赖与迁移提案](reports/03-data-contract-proposal-2026-09-23.md)、[04 媒体错误路由提案](reports/04-ai-continuation-2026-09-23.md)及 [06 Owner REST 提案](reports/web-06-api-proposal-2026-09-23.md)已按 [A08–A11](decisions.md)审定到 v0.3.0，其中 06 只批准 G1 最小路由；[A12](decisions.md)批准 RLS 修复迁移 `0003`，[A13](decisions.md)批准 02 持久化迁移 `0004`。机器 schema、全局 SQL、事务端口、02 发送租约和本机真实 PostgreSQL 用例已就位；生产登录/会话、其余 Owner API provider、持久调度与完整平台验收仍缺。**平台实测进度**（2026-09-24）：QQ 只接收 + 受控发送已测（CONDITIONAL）；微信经离线偏移移植后只接收已测（`receive_types` = `tested`，接收端尚未接入 `apps/bridge`）。
 
 “主责”负责编写端到端验收和证据；“协作”提供模块测试/接口。涉及平台实况的用例必须分别记录 mock 与微信/QQ real 结果。
 
@@ -95,4 +97,4 @@
 1. **G0 当前状态**：v0.3.0、`packages/contracts` 首批机器 schema、全局迁移 `0001`–`0006`、PostgreSQL 事务/outbox/inbox/发送账本/同步依赖 epoch 底座、02/03 的持久 provider、本人登录会话与 02 调度 worker 均已落盘（首个 Git 提交 `c85929e`）。本机隔离 PostgreSQL 17.11 上的 6 项真实用例（02 确认发送重启恢复、03 provider/RLS、04 PG 持久桥接、本人管理 API、聚合与调度、07 inbox-outbox/未知发送）通过。G0 仍待远端仓库上的首次远程 CI 与 01 的真实平台 producer 才能关闭；所有模块须导入统一类型，不能沿用互相冲突的局部定义。
 2. **07 已启动**：统一 CI、真实 PostgreSQL/HTTP/移动端 mock E2E 和 AC01–AC42 分栏证据矩阵已建立；跨进程重启恢复、口令登录与真实 HTTP→PostgreSQL→mock 发送浏览器流程已在本机通过。剩余门槛是远端仓库与首次远程 CI 实跑、生产部署（镜像/反代/备份恢复演练），G0/G1 因此仍未判完成。
 3. **接通最小 Owner API**：02 提供待办、确认、暂停与发送状态，03 提供受控查询，06 按已批准 REST schema 接入并做旧确认、重复点击、结果未知、部分发送、单人暂停的 mock E2E。`allowedActions` 与最终权限始终由后端计算。本机组合根已跑通：`scripts/dev-seed.mts` 注入一条合成入站文本后，`npm run serve:owner` 生成待办，确认后由 worker 提交到 mock 适配器并写入回执（仍为 mock，不计平台验收）。详见 [本次交付记录](reports/00-control-g1-local-loop-2026-09-23.md)。
-4. **01 真实平台验证并行继续**：QQ 先固定个人账号桥接候选和测试范围，核查独立常在线环境后实测；微信单独找满足现有好友会话的路径。两平台的本人发言、媒体、回执、断线补齐与关机运行分别出报告。模拟通过不解锁真实自动发送。05 可在公共类型稳定后启动版本库和试用骨架，D12/D13 决定后才定正式导入与执行规则。
+4. **01 真实平台验证并行继续**：QQ 只接收与受控发送已完成（CONDITIONAL），下一步是已批准表情发送、本人/系统回显区分与 AC23；微信已完成只接收（经离线偏移移植），下一步是把接收端接入 `apps/bridge`／`packages/platform/wechat`，并在需要发送时移植发送路径偏移。两平台的本人发言、媒体完整获取、断线补齐与关机运行分别出报告。模拟通过不解锁真实自动发送。05 可在公共类型稳定后启动版本库和试用骨架，D12/D13 决定后才定正式导入与执行规则。
