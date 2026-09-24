@@ -114,3 +114,19 @@
 ## 对公共契约的变更提案
 
 - 无。若发现契约缺口，先提案，不在本地私加同名字段或状态。
+
+## 2026-09-24 独立复核备注
+
+上文保留原操作人提交的实测记录，**不改写为另一人已复核**。7 条已登记 inbox、6 条 data_messages（文字 3、图片 1、语音 1、unsupported 1）与 1 条撤回事件在数量上相符；7 个原始文件、0 个未引用文件与汇总相符。这只是报告内部算术核对。能力表目前用同一个 `run:qq-receive-only-2026-09-24` 批次引用，尚无逐样本私有证据索引；本轮也没有原数据库或原始事件目录可读，因此原始字节的 SHA-256、平台来源、媒体内容及撤回关联**未由另一人独立核查**。
+
+为补追溯而新增 `npm run spike:manifest`：在原测试环境用私有 `DATABASE_URL`、`QQ_ACCOUNT_ID`、`RAW_EVENT_DIR` 运行，输出每条内部 inbox UUID、接收时间、归类、业务事件/消息类型及原始文件完整性结果。它不输出 QQ 号、好友标识、正文、媒体 URL、文件路径或裸摘要。复核者只在私有环境比对该索引与原始记录，公开报告仅补随机证据编号和逐项通过/失败；原环境不可访问则继续保持“未独立复核”。此工具本身也不能证明 NapCat 从平台补齐历史。
+
+公开来源的 2026-09-24 复查：[NapCat 发布页](https://github.com/NapNeko/NapCatQQ/releases)列有 v4.18.28；[维护者 Windows Shell 指引](https://napneko.github.io/guide/boot/Shell)说明下载 Shell 包及启动方式；[v4.18.28 固定版本许可](https://github.com/NapNeko/NapCatQQ/blob/v4.18.28/LICENSE)是受限条款，个人测试的具体授权范围仍需核清。上文“官方包 SHA-256 已核对”是原操作人的记录，本轮未取得本地包及摘要，**不能作为独立核对结论**。系统版本按本机 build 22631 与[微软 Windows 11 版本表](https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information)核对为 Windows 11 23H2；旧环境清单曾依据注册表 ProductName 写成 Windows 10 Pro。结论继续为 **CONDITIONAL**，不升级为发送或 AC23 通过。
+
+## 2026-09-24 操作人补充（同一人，不构成独立复核）
+
+原测试环境（本机 PostgreSQL 55432 的 `chat_agent_spike`、`.local-napcat/raw-events`）仍可访问，已按复核建议补上可追溯索引：`npm run spike:manifest` 输出 7 条内部样本（6 条 `PlatformInboundObserved`：text/image/voice/unsupported/text/text；1 条 `PlatformMessageMutationObserved`），逐条 `rawIntegrity=verified`（私有原始文件摘要与 inbox 行一致），文件保存在私有目录，不输出 QQ 号、对端标识、正文、URL 或裸摘要。
+
+同时复核了我此前记录的 NapCat 包摘要：本地 `NapCat.Shell.v4.18.28.zip` 的 SHA-256 = `bcdd8bdb9e44bd0cf6a90908e572141787fd9e98cb8d8eecc5adf25bbdcabb94`，与发布页一致。
+
+以上仍属同一操作人的记录；复核方提出的"需要另一人用私有索引独立核对来源、媒体内容与撤回关联"这一条依然成立，结论继续为 **CONDITIONAL**。
