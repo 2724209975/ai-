@@ -1,8 +1,8 @@
 {
-  "accountId": "unassigned-test-account",
+  "accountId": "01997000-0000-7000-8000-0000000e0001",
   "platform": "qq",
-  "adapterVersion": "napcat-v4.18.28-candidate",
-  "observedAt": "2026-09-24T00:00:00.000Z",
+  "adapterVersion": "napcat-v4.18.28",
+  "observedAt": "2026-09-24T03:35:00.000Z",
   "receiveTypes": ["text", "image", "voice", "unsupported"],
   "sendTypes": ["text"],
   "receiptLevels": ["accepted"],
@@ -10,8 +10,8 @@
   "historySync": "unknown",
   "mediaFetch": "documented:get_image/get_record",
   "constraints": [
-    "候选桥未安装、未登录、未接收任何真实事件；本文件是 spike 输入，不是能力结论",
-    "accountId 为占位值：真实测试账号选定后必须换成已登记 PlatformAccount 的内部 UUID 并重新签发",
+    "本快照含 2026-09-24 本机只接收 spike 的实测结果：NapCat v4.18.28（官方包 SHA-256 已核对）以注入方式携带非主力测试账号运行，投递到 apps/bridge 的签名入口",
+    "accountId 为已登记 PlatformAccount 的内部 UUID；QQ 号只留在本机数据库与 NapCat 本地配置，未进入本文件",
     "NapCat 许可为受限许可，个人测试使用权限需在安装前核清；不复制、修改或再分发其代码",
     "事件推送用配置里的 token 作为 HMAC-SHA1 签名密钥（x-signature: sha1=...）并带 x-self-id；部署仍必须保持私有网络且不暴露端口"
   ],
@@ -19,13 +19,14 @@
   "evidence": [
     {
       "capability": "receive_types",
-      "status": "documented",
-      "sourceRef": "https://napneko.github.io/develop/event",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "napcat-v4.18.28-candidate",
-      "constraints": ["仅维护者文档声明私聊/好友事件与消息段；逐类型实际送达、顺序、去重与原始字节完整性均未实测",
+      "status": "tested",
+      "sourceRef": "run:qq-receive-only-2026-09-24",
+      "observedAt": "2026-09-24T03:35:00.000Z",
+      "adapterVersion": "napcat-v4.18.28",
+      "constraints": ["本机只接收实测：文字、图片、语音、QQ 原生表情各一条均由知情好友从原客户端发出，全部被接纳（HTTP 204）并私密留存原始事件字节",
         "本适配器只声明 text、image、voice、unsupported：表情段（face）与未知段记为 unsupported，image 段一律记 image 而不认作静态或动态表情，因此不声明 sticker_static/sticker_animated",
-        "动态表情能否取得完整动画序列、而非单帧，仍待真实样本实测"]
+        "每类型仅一条样本；未在真实账号上验证重复投递、乱序、断线补齐与 24h 关机运行（这些目前只有合成夹具证据）",
+        "含引用文字的样本正文与引用 ID 正确；撤回样本经审计表记为 applied 并把原正文墓碑化"]
     },
     {
       "capability": "send_types",
@@ -47,11 +48,12 @@
     },
     {
       "capability": "owner_message_signal",
-      "status": "documented",
+      "status": "unknown",
       "sourceRef": "https://napneko.github.io/develop/event",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "napcat-v4.18.28-candidate",
-      "constraints": ["message_sent 事件已文档化，但缺少经审核的对端 mapper：本人手发与桥接回显的区分尚未验证，自己发出的事件当前会收到 400 而不是被归类"]
+      "observedAt": "2026-09-24T03:35:00.000Z",
+      "adapterVersion": "napcat-v4.18.28",
+      "constraints": ["message_sent 事件已文档化（维护者文档）"],
+      "unavailableReason": "本次只接收运行把 reportSelfMessage 关闭，平台未推送自身消息；且缺少经审核的对端 mapper，本人手发与桥接回显无法区分，因此该能力未测，不能算 documented 已达成的可用信号"
     },
     {
       "capability": "history_sync",
@@ -64,11 +66,12 @@
     },
     {
       "capability": "media_fetch",
-      "status": "documented",
+      "status": "unknown",
       "sourceRef": "https://github.com/botuniverse/onebot-11/blob/master/api/public.md",
-      "observedAt": "2026-09-24T00:00:00.000Z",
-      "adapterVersion": "napcat-v4.18.28-candidate",
-      "constraints": ["get_image/get_record 返回桥接本机路径：跨主机可读性、URL/token 失效期、原图与原语音完整性、动态表情是否可取得完整序列均未实测"]
+      "observedAt": "2026-09-24T03:35:00.000Z",
+      "adapterVersion": "napcat-v4.18.28",
+      "constraints": ["get_image/get_record 仍为文档声明（OneBot 公共 API）"],
+      "unavailableReason": "本适配器尚未接线媒体抓取：只保存原始事件（内含平台侧不透明媒体引用），因此无法判断原图/原语音/完整动态序列是否可取；这属于本项目待办，不是平台结论"
     }
   ]
 }

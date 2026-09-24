@@ -20,7 +20,7 @@ async function load(): Promise<PlatformCapabilitySnapshot> {
   return JSON.parse(await readFile(snapshotPath, 'utf8')) as PlatformCapabilitySnapshot;
 }
 
-test('the shipped QQ pre-spike snapshot is honest: no item claims tested, overall stays unknown', async () => {
+test('the shipped QQ snapshot is honest: measured items cite a run, the rest stay unclear', async () => {
   const schema = JSON.parse(await readFile(resolve(root, 'packages/contracts/schemas/platform-capability-snapshot.schema.json'), 'utf8'));
   assert.deepEqual(schema.$defs.status.enum, [...capabilityStatuses]);
   assert.deepEqual(schema.$defs.capability.enum, [...capabilityFamilies]);
@@ -28,11 +28,16 @@ test('the shipped QQ pre-spike snapshot is honest: no item claims tested, overal
   const snapshot = await load();
   assert.doesNotThrow(() => assertCapabilitySnapshot(snapshot));
   assert.deepEqual(snapshot.evidence.map(item => item.capability).sort(), [...capabilityFamilies].sort(), 'every capability family needs its own evidence item');
-  assert.ok(snapshot.evidence.every(item => item.status !== 'tested'), 'a snapshot taken before the spike cannot contain measured claims');
+  // The 2026-09-24 receive-only run measured the inbound types, so that family is `tested` - and a
+  // measured claim must cite this project's own run, never a vendor page.
+  assert.ok(snapshot.evidence.some(item => item.status === 'tested'), 'the QQ run produced at least one measured family');
+  assert.ok(snapshot.evidence.filter(item => item.status === 'tested').every(item => !/^https?:\/\//i.test(item.sourceRef)),
+    'a tested family must cite project evidence');
   assert.ok(snapshot.evidence.filter(item => item.status === 'unknown').every(item => item.unavailableReason), 'unknown items must say what is missing');
   assert.equal(capabilityOverallStatus(snapshot.evidence), 'unknown');
   assert.equal(snapshot.verificationStatus, 'unknown');
-  assert.match(snapshot.accountId, /^unassigned/, 'the placeholder account must be replaced once a test account exists');
+  // The QQ spike ran on a real account, so the placeholder is gone; WeChat still has none.
+  assert.match(snapshot.accountId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, 'the QQ snapshot carries the internal account uuid from the run');
 });
 
 test('a capability snapshot cannot overstate what was measured', async () => {
@@ -41,7 +46,10 @@ test('a capability snapshot cannot overstate what was measured', async () => {
     const copy = structuredClone(snapshot); change(copy); return copy;
   };
   // A vendor page is documentation, never our own measurement.
-  assert.throws(() => assertCapabilitySnapshot(patch(copy => { copy.evidence[0]!.status = 'tested'; copy.verificationStatus = 'unknown'; })), /VALIDATION_FAILED/);
+  const documented = snapshot.evidence.find(item => item.status === 'documented')!;
+  assert.ok(documented, 'the QQ snapshot keeps documented families for comparison');
+  assert.throws(() => assertCapabilitySnapshot(patch(copy => {
+    const item = copy.evidence.find(entry => entry.capability === documented.capability)!; item.status = 'tested'; })), /VALIDATION_FAILED/);
   // The overall status must equal the derived one.
   assert.throws(() => assertCapabilitySnapshot(patch(copy => { copy.verificationStatus = 'documented'; })), /VALIDATION_FAILED/);
   // Coverage matters: dropping a family cannot leave the overall status unchanged.
@@ -71,12 +79,14 @@ test('both platform snapshots exist, validate, and match their platform', async 
     const snapshot = JSON.parse(await readFile(path, 'utf8')) as PlatformCapabilitySnapshot;
     assert.doesNotThrow(() => assertCapabilitySnapshot(snapshot), `${platform} snapshot must satisfy the contract`);
     assert.equal(snapshot.platform, platform);
-    assert.ok(snapshot.evidence.every(item => item.status !== 'tested'), `${platform} has no measured evidence yet`);
+    // Only a platform that was actually exercised may carry measured families.
+    if (platform === 'wechat') assert.ok(snapshot.evidence.every(item => item.status !== 'tested'), 'no WeChat route exists, so nothing is measured');
     // A platform we cannot verify must not look better than "unknown" overall.
     assert.equal(snapshot.verificationStatus, capabilityOverallStatus(snapshot.evidence));
   }
   const wechat = JSON.parse(await readFile(snapshots.wechat, 'utf8')) as PlatformCapabilitySnapshot;
   assert.ok(wechat.evidence.every(item => item.status === 'unknown'), 'with no candidate route every WeChat capability stays unknown');
+  assert.match(wechat.accountId, /^unassigned/, 'WeChat has no test account yet, so its snapshot keeps the placeholder');
   assert.ok(wechat.evidence.every(item => item.unavailableReason), 'each WeChat gap must state what is missing');
 });
 
