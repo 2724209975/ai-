@@ -77,6 +77,10 @@ test('real PostgreSQL: an unknown send is resolved with evidence, and only then 
     const sends = async () => (await pool.query<{ id: string; sequence: number; status: string; version: number }>(
       'SELECT id,sequence,status,version::int AS version FROM orch_send_tasks ORDER BY sequence')).rows;
     assert.equal((await sends())[0]!.status, 'RESULT_UNKNOWN');
+    // The owner projection must expose the send version, otherwise the resolve command has no input.
+    const projected = (await service.ownerTasks()).items[0] as { sends: { sendTaskId: string; version: number; status: string }[] };
+    assert.equal(typeof projected.sends[0]!.version, 'number', 'the owner projection exposes the send version');
+    assert.equal(projected.sends[0]!.version, (await sends())[0]!.version);
     assert.equal((await pool.query<{ unresolved_send_key: string | null }>('SELECT unresolved_send_key FROM dispatch_control')).rows[0]!.unresolved_send_key !== null, true, 'the unknown send blocks the conversation');
     // The gap this command closes: until it is resolved, the owner cannot even resume the contact.
     const contact = (await service.ownerContacts()).items[0] as { version: number } | undefined;

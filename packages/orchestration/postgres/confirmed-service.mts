@@ -510,7 +510,7 @@ export class PgConfirmedService {
         items.push({ id: t.id, taskId: t.id, version: Number(t.version), taskVersion: Number(t.version), status: t.plan_status, allowedActions: active ? ['confirmPlan', 'rejectPlan'] : [], reasonCodes: t.reason_codes,
           planId: t.plan_id, planVersion: Number(t.plan_version), contactId: t.contact_id, contactName: detail.display_name, conversationId: t.conversation_id,
           triggerMessages: t.trigger_message_ids.map(id => { const m = messages.rows.find(x => x.id === id); return { id, type: m?.type ?? 'text', text: m?.content_ref ?? undefined, at: m?.sent_at instanceof Date ? m.sent_at.toISOString() : String(m?.sent_at ?? '') }; }),
-          alternatives: t.alternatives, sends: sends.rows.map(s => ({ sendTaskId: s.id, sequence: s.sequence, status: s.status, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })), contextSnapshotId: t.context_snapshot_id, policyVersion: Number(t.policy_version) });
+          alternatives: t.alternatives, sends: sends.rows.map(s => ({ sendTaskId: s.id, version: Number(s.version), sequence: s.sequence, status: s.status, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })), contextSnapshotId: t.context_snapshot_id, policyVersion: Number(t.policy_version) });
       }
       return { items };
     });
@@ -664,7 +664,7 @@ export class PgConfirmedService {
           revision: Number(row.revision), generation: Number(row.generation),
           pauseReasons: row.pause_reasons, globalPaused: Boolean(global?.paused),
           messages: messages.rows.reverse().map(m => ({ id: m.id, actor: m.actor, type: m.type, text: m.content_ref ?? undefined, mediaId: m.media_id ?? undefined, at: m.sent_at instanceof Date ? m.sent_at.toISOString() : String(m.sent_at) })),
-          sends: sends.rows.map(s => ({ sendTaskId: s.id, sequence: s.sequence, status: s.status, approvalSource: s.approval_source, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })),
+          sends: sends.rows.map(s => ({ sendTaskId: s.id, version: Number(s.version), sequence: s.sequence, status: s.status, approvalSource: s.approval_source, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })),
         });
       }
       return { items, connectionQueryStatus: 'unavailable' as const, faultQueryStatus: 'unavailable' as const };

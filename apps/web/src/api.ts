@@ -2,7 +2,7 @@
 export type Operable = { id: string; version: number; allowedActions: string[]; status: string; reasonCodes?: string[]; invalidationReason?: string; correlationId?: string };
 export type ReplyPart = { replyPartId: string; sequence: number; type: 'text' | 'approved_sticker'; content?: string; assetId?: string };
 export type Alternative = { alternativeId: string; strategySummary: string; parts: ReplyPart[] };
-export type SendTask = { sendTaskId: string; sequence: number; status: string; approvalSource?: string; receiptLevel?: string; platformMessageId?: string; lastError?: string; correlationId?: string };
+export type SendTask = { sendTaskId: string; version?: number; sequence: number; status: string; approvalSource?: string; receiptLevel?: string; platformMessageId?: string; lastError?: string; correlationId?: string };
 export type Task = Operable & { taskId: string; taskVersion: number; planId: string; planVersion: number; contactId: string; contactName: string; conversationId: string; triggerMessages: { id: string; type: string; text?: string; at: string }[]; reasonCodes: string[]; requiredInputs?: string[]; alternatives: Alternative[]; sends: SendTask[]; contextSnapshotId?: string; policyVersion?: number };
 export type Overview = { version: number; globalPaused: boolean; allowedActions: string[]; pendingCount: number; unknownSendCount: number;
   /** Optional G2 proposal. Omission means the projection has not proved coverage. */
