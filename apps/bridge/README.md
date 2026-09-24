@@ -14,7 +14,7 @@ node apps/bridge/main.mts
 
 可配置项：`HOST`、`PORT`（默认 8788）、`RAW_EVENT_DIR`、`MAX_BODY_BYTES`、`QQ_REQUIRE_SELF_ID_HEADER`、`AGGREGATION_WINDOW_MS`、`MAX_AGGREGATION_MS`、`WORKER_INTERVAL_MS`、`QQ_ENABLE_OUTBOUND`、`WORKER_ENABLED`、`PG_POOL_MAX`。默认**只接收**；只有明确设置 `QQ_ENABLE_OUTBOUND=1` 才要求 `QQ_ONEBOT_BASE_URL` 并创建真实发送传输，worker 也只会在该模式启动。单独设置 `WORKER_ENABLED=1` 而未启用出站会拒绝启动。真实出站需另有经本人批准的测试会话、消息内容与次数，且只能由 02 租约执行。
 
-路由：`POST /onebot/event`（OneBot 事件推送，需要 `Authorization: Bearer <token>`）、`GET /healthz`。
+路由：`POST /onebot/event`（OneBot 事件推送）、`GET /healthz`。鉴权支持两种：**签名路径**（OneBot 惯例，也是 NapCat 实际所用）用配置里的 token 作为 HMAC-SHA1 密钥校验 `x-signature: sha1=...` 并核对 `x-self-id`；**传输层路径**用于其他桥接，要求 `Authorization: Bearer <token>`。
 
 ## 这条路径上做了什么、没做什么
 

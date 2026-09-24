@@ -3,7 +3,7 @@
  * the outbound OneBot request shape. It is NOT platform verification: no QQ account is involved. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -92,7 +92,7 @@ async function setup() {
   const conversation = async () => (await pool.query<{ state: string; pause_reasons: string[] }>('SELECT state,pause_reasons FROM orch_conversations')).rows[0]!;
 
   return {
-    pool, admin, schema, bridge, received, conversation, contactId, conversationId, accountId, rawRoot, onebotPort, post, failures,
+    pool, admin, schema, bridge, received, conversation, contactId, conversationId, accountId, rawRoot, onebotPort, base, post, failures,
     setOutcome(value: 'ok' | 'failed' | 'disconnect') { outcome = value; },
     async cleanup() {
       await close(bridge.server);
@@ -140,7 +140,8 @@ test('real PostgreSQL + fake OneBot: push in, confirm, authorized send out', { s
     const mutated = JSON.parse(body) as Record<string, unknown>;
     mutated.time = Number(mutated.time) + 60;
     assert.equal((await fixture.post(JSON.stringify(mutated))).status, 409, 'a mutated replay must be refused');
-    assert.ok(fixture.failures.some(entry => entry.includes('ingress-conflict')), `conflict must be recorded: ${fixture.failures.join(' | ')}`);
+    assert.ok(fixture.failures.some(entry => entry.includes('409') && entry.includes('code=CONFLICT_VERSION')),
+      `conflict must be recorded: ${fixture.failures.join(' | ')}`);
     assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1, 'a conflicted replay changes nothing');
 
     // 5. An unenrolled peer keeps only raw discovery evidence: no task, no send.
@@ -355,5 +356,29 @@ test('real PostgreSQL + fake OneBot: a quoted text keeps the reply id and a reca
     const tasks = (await fixture.bridge.service.ownerTasks()).items;
     assert.ok(tasks.every(task => task.allowedActions.length === 0), 'the invalidated plan is no longer confirmable');
     assert.equal(fixture.received.length, 0, 'a recall never triggers a send');
+  } finally { await fixture.cleanup(); }
+});
+
+/** What a real OneBot client actually sends: the configured token is an HMAC-SHA1 key over the raw
+ * body, delivered as `x-signature: sha1=...` with `x-self-id`. This is the path NapCat uses; before
+ * it existed the bridge answered 401 and the platform reported "Unexpected status code: 4xx". */
+test('real PostgreSQL + fake OneBot: a signed push is accepted and a tampered one is refused', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    const body = oneBotEvent('签名通道测试', 70001);
+    const sign = (payload: string) => `sha1=${createHmac('sha1', TOKEN).update(payload).digest('hex')}`;
+    const signed = (payload: string, signature: string) => fetch(`${fixture.base}/onebot/event`, { method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-signature': signature, 'x-self-id': SELF_ID }, body: payload });
+
+    assert.equal((await signed(body, sign(body))).status, 204, `signed push must be accepted: ${fixture.failures.join(' | ')}`);
+    assert.equal((await signed(body, sign(body))).status, 204, 'a replayed signed push stays idempotent');
+    const tampered = await signed(body, sign(body.replace('70001', '70002')));
+    assert.equal(tampered.status, 401, 'a signature that does not match the body must be refused');
+    const wrongSelf = await fetch(`${fixture.base}/onebot/event`, { method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-signature': sign(body), 'x-self-id': '99999' }, body });
+    assert.equal(wrongSelf.status, 403, 'a forged x-self-id must be refused');
+
+    const rows = await fixture.pool.query<{ n: string }>('SELECT count(*)::text AS n FROM platform_inbox_raw');
+    assert.equal(rows.rows[0]?.n, '1', 'only the correctly signed delivery is recorded, once');
   } finally { await fixture.cleanup(); }
 });

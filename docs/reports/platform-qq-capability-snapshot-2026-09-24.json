@@ -13,7 +13,7 @@
     "候选桥未安装、未登录、未接收任何真实事件；本文件是 spike 输入，不是能力结论",
     "accountId 为占位值：真实测试账号选定后必须换成已登记 PlatformAccount 的内部 UUID 并重新签发",
     "NapCat 许可为受限许可，个人测试使用权限需在安装前核清；不复制、修改或再分发其代码",
-    "事件推送只有 token 鉴权、没有签名字段，部署必须保持私有网络且不暴露端口"
+    "事件推送用配置里的 token 作为 HMAC-SHA1 签名密钥（x-signature: sha1=...）并带 x-self-id；部署仍必须保持私有网络且不暴露端口"
   ],
   "verificationStatus": "unknown",
   "evidence": [

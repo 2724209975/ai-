@@ -1,6 +1,6 @@
 # QQ 真实接入 Spike 计划（G2 前置）
 
-日期：2026-09-24。状态：**QQ 非主力测试账号路线及非官方风险已由本人接受；账号、知情测试联系人、宿主参数及登录方式仍待具体确认**。未安装、未登录或连接真实平台，未真实发送。服务器按本人要求最后核查。基线：PRD v1.3、公共契约 v0.3.0、[platform-validation.md](../platform-validation.md)、[aliyun-readiness.md](aliyun-readiness.md)、[packages/platform/qq](../../packages/platform/qq/README.md)。下一阶段的只接收步骤、证据和停机条件见 [qq-receive-only-runbook.md](qq-receive-only-runbook.md)。
+日期：2026-09-24。状态（2026-09-24 更新）：**已确认先做 QQ、微信推迟（选项 B）；本人已接受非官方路线与账号风险并允许个人测试；测试账号与知情测试联系人均已就绪；宿主先在本机 Windows 运行，阿里云后置；登录时需本人在场**。未安装、未登录或连接真实平台，未真实发送。服务器按本人要求最后核查。基线：PRD v1.3、公共契约 v0.3.0、[platform-validation.md](../platform-validation.md)、[aliyun-readiness.md](aliyun-readiness.md)、[packages/platform/qq](../../packages/platform/qq/README.md)。下一阶段的只接收步骤、证据和停机条件见 [qq-receive-only-runbook.md](qq-receive-only-runbook.md)。
 
 本页把 G2 入口的账号、知情联系人与常在线宿主条件及工程缺口分开列出。公开资料只作 spike 输入，不构成能力验证。
 
@@ -15,7 +15,7 @@
 | 版本 | NapCat 最新发布 `v4.18.28`（2026-09-14），仓库仍在活跃维护（2026-09-23 有提交），约 1.07 万 stars | 版本可固定；维护活跃不等于稳定性承诺 |
 | 许可 | **不是标准开源许可**。[v4.18.28 固定版本许可](https://github.com/NapNeko/NapCatQQ/blob/v4.18.28/LICENSE)同时写有未经作者明确许可不得使用等条款和附条件再分发条款；适用范围需进一步核清 | 本人已接受评估风险，但这不代替许可证授权。不得把其代码复制进本仓库或随本项目分发；安装前确认具体个人测试用法是否获许可，必要时向作者核实 |
 | 网络模型 | 支持 HTTP 服务端（NapCat 收）、HTTP 客户端（NapCat 把事件推给应用）、正向与反向 WebSocket | 01 的入口按事件推送设计，对应 HTTP 客户端模式或反向 WS |
-| 鉴权 | HTTP 客户端配置项为 `name`/`url`/`messagePostFormat`/`reportSelfMessage`/`token`/`enableForcePushEvent`，**未见签名密钥或 HMAC 字段** | 01 的 `verifyWebhook`（HMAC-SHA1）在这条路线上不成立。入口安全模型必须改为私有网络加 token 且不暴露公网，或改用反向 WS 复用 token。该结论需在 spike 实测确认，并据此更新 [contract-proposals.md](contract-proposals.md) 中关于验签的表述 |
+| 鉴权 | HTTP 客户端配置项为 `name`/`url`/`messagePostFormat`/`reportSelfMessage`/`token`/`enableForcePushEvent` | **2026-09-24 实机纠正**：文档字段表没写清楚，但 `napcat.mjs` 实现里 `token` 是 HMAC-SHA1 密钥，推送带 `x-signature: sha1=<HMAC(token,原始体)>` 与 `x-self-id` 头，01 的 `verifyWebhook` 正好可用。桥接已按签名路径实现，实测正确签名 422（签名通过、事件类型不支持）、篡改签名 401、伪造 `x-self-id` 403 |
 | 消息格式 | `messagePostFormat` 可配置为数组格式 | 满足 01 解码器只解析数组、拒绝 CQ 字符串的前提 |
 | 自身消息 | `message_sent` 事件对私聊与好友可用 | 本人发言识别有原始信号，但仍需实测区分本人手发与桥接发送回显；`self-origin.mts` 的独立 verifier 仍缺实现 |
 | 本机载体 | 本机已装 QQ NT 9.9.30（Windows），但**本机没有 Docker** | 本机可做只读对照，不适合作为常在线宿主 |
