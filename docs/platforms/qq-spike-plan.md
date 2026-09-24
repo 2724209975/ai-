@@ -4,7 +4,7 @@
 
 本页把 G2 入口的账号、知情联系人与常在线宿主条件及工程缺口分开列出。公开资料只作 spike 输入，不构成能力验证。
 
-**来源专项增量**：本人从原 QQ 客户端手发的首个 `message_sent` 真实样本已由只接收桥接捕获，`target_id` 与既有知情好友入站对端在私有环境中一致；系统仍按 `unmapped_self` 暂停账号。尚无系统发送回显对照，`owner_message_signal` 保持 unknown。见 [专项记录](../reports/qq-self-origin-2026-09-24.md)。
+**来源专项增量**：本人从原 QQ 客户端手发的首个 `message_sent` 真实样本已由只接收桥接捕获，`target_id` 与既有知情好友入站对端在私有环境中一致；系统仍按 `unmapped_self` 暂停账号。随后经逐条授权，同一好友收到一次系统文字发送，平台回显的消息 ID、账号、对端和原文均与发送账本吻合；02 仍按 `unmapped_self` 暂停隔离库会话。`owner_message_signal` 保持 unknown，送达未获证明。见 [专项记录](../reports/qq-self-origin-2026-09-24.md)。
 
 ## 1. 为什么先做 QQ
 
