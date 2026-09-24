@@ -79,3 +79,48 @@ test('both platform snapshots exist, validate, and match their platform', async 
   assert.ok(wechat.evidence.every(item => item.status === 'unknown'), 'with no candidate route every WeChat capability stays unknown');
   assert.ok(wechat.evidence.every(item => item.unavailableReason), 'each WeChat gap must state what is missing');
 });
+
+/** A declared capability must be one the adapter can actually produce or accept. Without this the
+ * snapshot could list types the codec never emits, which is exactly the overstatement G2 forbids. */
+test('the QQ snapshot declares only the types this adapter can really produce and accept', async () => {
+  const { decodePrivateEvent } = await import('../../packages/platform/qq/onebot-codec.mts');
+  const { normalizeObservation } = await import('../../packages/platform/qq/normalize.mts');
+  const { createQqPlatformPort } = await import('../../packages/platform/qq/napcat-bridge.mts');
+  const snapshot = await load();
+
+  const event = (message: unknown[]) => ({ post_type: 'message', message_type: 'private', sub_type: 'friend',
+    self_id: 10001, user_id: 20002, message_id: 30003, time: 1790000000, message });
+  const context = { accountId: 'account-1', externalAccountRef: '10001', conversationId: 'conversation-1',
+    eventId: 'event-1', correlationId: 'correlation-1', causationId: 'cause-1', receivedAt: '2026-09-24T00:00:00.000Z', adapterVersion: 'test' };
+  const produced = new Set<string>();
+  const segments: unknown[][] = [
+    [{ type: 'text', data: { text: '你好' } }],
+    [{ type: 'image', data: { file: 'opaque' } }],
+    [{ type: 'record', data: { file: 'opaque' } }],
+    [{ type: 'face', data: { id: 4 } }],
+    [{ type: 'json', data: { data: '{}' } }],
+    [{ type: 'reply', data: { id: 1 } }, { type: 'text', data: { text: '引用回复' } }],
+  ];
+  for (const message of segments) {
+    const observation = decodePrivateEvent(event(message), { expectedSelfId: '10001', rawEventRef: 'raw:1' });
+    const normalized = normalizeObservation(observation, context);
+    produced.add(String((normalized!.payload as Record<string, unknown>).type));
+  }
+  assert.deepEqual([...produced].sort(), [...snapshot.receiveTypes].sort(),
+    'declared receiveTypes must equal the message types the wire path can actually produce');
+
+  // The declared send side is limited the same way: only text can leave the adapter today.
+  const authority = {};
+  const port = createQqPlatformPort({ accountId: 'account-1',
+    transport: { submitOnce: async () => ({ correlation: 'http_response' as const, response: { status: 'ok', retcode: 0, data: { message_id: 1 } } }) },
+    authority });
+  const envelope = { sendTaskId: 't', sendKey: 'k', conversationRef: { accountId: 'account-1', conversationId: 'c', externalContactRef: '20002' },
+    partType: 'text' as const, content: '你好', deadline: new Date(Date.now() + 60_000).toISOString(), mode: 'live' as const, correlationId: 'correlation-1' };
+  await assert.doesNotReject(() => port.submitSend(envelope, authority), 'text must be accepted');
+  const sent: string[] = [];
+  for (const partType of ['approved_sticker'] as const) {
+    await assert.rejects(() => port.submitSend({ ...envelope, partType, content: undefined, mediaRef: 'asset-1' }, authority),
+      (error: Error) => { sent.push(partType); assert.match(error.message, /UNSUPPORTED_CAPABILITY/); return true; });
+  }
+  assert.deepEqual(snapshot.sendTypes, ['text'], 'every other part type must be refused by the adapter');
+});

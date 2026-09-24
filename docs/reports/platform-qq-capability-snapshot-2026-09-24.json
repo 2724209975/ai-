@@ -3,8 +3,8 @@
   "platform": "qq",
   "adapterVersion": "napcat-v4.18.28-candidate",
   "observedAt": "2026-09-24T00:00:00.000Z",
-  "receiveTypes": ["text", "image", "voice", "sticker_static", "sticker_animated", "unsupported"],
-  "sendTypes": ["text", "sticker_static", "sticker_animated"],
+  "receiveTypes": ["text", "image", "voice", "unsupported"],
+  "sendTypes": ["text"],
   "receiptLevels": ["accepted"],
   "ownerMessageSignal": "documented:message_sent",
   "historySync": "unknown",
@@ -23,7 +23,9 @@
       "sourceRef": "https://napneko.github.io/develop/event",
       "observedAt": "2026-09-24T00:00:00.000Z",
       "adapterVersion": "napcat-v4.18.28-candidate",
-      "constraints": ["仅维护者文档声明私聊/好友事件与消息段；逐类型实际送达、顺序、去重与原始字节完整性均未实测"]
+      "constraints": ["仅维护者文档声明私聊/好友事件与消息段；逐类型实际送达、顺序、去重与原始字节完整性均未实测",
+        "本适配器只声明 text、image、voice、unsupported：表情段（face）与未知段记为 unsupported，image 段一律记 image 而不认作静态或动态表情，因此不声明 sticker_static/sticker_animated",
+        "动态表情能否取得完整动画序列、而非单帧，仍待真实样本实测"]
     },
     {
       "capability": "send_types",
@@ -31,7 +33,8 @@
       "sourceRef": "https://napneko.github.io/config/basic",
       "observedAt": "2026-09-24T00:00:00.000Z",
       "adapterVersion": "napcat-v4.18.28-candidate",
-      "constraints": ["send_private_msg 与 image 段为文档声明；发送窗口、频率限制与幂等键均未实测；本项目仅允许文字与已批准表情"]
+      "constraints": ["send_private_msg 为文档声明；发送窗口、频率限制与幂等键均未实测",
+        "本适配器当前只声明 text：已批准表情发送需要 03 的素材读取端口，未接线前对 approved_sticker 一律返回 UNSUPPORTED_CAPABILITY，因此不声明 sticker 发送能力"]
     },
     {
       "capability": "receipt_levels",

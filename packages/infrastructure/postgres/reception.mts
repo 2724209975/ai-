@@ -12,6 +12,7 @@ import { appendOutbox, type ReceivedEvent } from './event-store.mts';
 import { withTransaction, type PgClient, type PgPool } from './transaction.mts';
 import { newId } from '../../orchestration/postgres/ids.mts';
 import { normalizeObservation } from '../../platform/qq/normalize.mts';
+import { WireError } from '../../platform/qq/onebot-codec.mts';
 import type { AtomicReceptionPort } from '../../platform/qq/webhook-ingress.mts';
 import type { WireObservation } from '../../platform/qq/onebot-codec.mts';
 
@@ -109,7 +110,9 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
         const prior = await tx.query<{ payload_sha256: string }>(`SELECT payload_sha256 FROM platform_inbox_raw
           WHERE platform='qq' AND account_id=$1 AND conversation_id=$2 AND event_key=$3`, [options.accountId, inboxScope, dedupeKey]);
         if (prior.rows[0]) {
-          if (prior.rows[0].payload_sha256 !== sha256) throw new Error('CONFLICT_VERSION');
+          // Same platform event key with different bytes is a conflict, not a duplicate: answering
+          // 409 tells the bridge that retrying cannot help, instead of an opaque 503 loop.
+          if (prior.rows[0].payload_sha256 !== sha256) throw new WireError('CONFLICT_VERSION');
           return false;
         }
         // Discovery for non-enrolled peers retains only scoped IDs, event key, timestamp and
@@ -120,7 +123,7 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
         const rows = await tx.query<{ id: string }>(`INSERT INTO platform_inbox_raw(id,platform,account_id,conversation_id,event_key,payload_ref,payload_sha256)
           VALUES($1,'qq',$2,$3,$4,$5,$6) ON CONFLICT (platform,account_id,conversation_id,event_key) DO NOTHING RETURNING id`,
           [newId(now()), options.accountId, inboxScope, dedupeKey, payloadRef, sha256]);
-        if (!rows.rows.length) throw new Error('CONFLICT_VERSION');
+        if (!rows.rows.length) throw new WireError('CONFLICT_VERSION');
         if (event) await appendOutbox(tx, event);
         if (unmappedSelf) {
           if (!options.onUnmappedSelf) throw new Error('UNMAPPED_SELF_PAUSE_UNAVAILABLE');

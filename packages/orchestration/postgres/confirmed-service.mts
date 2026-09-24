@@ -26,6 +26,7 @@ export type DispatchPlatform = {
 };
 
 function fail(code: string): never { throw new Error(code); }
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function requireText(value: unknown): asserts value is string { if (typeof value !== 'string' || !value.trim()) fail('VALIDATION_FAILED'); }
 function toMs(value: unknown): number { return value instanceof Date ? value.getTime() : Date.parse(String(value)); }
 function validAlternatives(alternatives: ProposedAlternative[]): boolean {
@@ -43,7 +44,9 @@ function observedMessageOf(payload: Record<string, unknown>, row: Row, type: Mes
     platformMessageId: String(payload.platformMessageId), platformEventId: String(payload.platformEventId), actor, type,
     contentRef: type === 'text' ? String(payload.contentRef) : undefined,
     mediaId: typeof payload.mediaId === 'string' && payload.mediaId ? payload.mediaId : undefined,
-    quotedMessageId: typeof payload.quotedMessageId === 'string' && payload.quotedMessageId ? payload.quotedMessageId : undefined,
+    // `quotedMessageId` is this system's own message id (a uuid). A platform reply reference belongs
+    // in provenance: accepting it here would try to store a platform id in a uuid column.
+    quotedMessageId: typeof payload.quotedMessageId === 'string' && UUID_PATTERN.test(payload.quotedMessageId) ? payload.quotedMessageId : undefined,
     sentAt: String(payload.sentAt), receivedAt: String(payload.receivedAt),
     provenance: payload.provenance as Record<string, unknown> ?? {}, isAgentGenerated: false, mode: 'live' as const };
 }

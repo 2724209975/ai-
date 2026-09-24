@@ -75,10 +75,13 @@ async function setup() {
   });
   const onebotPort = await listen(onebot);
   const rawRoot = await mkdtemp(join(tmpdir(), 'qq-bridge-raw-'));
+  // Diagnostics: the bridge swallows storage errors on purpose, so keep its safe codes for assertions.
+  const failures: string[] = [];
   const bridge = createQqBridge({
     pool, accountId, selfId: SELF_ID, bridgeToken: TOKEN, rawStore: createFileRawEventStore(rawRoot),
     transport: new OneBotHttpTransport({ baseUrl: `http://127.0.0.1:${onebotPort}/`, accessToken: TOKEN }),
-    workerIntervalMs: 600_000, outboxIntervalMs: 600_000, onError: () => {},
+    workerIntervalMs: 600_000, outboxIntervalMs: 600_000,
+    onError: (error, phase) => failures.push(`${phase}:${error instanceof Error ? error.message : 'unknown'}`),
   });
   await bridge.start();
   await bridge.service.enrollContact({ contactId, conversationId, accountId, externalContactRef: '20002', timezone: 'Asia/Shanghai', goal: '了解对方' });
@@ -89,7 +92,7 @@ async function setup() {
   const conversation = async () => (await pool.query<{ state: string; pause_reasons: string[] }>('SELECT state,pause_reasons FROM orch_conversations')).rows[0]!;
 
   return {
-    pool, admin, schema, bridge, received, conversation, contactId, conversationId, accountId, rawRoot, onebotPort, post,
+    pool, admin, schema, bridge, received, conversation, contactId, conversationId, accountId, rawRoot, onebotPort, post, failures,
     setOutcome(value: 'ok' | 'failed' | 'disconnect') { outcome = value; },
     async cleanup() {
       await close(bridge.server);
@@ -107,7 +110,11 @@ test('real PostgreSQL + fake OneBot: push in, confirm, authorized send out', { s
   try {
     // 1. Transport authentication and the enrollment gate.
     assert.equal((await fixture.post(oneBotEvent('你好', 30003), 'Bearer wrong-token')).status, 401);
-    assert.equal((await fixture.post(oneBotEvent('你好', 30003))).status, 204);
+    // One body, posted twice: a genuine redelivery carries identical bytes. Re-serialising it would
+    // change `time` and become a same-key-different-content conflict (see the 409 case below).
+    const body = oneBotEvent('你好', 30003);
+    const accepted = await fixture.post(body);
+    assert.equal(accepted.status, 204, `ingress refused the accepted event: ${fixture.failures.join(' | ')}`);
 
     // 2. The original bytes are kept privately and the inbox row records the dedupe key.
     const inbox = await fixture.pool.query<{ payload_ref: string; payload_sha256: string }>('SELECT payload_ref,payload_sha256 FROM platform_inbox_raw');
@@ -124,8 +131,17 @@ test('real PostgreSQL + fake OneBot: push in, confirm, authorized send out', { s
     assert.equal((await fixture.bridge.service.ownerOverview()).pendingCount, 1);
 
     // 4. Duplicate delivery is deduplicated before any business effect.
-    assert.equal((await fixture.post(oneBotEvent('你好', 30003))).status, 204);
+    const replayed = await fixture.post(body);
+    assert.equal(replayed.status, 204, `duplicate delivery was refused: ${fixture.failures.join(' | ')}`);
     assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1, 'a duplicate delivery must not create a second task');
+
+    // 4b. Same event id with different bytes is a conflict (409), not a silent overwrite, and the
+    // operator sees it as an ingress conflict instead of an endless 503 retry loop.
+    const mutated = JSON.parse(body) as Record<string, unknown>;
+    mutated.time = Number(mutated.time) + 60;
+    assert.equal((await fixture.post(JSON.stringify(mutated))).status, 409, 'a mutated replay must be refused');
+    assert.ok(fixture.failures.some(entry => entry.includes('ingress-conflict')), `conflict must be recorded: ${fixture.failures.join(' | ')}`);
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1, 'a conflicted replay changes nothing');
 
     // 5. An unenrolled peer keeps only raw discovery evidence: no task, no send.
     assert.equal((await fixture.post(oneBotEvent('陌生人消息', 30099, 20999))).status, 204);
@@ -198,9 +214,12 @@ test('real PostgreSQL + fake OneBot: committed outbox survives consumer crash an
 test('real PostgreSQL + fake OneBot: duplicate and out-of-order push keep one durable row per platform ID', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
   const fixture = await setup();
   try {
-    assert.equal((await fixture.post(oneBotEvent('第二条先到', 50002))).status, 204);
+    // Identical bytes for the redelivery, otherwise the second push is a conflict rather than a
+    // duplicate and the test would be asserting the wrong rule.
+    const secondAgain = oneBotEvent('第二条先到', 50002);
+    assert.equal((await fixture.post(secondAgain)).status, 204);
     assert.equal((await fixture.post(oneBotEvent('第一条后到', 50001))).status, 204);
-    assert.equal((await fixture.post(oneBotEvent('第二条先到', 50002))).status, 204);
+    assert.equal((await fixture.post(secondAgain)).status, 204);
     const rows = await fixture.pool.query<{ platform_message_id: string; content_ref: string }>(
       'SELECT platform_message_id,content_ref FROM data_messages ORDER BY platform_message_id');
     assert.deepEqual(rows.rows, [
@@ -278,4 +297,63 @@ test('real PostgreSQL + fake OneBot: a media message pauses instead of being gue
   } finally {
     await fixture.cleanup();
   }
+});
+
+/** Runbook step 3 lists the inbound kinds the spike must sample; these two cases pin the mapping so
+ * a deviation on the real account is a platform finding rather than an untested code path. */
+test('real PostgreSQL + fake OneBot: voice and native faces map as unsupported material, not text', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    const send = (message: unknown[], id: number) => fixture.post(JSON.stringify({ post_type: 'message', message_type: 'private',
+      sub_type: 'friend', self_id: Number(SELF_ID), user_id: 20002, message_id: id, time: Math.floor(Date.now() / 1000), message }));
+    assert.equal((await send([{ type: 'record', data: { file: 'opaque-voice' } }], 41001)).status, 204);
+    assert.equal((await send([{ type: 'face', data: { id: 4 } }], 41002)).status, 204);
+    const rows = await fixture.pool.query<{ m: string; type: string; content_ref: string | null }>(
+      `SELECT platform_message_id AS m, type, content_ref FROM data_messages ORDER BY platform_message_id`);
+    assert.deepEqual(rows.rows, [
+      { m: '41001', type: 'voice', content_ref: null },
+      { m: '41002', type: 'unsupported', content_ref: null },
+    ], 'a native face is never claimed as a sticker and a voice note keeps its own type');
+    const row = await fixture.conversation();
+    assert.equal(row.state, 'PAUSED_MEDIA');
+    assert.deepEqual(row.pause_reasons, ['MEDIA_UNCERTAIN']);
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 0, 'unreadable material must not produce a candidate');
+    assert.equal(fixture.received.length, 0);
+  } finally { await fixture.cleanup(); }
+});
+
+test('real PostgreSQL + fake OneBot: a quoted text keeps the reply id and a recall tombstones it', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const fixture = await setup();
+  try {
+    const quoted = JSON.stringify({ post_type: 'message', message_type: 'private', sub_type: 'friend', self_id: Number(SELF_ID),
+      user_id: 20002, message_id: 42001, time: Math.floor(Date.now() / 1000),
+      message: [{ type: 'reply', data: { id: 41999 } }, { type: 'text', data: { text: '引用回复' } }] });
+    assert.equal((await fixture.post(quoted)).status, 204);
+    const stored = await fixture.pool.query<{ type: string; content_ref: string | null; quoted_message_id: string | null; quoted_platform: string | null }>(
+      `SELECT type, content_ref, quoted_message_id, provenance->>'quotedPlatformMessageId' AS quoted_platform
+       FROM data_messages WHERE platform_message_id='42001'`);
+    // The internal quoted id stays unknown; the platform reference is kept in provenance for the
+    // spike record, because storing it in the uuid column is what returned 503 before.
+    assert.deepEqual(stored.rows, [{ type: 'text', content_ref: '引用回复', quoted_message_id: null, quoted_platform: '41999' }]);
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1, 'a quoted text still yields a normal confirmation task');
+
+    // The contact then recalls that message: 02 must tombstone it and pause for review (A19 path).
+    const recall = JSON.stringify({ post_type: 'notice', notice_type: 'friend_recall', self_id: Number(SELF_ID), user_id: 20002,
+      message_id: 42001, time: Math.floor(Date.now() / 1000) });
+    assert.equal((await fixture.post(recall)).status, 204);
+    const row = await fixture.conversation();
+    assert.equal(row.state, 'PAUSED_FAILURE');
+    assert.deepEqual(row.pause_reasons, ['PLATFORM_MUTATION_UNVERIFIED']);
+    const audit = await fixture.pool.query<{ status: string; old_version: number; new_version: number }>(
+      `SELECT status, old_version, new_version FROM data_platform_message_mutations`);
+    assert.equal(audit.rows.length, 1);
+    assert.equal(audit.rows[0]!.status, 'applied');
+    assert.equal(Number(audit.rows[0]!.new_version), Number(audit.rows[0]!.old_version) + 1);
+    const after = await fixture.pool.query<{ deletion_status: string; content_ref: string | null }>(
+      `SELECT deletion_status, content_ref FROM data_messages WHERE platform_message_id='42001'`);
+    assert.deepEqual(after.rows, [{ deletion_status: 'deleted', content_ref: null }]);
+    const tasks = (await fixture.bridge.service.ownerTasks()).items;
+    assert.ok(tasks.every(task => task.allowedActions.length === 0), 'the invalidated plan is no longer confirmable');
+    assert.equal(fixture.received.length, 0, 'a recall never triggers a send');
+  } finally { await fixture.cleanup(); }
 });

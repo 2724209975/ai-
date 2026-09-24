@@ -50,12 +50,26 @@ export async function ingestAuthenticatedOneBotEvent(request: { bytes: Uint8Arra
   return { status: 204, body: '', outcome: result };
 }
 
+/** Codes this system throws on purpose. Anything else stays opaque, because an upper-case message
+ * could still be storage text (the ingress test pins that with a simulated 'SECRET_PRIVATE_SQL'). */
+const INTERNAL_CODES = new Set([
+  'VALIDATION_FAILED', 'NOT_FOUND', 'CONFLICT_VERSION', 'STALE_CONTEXT', 'STALE_PLAN', 'POLICY_BLOCKED',
+  'PAUSED', 'RECOVERY_REQUIRED', 'FORBIDDEN', 'UNAUTHENTICATED', 'UNSUPPORTED_CAPABILITY',
+  'SEND_RESULT_UNKNOWN', 'PLATFORM_UNAVAILABLE', 'MEDIA_UNCERTAIN',
+  'UNMAPPED_SELF_PAUSE_UNAVAILABLE', 'MOCK_AUTO_REQUIRES_MOCK_PLATFORM',
+]);
+
 /** Shared status mapping so both entry points answer identically. */
 export function failureResponse(error: unknown): { status: number; body: ''; outcome: string } {
   if (error instanceof WireError) {
-    const status = error.code === 'UNAUTHENTICATED' ? 401 : error.code === 'FORBIDDEN' ? 403 : error.code === 'UNSUPPORTED_CAPABILITY' ? 422 : 400;
+    // A conflicting replay can never succeed by retrying, so it is a client-visible conflict.
+    const status = error.code === 'UNAUTHENTICATED' ? 401 : error.code === 'FORBIDDEN' ? 403
+      : error.code === 'CONFLICT_VERSION' ? 409 : error.code === 'UNSUPPORTED_CAPABILITY' ? 422 : 400;
     return { status, body: '', outcome: error.code };
   }
-  // Storage/mapper exception may contain SQL, body text or credentials: never surface it.
-  return { status: 503, body: '', outcome: 'PLATFORM_UNAVAILABLE' };
+  // Storage/mapper exception may contain SQL, body text or credentials: the client never sees it.
+  // Our own failures are thrown as bare upper-case codes, so those may be surfaced internally
+  // (server-side log / operator diagnostics) while anything else stays opaque.
+  const code = error instanceof Error && INTERNAL_CODES.has(error.message) ? error.message : 'PLATFORM_UNAVAILABLE';
+  return { status: 503, body: '', outcome: code };
 }

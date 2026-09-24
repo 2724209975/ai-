@@ -65,18 +65,22 @@ export function normalizeObservation(observation: WireObservation, context: Norm
     return envelope(context, 'PlatformMessageMutationObserved', context.conversationId, 1, {
       adapter: 'qq-onebot', platform: 'qq', accountId: context.accountId, conversationRef,
       platformMessageId: observation.platformMessageId, platformEventId: observation.dedupeKey,
-      mutation: 'recall', sentAt: observation.sentAt,
+      mutation: 'recall', sentAt: observation.sentAt, mode: 'live' as const,
       receivedAt: context.receivedAt, requiresReview: true, provenance,
     });
   }
 
   const { type, contentRef } = bodyType(observation.parts);
   const replied = observation.parts.find(part => part.kind === 'reply');
-  const quotedMessageId = replied?.kind === 'reply' ? replied.platformMessageId : undefined;
+  // A reply segment carries the *platform* message id. It cannot become `quotedMessageId`, which is
+  // this system's own message id: the quoted message may not even be stored locally. Keep the
+  // platform reference in provenance so the spike can still record that the field was present.
+  const quotedPlatformMessageId = replied?.kind === 'reply' ? replied.platformMessageId : undefined;
   const shared = { adapter: 'qq-onebot', platform: 'qq' as const, accountId: context.accountId, conversationRef,
     platformEventId: observation.dedupeKey, platformMessageId: observation.platformMessageId,
-    sentAt: observation.sentAt, receivedAt: context.receivedAt, type, contentRef, quotedMessageId,
-    dedupeKey: observation.dedupeKey, mode: 'live' as const, provenance };
+    sentAt: observation.sentAt, receivedAt: context.receivedAt, type, contentRef,
+    dedupeKey: observation.dedupeKey, mode: 'live' as const,
+    provenance: quotedPlatformMessageId ? { ...provenance, quotedPlatformMessageId } : provenance };
 
   if (observation.direction === 'self') {
     if (!context.conversationId) return undefined;

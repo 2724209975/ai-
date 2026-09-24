@@ -118,7 +118,9 @@ export function createQqBridge(options: QqBridgeOptions) {
     } catch (error) {
       outcome = error instanceof SyntaxError ? { status: 400, body: '', outcome: 'VALIDATION_FAILED' } : failureResponse(error);
     }
-    if (outcome.status >= 500) report(new Error(outcome.outcome), `ingress-503:${randomUUID()}`);
+    if (outcome.status >= 500) report(new Error(outcome.outcome), `ingress-${outcome.status}:${randomUUID()}`);
+    // A conflicting replay is expected platform behaviour to record, not a transient failure.
+    else if (outcome.status === 409) report(new Error(outcome.outcome), `ingress-conflict`);
     response.writeHead(outcome.status); response.end();
   }
 
