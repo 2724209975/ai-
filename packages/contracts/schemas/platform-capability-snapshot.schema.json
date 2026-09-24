@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://personal-chat-agent.invalid/schemas/platform-capability-snapshot.schema.json",
+  "title": "Platform capability snapshot",
+  "description": "01's versioned, per-capability evidence for one platform account (contracts.md §2). The overall status never substitutes for the per-item evidence: a capability is only `tested` with evidence produced against the target account, and documented vendor statements stay `documented`.",
+  "type": "object",
+  "required": ["accountId", "platform", "adapterVersion", "observedAt", "receiveTypes", "sendTypes", "receiptLevels", "ownerMessageSignal", "historySync", "mediaFetch", "constraints", "verificationStatus", "evidence"],
+  "properties": {
+    "accountId": { "type": "string", "minLength": 1 },
+    "platform": { "type": "string", "enum": ["wechat", "qq"] },
+    "adapterVersion": { "type": "string", "minLength": 1 },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "receiveTypes": { "type": "array", "items": { "type": "string", "enum": ["text", "image", "voice", "sticker_static", "sticker_animated", "unsupported"] } },
+    "sendTypes": { "type": "array", "items": { "type": "string", "enum": ["text", "sticker_static", "sticker_animated"] } },
+    "receiptLevels": { "type": "array", "items": { "type": "string", "enum": ["accepted", "delivered"] } },
+    "ownerMessageSignal": { "type": "string", "minLength": 1 },
+    "historySync": { "type": "string", "minLength": 1 },
+    "mediaFetch": { "type": "string", "minLength": 1 },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "verificationStatus": { "$ref": "#/$defs/status" },
+    "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evidenceItem" } }
+  },
+  "$defs": {
+    "status": { "type": "string", "enum": ["documented", "tested", "unsupported", "unknown"] },
+    "capability": { "type": "string", "enum": ["receive_types", "send_types", "receipt_levels", "owner_message_signal", "history_sync", "media_fetch"] },
+    "evidenceItem": {
+      "type": "object",
+      "required": ["capability", "status", "sourceRef", "observedAt", "adapterVersion", "constraints"],
+      "properties": {
+        "capability": { "$ref": "#/$defs/capability" },
+        "status": { "$ref": "#/$defs/status" },
+        "sourceRef": { "type": "string", "minLength": 1, "description": "For `tested`, a project-produced evidence reference (report, run or fixture id) - never a vendor URL." },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "adapterVersion": { "type": "string", "minLength": 1 },
+        "constraints": { "type": "array", "items": { "type": "string" } },
+        "unavailableReason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

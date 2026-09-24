@@ -7,6 +7,10 @@ export const sendStates = ['CREATED', 'PREFLIGHT', 'LEASED', 'SUBMITTING', 'SUBM
 /** Owner projection availability. A missing field reads as `unavailable`: an empty array is not proof. */
 export const queryStatuses = ['ready', 'unavailable'] as const;
 export const platformConnectionStates = ['disconnected', 'connecting', 'relogin_required', 'reconciling', 'connected', 'degraded'] as const;
+/** Per-capability evidence levels (contracts.md §2): `documented` is a vendor statement, `tested`
+ * must come from this project against the target account. */
+export const capabilityStatuses = ['documented', 'tested', 'unsupported', 'unknown'] as const;
+export const capabilityFamilies = ['receive_types', 'send_types', 'receipt_levels', 'owner_message_signal', 'history_sync', 'media_fetch'] as const;
 export const eventTypes = ['PlatformInboundObserved', 'PlatformOwnerMessageObserved', 'PlatformSelfMessageUnattributed', 'PlatformAgentEchoObserved', 'PlatformOriginResolved', 'PlatformReceiptObserved', 'PlatformConnectionChanged', 'PlatformMessageMutationObserved', 'ContactPolicyChanged', 'GlobalPauseChanged', 'ContactControlChanged', 'FactChanged', 'EvidenceInvalidated', 'AnalysisChanged', 'SkillVersionChanged', 'GrantChanged', 'ReplyPlanProposed', 'ReplyPlanInvalidated', 'SendTaskStateChanged'] as const;
 export type Mode = typeof modes[number];
 export type Actor = typeof actors[number];
@@ -14,6 +18,8 @@ export type MessageType = typeof messageTypes[number];
 export type SendState = typeof sendStates[number];
 export type QueryStatus = typeof queryStatuses[number];
 export type PlatformConnectionState = typeof platformConnectionStates[number];
+export type CapabilityStatus = typeof capabilityStatuses[number];
+export type CapabilityFamily = typeof capabilityFamilies[number];
 export type EventType = typeof eventTypes[number];
 
 export interface EventEnvelope<T extends EventType = EventType, P = unknown> {
@@ -66,6 +72,62 @@ export interface OwnerConnection {
   lastReconciledAt?: string; limitations?: string[]; recovery?: OwnerConnectionRecovery;
 }
 export interface OwnerFault { id: string; status: string; summary: string }
+export interface PlatformCapabilityEvidence {
+  capability: CapabilityFamily; status: CapabilityStatus; sourceRef: string;
+  observedAt: string; adapterVersion: string; constraints: string[]; unavailableReason?: string;
+}
+export interface PlatformCapabilitySnapshot {
+  accountId: string; platform: 'wechat' | 'qq'; adapterVersion: string; observedAt: string;
+  receiveTypes: MessageType[]; sendTypes: ('text' | 'sticker_static' | 'sticker_animated')[];
+  receiptLevels: ('accepted' | 'delivered')[]; ownerMessageSignal: string; historySync: string; mediaFetch: string;
+  constraints: string[]; verificationStatus: CapabilityStatus; evidence: PlatformCapabilityEvidence[];
+}
+/** The overall status is derived from the per-capability evidence, never declared on its own:
+ * it can only be as strong as the weakest required capability. */
+export function capabilityOverallStatus(evidence: readonly PlatformCapabilityEvidence[]): CapabilityStatus {
+  const byFamily = new Map(evidence.map(item => [item.capability, item.status]));
+  if (capabilityFamilies.some(family => !byFamily.has(family))) return 'unknown';
+  const statuses = capabilityFamilies.map(family => byFamily.get(family)!);
+  if (statuses.every(status => status === 'tested')) return 'tested';
+  if (statuses.every(status => status === 'documented' || status === 'tested')) return 'documented';
+  if (statuses.some(status => status === 'unsupported')) return 'unsupported';
+  return 'unknown';
+}
+function rfc3339Z(value: unknown): boolean {
+  return typeof value === 'string' && /^\d{4}-\d\d-\d\dT.*Z$/.test(value) && Number.isFinite(Date.parse(value));
+}
+/** Validates one snapshot. `tested` may not cite a vendor URL, and the overall status must equal the
+ * derived one, so a report cannot quietly upgrade a documented statement into measured behaviour. */
+export function assertCapabilitySnapshot(value: unknown): asserts value is PlatformCapabilitySnapshot {
+  if (!value || typeof value !== 'object') throw new Error('VALIDATION_FAILED');
+  const snapshot = value as Record<string, unknown>;
+  if (typeof snapshot.accountId !== 'string' || !snapshot.accountId.trim()) throw new Error('VALIDATION_FAILED');
+  if (!['wechat', 'qq'].includes(snapshot.platform as string)) throw new Error('VALIDATION_FAILED');
+  if (typeof snapshot.adapterVersion !== 'string' || !snapshot.adapterVersion.trim() || !rfc3339Z(snapshot.observedAt)) throw new Error('VALIDATION_FAILED');
+  for (const key of ['receiveTypes', 'sendTypes', 'receiptLevels', 'constraints']) {
+    if (!Array.isArray(snapshot[key])) throw new Error('VALIDATION_FAILED');
+  }
+  for (const key of ['ownerMessageSignal', 'historySync', 'mediaFetch']) {
+    if (typeof snapshot[key] !== 'string' || !(snapshot[key] as string).trim()) throw new Error('VALIDATION_FAILED');
+  }
+  if (!(capabilityStatuses as readonly string[]).includes(snapshot.verificationStatus as string)) throw new Error('VALIDATION_FAILED');
+  if (!Array.isArray(snapshot.evidence) || !snapshot.evidence.length) throw new Error('VALIDATION_FAILED');
+  const seen = new Set<string>();
+  for (const item of snapshot.evidence as Record<string, unknown>[]) {
+    if (!item || typeof item !== 'object') throw new Error('VALIDATION_FAILED');
+    if (!(capabilityFamilies as readonly string[]).includes(item.capability as string)) throw new Error('VALIDATION_FAILED');
+    if (!(capabilityStatuses as readonly string[]).includes(item.status as string)) throw new Error('VALIDATION_FAILED');
+    if (typeof item.sourceRef !== 'string' || !item.sourceRef.trim()) throw new Error('VALIDATION_FAILED');
+    // A vendor page cannot prove this project measured the behaviour.
+    if (item.status === 'tested' && /^https?:\/\//i.test(item.sourceRef)) throw new Error('VALIDATION_FAILED');
+    if (!rfc3339Z(item.observedAt) || typeof item.adapterVersion !== 'string' || !item.adapterVersion.trim()) throw new Error('VALIDATION_FAILED');
+    if (!Array.isArray(item.constraints)) throw new Error('VALIDATION_FAILED');
+    if (item.unavailableReason !== undefined && (typeof item.unavailableReason !== 'string' || !item.unavailableReason.trim())) throw new Error('VALIDATION_FAILED');
+    if (seen.has(item.capability as string)) throw new Error('VALIDATION_FAILED');
+    seen.add(item.capability as string);
+  }
+  if (snapshot.verificationStatus !== capabilityOverallStatus(snapshot.evidence as PlatformCapabilityEvidence[])) throw new Error('VALIDATION_FAILED');
+}
 /** Owner overview projection (contracts.md §3). Availability is explicit: an empty array alone
  * never means "connected" or "no faults". */
 export interface OwnerOverviewProjection {

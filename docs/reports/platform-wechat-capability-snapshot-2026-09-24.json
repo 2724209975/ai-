@@ -1,0 +1,76 @@
+{
+  "accountId": "unassigned-test-account",
+  "platform": "wechat",
+  "adapterVersion": "no-verified-candidate",
+  "observedAt": "2026-09-24T00:00:00.000Z",
+  "receiveTypes": ["unsupported"],
+  "sendTypes": [],
+  "receiptLevels": [],
+  "ownerMessageSignal": "unknown",
+  "historySync": "unknown",
+  "mediaFetch": "unknown",
+  "constraints": [
+    "尚未选定候选路线：没有找到能支持'个人微信现有好友一对一自动收发'的官方资料，企业微信/微信客服/公众号属于不同账号形态，不能替代目标场景",
+    "第三方桌面注入、逆向与协议模拟路线涉及封号、条款与云端登录风险，未经本人明确接受风险前不进入备选",
+    "accountId 为占位值：路线与测试账号确定后必须换成已登记 PlatformAccount 的内部 UUID 并重新签发",
+    "本文件只记录现状，不构成任何微信能力结论",
+    "候选路线与许可/维护事实见 docs/platforms/wechat-route-options.md（2026-09-24 只读核查）"
+  ],
+  "verificationStatus": "unknown",
+  "evidence": [
+    {
+      "capability": "receive_types",
+      "status": "unknown",
+      "sourceRef": "docs/platform-validation.md",
+      "observedAt": "2026-09-24T00:00:00.000Z",
+      "adapterVersion": "no-verified-candidate",
+      "constraints": [],
+      "unavailableReason": "无候选可测：公开资料未提供个人账号现有好友会话的接收能力证据，未做任何实测"
+    },
+    {
+      "capability": "send_types",
+      "status": "unknown",
+      "sourceRef": "docs/platform-validation.md",
+      "observedAt": "2026-09-24T00:00:00.000Z",
+      "adapterVersion": "no-verified-candidate",
+      "constraints": [],
+      "unavailableReason": "无候选可测：没有任何已验证的出站路径，也没有窗口/频率/幂等键证据"
+    },
+    {
+      "capability": "receipt_levels",
+      "status": "unknown",
+      "sourceRef": "docs/platform-validation.md",
+      "observedAt": "2026-09-24T00:00:00.000Z",
+      "adapterVersion": "no-verified-candidate",
+      "constraints": [],
+      "unavailableReason": "无候选可测：无法区分平台受理与对方可见，未知结果也无法按 sendKey 核对"
+    },
+    {
+      "capability": "owner_message_signal",
+      "status": "unknown",
+      "sourceRef": "docs/platform-validation.md",
+      "observedAt": "2026-09-24T00:00:00.000Z",
+      "adapterVersion": "no-verified-candidate",
+      "constraints": [],
+      "unavailableReason": "无候选可测：本人手发、系统发送与平台回显的区分没有可用信号，接管判定无从建立"
+    },
+    {
+      "capability": "history_sync",
+      "status": "unknown",
+      "sourceRef": "docs/platform-validation.md",
+      "observedAt": "2026-09-24T00:00:00.000Z",
+      "adapterVersion": "no-verified-candidate",
+      "constraints": [],
+      "unavailableReason": "无候选可测：没有游标或补齐机制证据，RecoveryReport.historyComplete 只能为 false"
+    },
+    {
+      "capability": "media_fetch",
+      "status": "unknown",
+      "sourceRef": "docs/platform-validation.md",
+      "observedAt": "2026-09-24T00:00:00.000Z",
+      "adapterVersion": "no-verified-candidate",
+      "constraints": [],
+      "unavailableReason": "无候选可测：原图、原语音与动态表情的完整获取方式均未验证"
+    }
+  ]
+}

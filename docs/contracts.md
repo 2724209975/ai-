@@ -38,7 +38,8 @@
 | ImportJob | `format, sourceHash, mode=import, preview, identityMapping, confirmedScope, status, errorReport` | 03 |
 | AuditEntry | `actor, action, targetType/id/version, decisionSummary, sourceRefs, result, correlationId` | 03 |
 
-正文可加密字段、数据库索引和拆表属于实现细节，但不能削弱 scope、来源、版本、状态或引用完整性。
+- PlatformCapabilitySnapshot 的机器 schema 在 packages/contracts/schemas/platform-capability-snapshot.schema.json，校验函数为 ssertCapabilitySnapshot：六个能力族（eceive_types、send_types、eceipt_levels、owner_message_signal、history_sync、media_fetch）各需一条独立证据且不得重复；	ested 的来源不得是 http(s) 文档链接（文档只能支撑 documented）；总体 erificationStatus 必须等于由逐项证据推导的结果，不得单独声明。
+- 正文可加密字段、数据库索引和拆表属于实现细节，但不能削弱 scope、来源、版本、状态或引用完整性。
 
 ## 3. 模块端口
 
