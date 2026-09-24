@@ -14,6 +14,7 @@
     "serve:owner": "node apps/web/server/main.mts",
     "serve:bridge": "node apps/bridge/main.mts",
     "spike:posture": "node scripts/qq-spike-summary.mts posture",
+    "spike:preflight": "node scripts/qq-spike-preflight.mts",
     "spike:shape": "node scripts/qq-raw-shape.mts",
     "spike:summary": "node scripts/qq-spike-summary.mts summary",
     "verify": "npm run test:unit && npm run test:contracts && npm run test:integration && npm run build:web && npm run test:e2e"

@@ -27,6 +27,7 @@ node apps/bridge/main.mts
 ## 只接收采证用的两个命令
 
 ```powershell
+npm run spike:preflight # 一次性 schema + 合成事件，验证真实入口进程（只需 DATABASE_URL）
 npm run spike:posture   # 校验只接收姿态：出站与 worker 必须关闭、监听必须留在 loopback、token 已配置
 npm run spike:summary   # 去敏聚合：入站分类计数、消息类型计数、会话/暂停/待办/发送状态、未发布 outbox、原始文件审计
 npm run spike:shape -- <原始事件文件或目录>   # 只读字段形状（无取值、无文件名），用于判定 message_sent 的对端字段
