@@ -29,7 +29,6 @@ test('real PostgreSQL isolated schema: 05 versions/grants/epoch/outbox/invocatio
     await admin.query(`CREATE SCHEMA ${schema}`);
     await admin.query(`SET search_path TO ${schema}`);
     await applyMigrations(admin, resolve('db/migrations'));
-    await admin.query(await readFile(fileURLToPath(new URL('./schema.proposed.sql', import.meta.url)), 'utf8'));
     const a = { id: randomUUID(), conversationId: randomUUID(), accountId: randomUUID() };
     const b = { id: randomUUID(), conversationId: randomUUID(), accountId: a.accountId };
     for (const c of [a, b]) {
@@ -80,7 +79,9 @@ test('real PostgreSQL isolated schema: 05 versions/grants/epoch/outbox/invocatio
     await transact(tx => restarted.setGrant(tx, { command: owner('grant-b'), contactId: b.id, skillId: first.skillId, min: 1, max: 2, enabled: true }));
     await active.query(`CREATE ROLE ${role} NOLOGIN`); roleCreated = true;
     await active.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}`);
+    // The runtime role must be able to perform the writes it actually performs, not just read.
     await active.query(`GRANT SELECT ON skills_grants,skills_current,skills_versions,skills_invocations TO ${role}`);
+    await active.query(`GRANT INSERT,UPDATE ON skills_invocations TO ${role}`);
     await active.query(`SET ROLE ${role}`);
     try {
       await transact(async tx => {
@@ -96,6 +97,18 @@ test('real PostgreSQL isolated schema: 05 versions/grants/epoch/outbox/invocatio
         assert.deepEqual(raw.rows.map(row => row.contact_id), [b.id]);
         assert.deepEqual(await restarted.listInvocations(tx, b.id, b.id), []);
       });
+      // Writes inside the contact's own scope succeed for the restricted role...
+      const scoped = { ...invocation, id: uuidv7(), contactId: a.id, taskId: uuidv7() };
+      await transact(tx => restarted.recordInvocation(tx, a.id, 'live', scoped));
+      // ...while a cross-contact write is refused by the WITH CHECK policy, both through the port
+      // and through raw SQL that would otherwise be a valid insert.
+      await assert.rejects(transact(tx => restarted.recordInvocation(tx, a.id, 'live', { ...scoped, id: uuidv7(), contactId: b.id })), { code: 'FORBIDDEN' });
+      await assert.rejects(transact(async tx => {
+        await tx.query(`SELECT set_config('app.contact_id',$1,true)`, [a.id]);
+        await tx.query(`INSERT INTO skills_invocations(id,task_id,contact_id,stage,skill_id,skill_version,skill_epoch,selection_mode,reason,input_refs,status,created_at)
+          VALUES($1,$2,$3,'strategy',$4,1,1,'automatic','forced',$5::jsonb,'suggested',now())`,
+          [uuidv7(), uuidv7(), b.id, first.skillId, JSON.stringify({ snapshotId: uuidv7(), snapshotHash: 'b'.repeat(64), messageRefs: [], factRefs: [], analysisRefs: [] })]);
+      }), /row-level security/);
     } finally { await active.query('RESET ROLE'); }
   } finally {
     if (active !== admin) await active.end().catch(() => {});

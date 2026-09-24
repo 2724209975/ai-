@@ -50,3 +50,9 @@ restricted role read count: 1
 ## 后续
 
 修订后由 05 重跑真实库用例（含受限角色的写入路径），交回总控复审；复审通过才把该 SQL 以全局编号 `0009` 写入 `db/migrations`（`applyMigrations` 要求编号连续，且已应用文件不可修改）。在此之前 [decisions.md](../decisions.md) 的 A18 保持 Candidate。
+
+## 复审结论（2026-09-24 同日修订后）
+
+05 按上述阻断项修订，总控复查通过：`0009_skills.sql` 已写入 `db/migrations`，原 `schema.proposed.sql` 删除以免两份真源。修订内容：两张联系人表改为 `ENABLE`+`FORCE ROW LEVEL SECURITY` 且策略同时给出 `USING` 与 `WITH CHECK`（覆盖各命令，与 `0002_data.sql` 一致）；`visibility_scope` 限定为 `global`，联系人私有 Skill 留待单独提案；全局表的写入者尚未做角色隔离，已在迁移注释与本记录中显式列为已知缺口；延迟外键必须同事务写入的前提写进迁移注释。
+
+证据：`packages/skills/registry/pg-store.real.test.mts` 现在以**受限角色**执行运行期写入路径——自身 scope 内写调用记录成功，跨联系人写入经端口返回 `FORBIDDEN`、绕过端口直接 SQL 也被 RLS 拒绝；`npm run verify` 全绿（198 单元、4 契约、17 集成、13 E2E，0 fail）。

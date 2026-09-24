@@ -131,11 +131,16 @@ test('05 PostgreSQL port stores scoped invocation refs and rejects non-live/repl
   assert.equal(db.state.invocations.size, 1);
 });
 
-test('proposed SQL contains immutable versions, scoped grant and invocation rules without SendTask DDL', async () => {
-  const sql = await readFile(fileURLToPath(new URL('./schema.proposed.sql', import.meta.url)), 'utf8');
+test('migration 0009 keeps immutable versions and contact-scoped rules without SendTask DDL', async () => {
+  const sql = await readFile(fileURLToPath(new URL('../../../db/migrations/0009_skills.sql', import.meta.url)), 'utf8');
   assert.match(sql, /CREATE TRIGGER skills_versions_immutable/);
   assert.match(sql, /PRIMARY KEY \(contact_id,skill_id\)/);
-  assert.match(sql, /ALTER TABLE skills_grants ENABLE ROW LEVEL SECURITY/);
-  assert.match(sql, /ALTER TABLE skills_invocations ENABLE ROW LEVEL SECURITY/);
+  for (const table of ['skills_grants', 'skills_invocations']) {
+    assert.match(sql, new RegExp(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`));
+    // The review's blocker: without FORCE plus a WITH CHECK the restricted role cannot write.
+    assert.match(sql, new RegExp(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`));
+  }
+  assert.match(sql, /USING \(contact_id::text = current_setting\('app.contact_id', true\)\)\s+WITH CHECK/);
+  assert.match(sql, /CHECK \(visibility_scope = 'global'\)/);
   assert.doesNotMatch(sql, /CREATE TABLE\s+(?:send|dispatch)_/i);
 });
