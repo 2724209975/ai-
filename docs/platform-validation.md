@@ -39,13 +39,15 @@ QQ 路线的候选版本、许可与入口缺口已整理为 [QQ spike 计划](p
 | 第三方协议/桌面自动化/注入 | 本轮未采信供应商声明 | 可能表面匹配，但关机、封号、回执、本人识别风险高 | 不选择；若评估需单独风险决策 |
 | 专用常在线设备桥接 | 取决于具体实现 | 可能匹配，但“本人电脑关机”不等于无设备 | 候选架构，需本人接受并实测 |
 
+2026-09-24 复查（GitHub API 可用后）：微信侧能匹配「本人个人账号 + 既有好友会话」的候选只剩非官方 Hook 或 UI 自动化，分别受**无许可文件**、**GPL-3.0 传染性**、客户端版本强耦合与**必须另备常开 Windows/macOS 宿主**的限制；原先两条主力路线已失效（WeChatFerry 归档、Wechaty 微信 puppet 停更四年）。完整事实、更正与三个决策选项见 [wechat-route-options.md](platforms/wechat-route-options.md)。在本人选择前，微信半场保持未验证。
+
 ## 4. Spike 执行与报告
 
 每平台独立限时实验，先沙箱/测试账号，不在主账号直接试高风险方案。步骤：锁定账号形态和官方条款 → 建最小 adapter → 执行能力矩阵 → 制造重复、乱序、断网、超时、进程崩溃 → 关本人电脑持续测试 → 恢复并 reconcile → 产出 go/conditional/no-go。
 
 测试至少包括：双向文字；各媒体类型；多条消息；主动消息；本人从手机/桌面发言；系统回显；同一事件重复；发送前断线、提交中断线、接受后丢响应；adapter/核心/数据库分别重启；二维码/token 过期；平台限频；24h 本人电脑关机。正式 AC23 的持续时长与可用性目标由 D06 确认，24h 只是 spike 下限建议，不是 PRD 新承诺。
 
-报告写入 `docs/reports/platform-<platform>-YYYY-MM-DD.md`，包含：路线/版本、环境、能力快照、逐项证据、风险、成本、人工维护频率、未验证项、结论、对 contracts 的变更提案。结论为 `GO_CONFIRM_ONLY`、`GO_AUTO`、`CONDITIONAL` 或 `NO_GO`；只有满足本人发言识别、未知回执处理和关机持续运行后才能 `GO_AUTO`。
+报告写入 `docs/reports/platform-<platform>-YYYY-MM-DD.md`，并同时交付同日的 `platform-<platform>-capability-snapshot-<date>.json`（格式与填写规则见 [QQ 只接收步骤](qq-receive-only-runbook.md) 与 contracts.md §2；总体状态由逐项证据推导，`tested` 不得只引用厂商文档）。报告包含：路线/版本、环境、能力快照、逐项证据、风险、成本、人工维护频率、未验证项、结论、对 contracts 的变更提案。结论为 `GO_CONFIRM_ONLY`、`GO_AUTO`、`CONDITIONAL` 或 `NO_GO`；只有满足本人发言识别、未知回执处理和关机持续运行后才能 `GO_AUTO`。
 
 ## 5. 开发期间的模拟 adapter
 

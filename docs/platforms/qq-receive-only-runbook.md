@@ -17,7 +17,7 @@
 3. **最小入站样本**：好友先发一条不含私人信息的文字；随后在明确时间窗分别发测试图片、语音、静态表情、动态表情、含引用文字和可撤回的测试文字。每类记录账号类型、会话是否原有好友、事件时间/接收时间、是否有平台消息 ID、原始事件私有引用、引用/媒体字段的存在性及返回状态。原始字节与媒体只留在私有存储，报告用随机证据编号，不写正文、URL、QQ 号或可反推身份的裸哈希。
 4. **异常与重复**：用同一已授权样本在本地测试环境重放两次，比较 `platform_inbox_raw`、`data_messages`、02 待办数量；再交换两条合成消息到达顺序。混合文本+媒体必须成为 `unsupported`，进入人工处理且不生成可发送方案；纯媒体不能改写成文本。动态表情只有拿到原始动画字节并核实完整性才能记 `complete`，单帧/缩略图一律 `partial` 或 `unavailable`。
 5. **本人来源专项**：当前桥接缺经审核的自身消息 peer mapper。本人若从手机/原客户端向知情测试好友手发一条约定文字，先在主机私有诊断区观察原事件字段，记录是否有稳定对端字段、`message_sent`/回显情况；桥接收到 400 时不把它伪装为接管成功。字段映射经 01/00 审核并补测试后，才能验证 `PlatformSelfMessageUnattributed`、独立本人证据与系统回显关联。此阶段不由系统发测试消息，故不能完成系统回显对照。
-6. **断线与恢复**：在只接收模式下依次重启桥接与 01，记录登录是否保留、期间好友的测试消息是否补齐、重复事件是否被去重、是否存在可证明的连续覆盖游标。没有连续覆盖证据的 `RecoveryReport.historyComplete=false`，连接状态保持 `reconciling/degraded`；不能因为重连或 `/healthz` 正常而开放新发送。已接纳但 02 消费失败的 outbox 行须由 00/03 实现发布器后验证可重投；当前这是可靠接收阻塞项。
+6. **断线与恢复**：在只接收模式下依次重启桥接与 01，记录登录是否保留、期间好友的测试消息是否补齐、重复事件是否被去重、是否存在可证明的连续覆盖游标。没有连续覆盖证据的 `RecoveryReport.historyComplete=false`，连接状态保持 `reconciling/degraded`；不能因为重连或 `/healthz` 正常而开放新发送。已接纳但 02 消费失败的 outbox 行由 `apps/bridge/outbox-pump.mts` 负责重投：`bridge.start()` 先跑一次 tick 再启动定时器，领取行先提交、再交消费者、最后标记发布。真实库用例 `tests/integration/postgres-outbox-pump.test.mts` 覆盖"消费者失败后行保持未发布并可重投"和"只投本账号事件"；`tests/integration/postgres-qq-bridge.test.mts` 覆盖"提交后在消费者崩溃时 outbox 行仍在、重复 webhook 不产生第二个业务副作用"。因此接收侧不再有已知的补齐阻塞项。
 7. **停止与清理**：结束测试后停止桥接与 01，撤销测试账号会话或由本人按需退出。记录组件版本、登录次数、断线时间、故障码和证据编号；秘密不入库外报告。私有原始事件按 03/00 的保留策略清理，去重与发送账本的保留另行评估，不能直接删除后再重放。
 
 ## 判定
@@ -26,4 +26,16 @@
 
 后续若要升为 `GO_CONFIRM_ONLY`，需 02 提供明确的测试会话、发送内容及次数并经本人授权，完成真实文字/批准表情发送、回执关联、未知结果不重试、人工接管/回显区分及独立宿主关机测试。`GO_AUTO` 还需来源、历史连续覆盖、恢复和长期稳定性证据。微信必须单独跑同等级验证；QQ 结论不能推断微信。
 
-交接：01 向 00/06 提供版本化账号连接状态、逐能力 `documented/tested/unsupported/unknown` 与 `RecoveryReport` 的受控摘要；02 只使用真实来源证据和发送状态，03 接收私有媒体/原始事件，04 决定媒体理解并在不足时暂停，07 负责宿主隔离和关机演练。当前 [reception.mts](../../packages/infrastructure/postgres/reception.mts) 对名单外仍保存完整原始字节、outbox 尚无重投发布器，需 00/03 明确修正范围；不可在本页用“已可靠补齐”替代。
+交接：01 向 00/06 提供版本化账号连接状态、逐能力 `documented/tested/unsupported/unknown` 与 `RecoveryReport` 的受控摘要；02 只使用真实来源证据和发送状态，03 接收私有媒体/原始事件，04 决定媒体理解并在不足时暂停，07 负责宿主隔离和关机演练。名单外联系人现在只保留最小发现元数据（`payload_ref='discovery:metadata-only'`，仅留作用域 ID、事件键、时间与摘要），未入名单不再落全文；已登记账号但无法确定对端的自身消息按 `unmapped_self` 处理，只保留受限原始证据并暂停整个账号（不猜 contactId）。能力快照的填法见下一节。
+
+## 能力快照怎么填（G2 的交付格式）
+
+预 spike 快照在 [platform-qq-capability-snapshot-2026-09-24.json](../reports/platform-qq-capability-snapshot-2026-09-24.json)：六个能力族 `receive_types`、`send_types`、`receipt_levels`、`owner_message_signal`、`history_sync`、`media_fetch` 各有一条证据项，当前是 `documented`（维护者/规范文档）或 `unknown`（无实测），总体状态因此只能是 `unknown`。`accountId` 是占位值，选定真实测试账号后必须换成已登记 `PlatformAccount` 的内部 UUID 并重新签发。
+
+填写规则由 [contracts.md](../contracts.md) §2 与机器校验 `assertCapabilitySnapshot` 共同强制，`tests/contracts/capability-snapshot.test.mts` 会拒绝以下写法：
+
+1. 把 `tested` 的来源写成 `http(s)://` 文档链接——文档不能证明本项目实测过；
+2. 总体状态与逐项推导不一致（总体不能强于最弱的能力族）；
+3. 少写任何一个能力族、重复同一族、证据为空、`unknown` 不写缺失原因、时间不是 RFC3339。
+
+因此每完成一项实测，把该项改成 `tested` 并填写本项目证据编号（例如 `run:qq-receive-only-2026-09-25-a`），再让总体状态由推导得出，不要手写升级。报告交付时必须同时给出该 JSON 与 markdown 报告，两者结论一致；只接收阶段六项不可能全部 `tested`，总体应停在 `unknown` 或 `documented`。

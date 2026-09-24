@@ -213,6 +213,12 @@ test('real PostgreSQL + fake OneBot: mixed body is retained as unsupported and p
     assert.equal(rows.rows[0]?.type, 'unsupported');
     assert.equal(rows.rows[0]?.content_ref, null);
     assert.equal((await fixture.conversation()).state, 'PAUSED_MEDIA');
+    // The runbook's receive-only evidence: the witness is kept for an enrolled contact, and an
+    // unreadable body must not produce a candidate the owner could accidentally confirm.
+    const inbox = await fixture.pool.query<{ payload_ref: string }>('SELECT payload_ref FROM platform_inbox_raw');
+    assert.equal(inbox.rows.length, 1);
+    assert.doesNotMatch(inbox.rows[0]!.payload_ref, /^discovery:/, 'an enrolled contact keeps its raw evidence');
+    assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 0, 'no candidate may be proposed for an unreadable body');
     assert.equal(fixture.received.length, 0, 'receive-only observation must not send');
   } finally { await fixture.cleanup(); }
 });
