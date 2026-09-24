@@ -136,3 +136,25 @@ Windows 应用程序日志（本机时间）显示 `WeChat.exe` 3.9.11.17 在 **
 - 发：发送接口与"平台受理级"回执；`msgId` 能否与发送账本关联。
 - 本人手发与系统回显能否区分；历史补齐；媒体完整获取。
 - 3.9.11.17 与偏移表 `V_3_9_11_19` 的差异是否会在**除 checkLogin 之外**的路径上暴露（本次只验证了一条最简路径）。
+
+## 偏移移植第二阶段（2026-09-24 晚，全程离线/只读）：两个关键偏移已精确定位
+
+工具链：`github.com` 主站与 release 附件在这台机器上不可达，但 `codeload.github.com` 通——于是用源码包拉 **Capstone 5.0.3**，用已装好的 MSVC 编译成静态库，自写 `wxdisasm.exe`（线性反汇编 + RIP 相对寻址解析 + 坏字节自动重同步）。全部工作在**离线二进制副本**上完成，没有注入、没有写内存、没有创建线程。
+
+### 已确认结果（本机 `WeChatWin.dll` 3.9.11.25，SHA-256 `2058A926…`）
+
+| 名称 | 本机 RVA | 上游表值 | 差 | 判据 |
+| --- | --- | --- | --- | --- |
+| `SyncMgr::doAddMsg`（即 `kDoAddMsg`，消息接收入口） | **0x230ef30** | 0x230a3e0 | **+0x4B50** | 入口前有 12 字节 `int3` 填充；入口是完整序言 `mov [rsp+0x20],rbx; push rbp/rsi/rdi/r12-r15; lea rbp,[rsp-0xac0]; sub rsp,0xbc0`，三参数与 hook 需要的 `(param1,param2,param3)` 一致；函数体内**两处**日志调用用 `lea r9, →0x4f203e0`（字符串 `"SyncMgr::doAddMsg"`）作为函数名参数，并调用 `SyncMgr::ConvertAddMsgToChatMsg` 后打印 `"%d type %d skip add to db "`（`0x4f203f8`）与 `"svrid : %d is received!!!"`（`0x4f203c0`）；所属源文件串为 `…\MicroMsgWin\02_manager\SyncMgr.cpp` |
+| `kGetAccountServiceMgr`（`CheckLogin` 依赖） | **0x1b557d0** | 0x1b50d00 | **+0x4AD0** | **两处独立调用点**（`0x230ef71`、`0x230c5aa`）都是 `call 0x1b557d0` 紧跟 `movzx …, byte ptr [rax + 0x7f8]`，与 wxhelper `CheckLogin` 的"取服务管理器后读 `+0x7F8`"**完全同型** |
+| `SyncMgr::ConvertAddMsgToChatMsg` | 0x230c570 | 表中无 | — | 入口同为填充 + 完整序言；体内含同名日志串 |
+
+**关键推论**：上游表对应的不是本机这份二进制，而是**同版本的另一个构建**，代码整体位移约 **+0x4B00**（两个独立证据分别给出 +0x4B50 与 +0x4AD0）。这解释此前"版本号一致却一调用就崩"的全部现象——函数确实存在，只是地址整体挪了；因此**移植是可做的**。
+
+### 仍需完成（下一批工作）
+
+1. **消息结构字段偏移**：hook 拿到的 `param2`（`AddMsg`）要按本机布局解析 `fromUser`/`toUser`/`content`/`type`/`msgId` 等。`ConvertAddMsgToChatMsg` 里已能看到 `[rdi+0x72]`、`[rdi+0x74]`、`[rsi+0x50]`（`rsi=rdi+0x10`）这类读取，与上游 handler 用的 `+0x18/+0x28/+0x30/+0x24` **不完全一致**，必须逐字段重新推导，不能照抄。
+2. 用同一方法定位其余偏移：发送路径（`kSendTextMsg`/`kGetSendMessageMgr`/`kFreeChatMsg`）与只读接口（`kGetSelfInfo` 等）。
+3. 把结果维护成**属于这份二进制的偏移块**，每个入口都要有"填充+序言"或"调用点同型"证据；离线自证完成后再单独申请一次注入验证。
+
+工具都留在 `.local-wxhelper/`（gitignored）：`find-strings.mjs`、`dump-strings.mjs`、`grep-strings.mjs`、`find-function.mjs`、`call-targets.mjs`、`check-offsets.ps1`、`dump-pdata.ps1`、`read-mem.ps1`、`disasm/`（Capstone 工具）、`inject.ps1`。
