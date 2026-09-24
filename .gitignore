@@ -12,3 +12,4 @@ playwright-report/
 .env.*
 !.env.example
 .local-napcat/
+.local-wxhelper/
