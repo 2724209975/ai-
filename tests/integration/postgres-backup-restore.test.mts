@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { applyMigrations } from '../../packages/infrastructure/postgres/migrate.mts';
 import { commitReceived } from '../../packages/infrastructure/postgres/event-store.mts';
 import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
+import { FileMediaStore } from '../../packages/data/media/file-store.mts';
 import { recoverAmbiguous } from '../../packages/infrastructure/postgres/dispatch-journal.mts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -53,6 +54,12 @@ test('real PostgreSQL: database and raw-event backup restores into a separate da
     const rawSha = createHash('sha256').update(rawBytes).digest('hex');
     const rawRoot = join(files, 'raw');
     const rawRef = await createFileRawEventStore(rawRoot).put({ accountId, receivedAt: now, sha256: rawSha, bytes: rawBytes });
+    // Private media lives outside the database too, so the restore procedure has to carry it.
+    const mediaRoot = join(files, 'media');
+    const mediaBytes = Buffer.from('synthetic-image-bytes-for-backup');
+    const media = await new FileMediaStore(mediaRoot, async () => contactId).storeMedia({ callerContactId: contactId,
+      contactId, messageId, mediaType: 'image', mimeType: 'image/png', bytes: mediaBytes, completeness: 'complete' });
+    assert.equal(media.sha256, createHash('sha256').update(mediaBytes).digest('hex'));
     const event = { eventId: randomUUID(), eventType: 'PlatformInboundObserved', eventVersion: 1,
       occurredAt: now, correlationId: randomUUID(), causationId: randomUUID(), aggregateId: conversationId,
       aggregateVersion: 1, payload: { adapter: 'mock', fixture: true } };
@@ -64,6 +71,13 @@ test('real PostgreSQL: database and raw-event backup restores into a separate da
         VALUES($1,$2,$3,$4,'backup-msg','backup-event','contact','text','合成消息',$5,$5,'{}'::jsonb,false,'live',2,'active',$6,$5,$5)`,
         [messageId, contactId, conversationId, accountId, now, rawSha]);
       await source.query(`INSERT INTO dispatch_control(conversation_id,account_id,paused,unresolved_send_key) VALUES($1,$2,true,$3)`, [conversationId, accountId, sendKey]);
+      // Note: data_media_assets has no mime_type column, so the byte-format check 01 needs for
+      // approved stickers can only come from the private store until that column exists.
+      await source.query(`INSERT INTO data_media_assets(id,message_id,contact_id,media_type,storage_ref,sha256,fetch_status,completeness,interpretation_status,platform_metadata,approval_status,approval_version,allowed_platforms,version,created_at,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14,$15,$15)`,
+        [media.id, messageId, contactId, media.mediaType, media.storageRef, media.sha256, media.fetchStatus, media.completeness,
+          media.interpretationStatus, JSON.stringify(media.platformMetadata), media.approvalStatus, media.approvalVersion,
+          media.allowedPlatforms, media.version, now]);
       await source.query(`INSERT INTO dispatch_attempts(send_task_id,plan_id,conversation_id,account_id,send_key,sequence,mode,content_sha256,expected_generation,expected_policy_version,expected_dependency_epoch,expected_skill_epoch,expected_pause_epoch,expected_global_pause_epoch,status)
         VALUES($1,$2,$3,$4,$5,1,'live',$6,1,1,0,0,0,0,'SUBMITTING')`, [sendTaskId, randomUUID(), conversationId, accountId, sendKey, 'a'.repeat(64)]);
       assert.deepEqual(await commitReceived(source, { rawId: randomUUID(), platform: 'qq', accountId, conversationId,
@@ -74,6 +88,7 @@ test('real PostgreSQL: database and raw-event backup restores into a separate da
     const archive = runPg(dumpBin, [`--dbname=${databaseUrl}`, '--format=custom', `--schema=${schema}`, '--no-owner', '--no-acl']);
     assert.ok(archive.length > 0);
     await cp(rawRoot, join(files, 'raw-restored'), { recursive: true });
+    await cp(mediaRoot, join(files, 'media-restored'), { recursive: true });
     await source.query(`CREATE DATABASE ${restoredDb}`); restoreDbCreated = true;
     runPg(restoreBin, [`--dbname=${restoreUrl.toString()}`, '--no-owner', '--no-acl'], archive);
     restored = new Client({ connectionString: restoreUrl.toString() }); await restored.connect();
@@ -89,6 +104,15 @@ test('real PostgreSQL: database and raw-event backup restores into a separate da
     const restoredBytes = await readFile(join(files, 'raw-restored', rawRow.payload_ref));
     assert.equal(createHash('sha256').update(restoredBytes).digest('hex'), rawRow.payload_sha256);
     assert.deepEqual(restoredBytes, rawBytes);
+    const mediaRow = (await restored.query<{ storage_ref: string; sha256: string }>('SELECT storage_ref,sha256 FROM data_media_assets WHERE id=$1', [media.id])).rows[0]!;
+    assert.equal(mediaRow.storage_ref, media.id);
+    assert.equal(mediaRow.sha256, media.sha256);
+    // Reading through the restored private store also re-checks the digest and the metadata.
+    const restoredMedia = await new FileMediaStore(join(files, 'media-restored'), async () => contactId)
+      .readPrivate({ callerContactId: contactId, contactId, mediaId: media.id });
+    assert.deepEqual(Buffer.from(restoredMedia.bytes), mediaBytes);
+    assert.equal(restoredMedia.asset.sha256, media.sha256);
+    assert.equal(restoredMedia.asset.mimeType, 'image/png');
     await restored.query('BEGIN');
     assert.equal(await recoverAmbiguous(restored), 1);
     await restored.query('COMMIT');
