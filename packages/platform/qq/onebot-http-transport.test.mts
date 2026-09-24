@@ -7,7 +7,7 @@ import type { AttemptResult } from './send-executor.mts';
 
 const wire = { action: 'send_private_msg' as const, params: { user_id: '10002', message: [{ type: 'text', data: { text: 'fixture' } }] }, echo: 'local-rpc' };
 
-test('HTTP transport posts only send_private_msg with bearer auth and request/response correlation', async () => {
+test('HTTP transport posts only send_private_msg with bearer auth and the request echo for correlation', async () => {
   let calls = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     calls++;
@@ -15,15 +15,19 @@ test('HTTP transport posts only send_private_msg with bearer auth and request/re
     assert.equal(init?.method, 'POST');
     assert.equal((init?.headers as Record<string, string>).authorization, 'Bearer synthetic-token');
     assert.equal(init?.redirect, 'manual');
-    assert.deepEqual(JSON.parse(String(init?.body)), wire.params);
-    assert.ok(!String(init?.body).includes(wire.echo));
-    return new Response(JSON.stringify({ status: 'ok', retcode: 0, data: { message_id: 123 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    // The echo travels with the params, because a bridge that receives none may invent its own
+    // (NapCat does exactly that) and the reply then cannot be paired with this request.
+    assert.deepEqual(JSON.parse(String(init?.body)), { ...wire.params, echo: wire.echo });
+    return new Response(JSON.stringify({ status: 'ok', retcode: 0, data: { message_id: 123 }, echo: wire.echo }),
+      { status: 200, headers: { 'content-type': 'application/json' } });
   };
   const transport = new OneBotHttpTransport({ baseUrl: 'http://bridge.internal:5700/', accessToken: 'synthetic-token', fetchImpl });
   const reply = await transport.submitOnce(wire, new AbortController().signal);
   assert.equal(calls, 1);
   assert.equal(reply.correlation, 'http_response');
   assert.equal(decodeSendResponse(reply.response, wire.echo, reply.correlation).status, 'SUBMITTED');
+  // A reply carrying someone else's echo is never accepted as this request's result.
+  assert.equal(decodeSendResponse({ status: 'ok', retcode: 0, data: { message_id: 123 }, echo: 'invented-by-bridge' }, wire.echo, 'http_response').status, 'RESULT_UNKNOWN');
 });
 
 test('redirect, malformed body and oversized body never become accepted evidence or trigger a retry', async () => {

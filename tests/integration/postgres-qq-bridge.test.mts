@@ -67,10 +67,13 @@ async function setup() {
     let text = '';
     request.on('data', chunk => { text += chunk.toString(); });
     request.on('end', () => {
-      received.push({ path: request.url ?? '', authorization: request.headers.authorization, body: JSON.parse(text) as Record<string, unknown> });
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      received.push({ path: request.url ?? '', authorization: request.headers.authorization, body: parsed, echo: parsed.echo });
       if (outcome === 'disconnect') { response.destroy(); return; }
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify(outcome === 'ok' ? { status: 'ok', retcode: 0, data: { message_id: 90001 } } : { status: 'failed', retcode: 1200, data: null }));
+      response.end(JSON.stringify(outcome === 'ok'
+        ? { status: 'ok', retcode: 0, data: { message_id: 90001 }, echo: parsed.echo }
+        : { status: 'failed', retcode: 1200, data: null, echo: parsed.echo }));
     });
   });
   const onebotPort = await listen(onebot);

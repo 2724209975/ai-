@@ -23,10 +23,12 @@ export class OneBotHttpTransport implements SubmissionTransport {
 
   async submitOnce(wire: Parameters<SubmissionTransport['submitOnce']>[0], signal: AbortSignal) {
     if (wire.action !== 'send_private_msg') throw new WireError('UNSUPPORTED_CAPABILITY');
-    // The OneBot HTTP API takes params as the POST body. It does not promise an echo.
+    // The OneBot HTTP API takes params as the POST body. `echo` belongs in that body: a bridge may
+    // otherwise invent one of its own (NapCat does), and the response can no longer be correlated
+    // with this request - which silently turned delivered messages into RESULT_UNKNOWN.
     const response = await this.#fetch(this.#endpoint, {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.#token}` },
-      body: JSON.stringify(wire.params), signal, redirect: 'manual', cache: 'no-store',
+      body: JSON.stringify({ ...wire.params, echo: wire.echo }), signal, redirect: 'manual', cache: 'no-store',
     });
     // Even an HTTP error or malformed reply might arrive after a platform side effect.
     // The executor conservatively marks thrown transport results RESULT_UNKNOWN.
