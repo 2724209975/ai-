@@ -35,7 +35,9 @@ test('quoted contact text keeps the platform reply id and stays a text message',
   const payload = normalizeObservation(observation, context())!.payload as Record<string, unknown>;
   assert.equal(payload.type, 'text');
   assert.equal(payload.contentRef, '在吗');
-  assert.equal(payload.quotedMessageId, '40004');
+  // The platform reply id must never be presented as this system's own quoted message id.
+  assert.equal(payload.quotedMessageId, undefined);
+  assert.equal((payload.provenance as Record<string, unknown>).quotedPlatformMessageId, '40004');
 });
 
 test('a media part is never rewritten as text', () => {
@@ -58,6 +60,9 @@ test('a recall becomes a mutation event, not a new inbound message', () => {
   const event = normalizeObservation(observation, context());
   assert.equal(event?.eventType, 'PlatformMessageMutationObserved');
   assert.equal((event?.payload as Record<string, unknown>).mutation, 'recall');
+  // 02 only consumes live events; omitting mode made the mutation path fail closed with a 503.
+  assert.equal((event?.payload as Record<string, unknown>).mode, 'live');
+  assert.equal((event?.payload as Record<string, unknown>).platformEventId, observation.dedupeKey);
 });
 
 test('an unattributed self message never becomes a contact inbound message', () => {
