@@ -53,7 +53,9 @@ export function createQqBridge(options: QqBridgeOptions) {
   const now = options.now ?? Date.now;
   // Transport/SQL exceptions may embed chat content or credentials. The diagnostic phase is safe;
   // the original error stays local to a caller-provided sink if an operator needs private tracing.
-  const report = options.onError ?? ((_error: unknown, phase: string) => process.stderr.write(`bridge ${phase} failed\n`));
+  // The phase already carries the outcome, so no blanket "failed" suffix: it made accepted pushes
+  // look like failures when reading the spike log.
+  const report = options.onError ?? ((_error: unknown, phase: string) => process.stderr.write(`bridge ${phase}\n`));
   const authority = {};
   const platform = createQqPlatformPort({ accountId: options.accountId, transport: options.transport, authority, now });
   const data = new PgDataProvider();
