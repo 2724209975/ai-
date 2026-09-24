@@ -2,6 +2,16 @@
 
 日期：2026-09-24。对象仅为**非主力个人 QQ 测试账号与其已有、知情的一对一好友会话**；QQ 官方 Bot、群聊或模拟 OneBot 回包均不计目标能力。当前未登录真实账号、未连接阿里云服务器、未实际接收或发送。本人要求服务器最后核查，因此本页是后续可执行步骤，不是已执行记录。公共语义以 [contracts.md](../contracts.md) v0.3.0 与 [A16](../decisions.md) 为准。
 
+## 开工前确认清单（本人一次回复即可）
+
+以下五项齐了就能开始只接收 spike；缺任一项时先用本机模拟，不接真实桥接。**不要在聊天或仓库里提供号码、密码、二维码、token 或聊天记录。**
+
+1. 测试账号：非主力个人 QQ，可用于测试（说明账号类型与是否可用即可）。
+2. 测试好友：一名知情联系人，愿意在约定时间从原客户端发送测试消息。
+3. 宿主：阿里云实例的只读信息（`cat /etc/os-release`、`uname -m`、`nproc`、`free -h`、`df -h /`、`docker --version`），以及是否已有业务占用。
+4. 登录方式与时间窗：谁扫码、是否需要手机在线、可以测试的时间段（例如某天 20:00–22:00）。
+5. 风险与许可：确认继续使用 NapCat v4.18.28 的受限许可做个人测试（已记录 A16；如需可先向作者核实个人用法）。
+
 ## 入口条件与边界
 
 本人已接受对 NapCat 非官方路线及账号风险进行非主力账号评估；[固定版本 v4.18.28 发布页](https://github.com/NapNeko/NapCatQQ/releases/tag/v4.18.28)与[该版本许可](https://github.com/NapNeko/NapCatQQ/blob/v4.18.28/LICENSE)已于 2026-09-24 只读复查。许可证的具体个人测试使用权限需在安装前核清；不复制、修改或再分发其代码。维护者文档说明 HTTP 客户端可推送事件，配置项包括 `messagePostFormat`、`reportSelfMessage` 与 `token`；这只是组件声明，不能当作实际收发证据。[配置说明](https://napneko.github.io/config/basic)、[事件说明](https://napneko.github.io/develop/event)。
