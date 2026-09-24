@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { adaptDataContextProjection, createFakeIntelligencePort, FakeCandidateGateway, interpretWithFallback, interpretWithGateway, prepareReplyForOrchestration, proposeWithGateway } from './index.mts';
+import { adaptDataContextProjection, createFakeIntelligencePort, createTextCandidateGateway, FakeCandidateGateway, interpretWithFallback, interpretWithGateway, prepareReplyForOrchestration, proposeWithGateway } from './index.mts';
+import type { TextModelMeasurement, TextModelProvider } from './generation/text-provider-contract.mts';
 import { MemoryDataContextStore } from '../data/context/store.mts';
 import type { CandidateGateway } from './generation/fake-provider.mts';
 import type { MediaGateway } from './understanding/media-gateway.mts';
@@ -35,6 +36,22 @@ test('mock G1: decision -> 3 candidates including a two-part alternative -> advi
   const check = port.checkReply({ context, policy, decision: decision.value, parts: proposal.value.alternatives[0]!.parts });
   assert.equal(check.ok, true);
   if (check.ok) assert.deepEqual([check.value.status, check.value.authorization], ['passed', 'not_evaluated']);
+});
+
+test('04 handoff retains source refs, uncertainty and prompt version without granting dispatch', async () => {
+  const { context, policy } = fixture();
+  const result = await prepareReplyForOrchestration(createFakeIntelligencePort(), context, policy);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.value.authorization, 'not_evaluated');
+  assert.equal(result.value.decision.contextSnapshotId, context.snapshot.id);
+  assert.deepEqual(result.value.decision.evidenceRefs, ['message:m1']);
+  assert.ok(result.value.decision.uncertainty);
+  assert.equal(result.value.proposal?.promptVersion, 'fixture-1');
+  assert.deepEqual(result.value.proposal?.evidenceRefs, ['message:m1']);
+  assert.ok(result.value.proposal?.uncertainty);
+  assert.ok(result.value.checks.every(check =>
+    check.authorization === 'not_evaluated' && check.evidenceRefs.includes('message:m1')));
 });
 
 test('missing personal schedule stays missing and yields no candidate', async () => {
@@ -379,4 +396,43 @@ test('candidate gateway records its own model and prompt versions', async () => 
   const result = await prepareReplyForOrchestration(createFakeIntelligencePort(gateway), context, policy);
   assert.equal(result.ok, true);
   if (result.ok) assert.deepEqual([result.value.proposal?.generatorVersion, result.value.proposal?.promptVersion], ['candidate-test-2', 'prompt-test-3']);
+});
+
+test('replaceable text provider records version and usage without storing message content', async () => {
+  const measurements: TextModelMeasurement[] = [];
+  const provider: TextModelProvider = {
+    providerId: 'stub', modelId: 'text-stub', modelVersion: '1', promptVersion: 'prompt-2',
+    dataRegion: 'fixture-only', retentionPolicy: 'none',
+    async invoke({ signal }) {
+      assert.equal(signal.aborted, false);
+      return { alternatives: [{ clientAlternativeKey: 'a', strategySummary: '简短', parts: [{ clientPartKey: 'p', sequence: 1, type: 'text', content: '你好' }] }], usage: { inputTokens: 12, outputTokens: 2 } };
+    },
+  };
+  const { context, policy } = fixture();
+  const port = createFakeIntelligencePort(createTextCandidateGateway(provider, m => measurements.push(m)));
+  const result = await prepareReplyForOrchestration(port, context, policy);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual([result.value.proposal?.generatorVersion, result.value.proposal?.promptVersion], ['stub/text-stub@1', 'prompt-2']);
+  assert.equal(measurements.length, 1);
+  assert.equal(measurements[0]?.outcome, 'ok');
+  assert.deepEqual([measurements[0]?.inputTokens, measurements[0]?.outputTokens], [12, 2]);
+  assert.equal(JSON.stringify(measurements).includes('你好'), false);
+});
+
+test('provider failure records only an error outcome and yields no candidate', async () => {
+  const measurements: TextModelMeasurement[] = [];
+  const provider: TextModelProvider = {
+    providerId: 'stub', modelId: 'text-stub', modelVersion: '1', promptVersion: 'prompt-2',
+    dataRegion: 'fixture-only', retentionPolicy: 'none',
+    async invoke() { throw new Error('private message text must not enter telemetry'); },
+  };
+  const { context, policy } = fixture();
+  const result = await prepareReplyForOrchestration(createFakeIntelligencePort(
+    createTextCandidateGateway(provider, m => measurements.push(m))), context, policy);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, 'MODEL_UNAVAILABLE');
+  assert.equal(measurements.length, 1);
+  assert.equal(measurements[0]?.outcome, 'error');
+  assert.equal(measurements[0]?.inputTokens, null);
+  assert.equal(JSON.stringify(measurements).includes('private message'), false);
 });

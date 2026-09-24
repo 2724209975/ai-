@@ -32,6 +32,12 @@ test('Owner HTTP denies missing session and CSRF before reaching 02', async () =
     assert.equal(allowed.status, 200);
     assert.deepEqual(await allowed.json(), { items: [] });
     assert.equal(called, 1);
+    for (const path of ['/api/v1/skills', '/api/v1/imports', '/api/v1/faults']) {
+      const missing = await fetch(url + path, { headers: { cookie: 'owner=fixture' } });
+      assert.equal(missing.status, 501);
+      assert.equal((await missing.json() as { code: string }).code, 'NOT_IMPLEMENTED');
+    }
+    assert.equal(called, 1);
     const malformed = await fetch(url + '/api/v1/tasks/task-1/confirm', { method: 'POST', headers: { cookie: 'owner=fixture', origin: 'http://127.0.0.1', 'x-csrf-token': 'fixture-csrf' }, body: '{}' });
     assert.equal(malformed.status, 400);
     assert.equal(called, 1);

@@ -49,6 +49,25 @@ export class PgOwnerDataPort {
     });
   }
 
+  /** Owner UI receives scoped, opaque evidence IDs only; never raw bytes or storage paths. */
+  async listUnknownOrigins(scope: OwnerScope): Promise<{ items: { messageId: string; contactId: string; originStatus: 'unknown'; originEvidenceRefs: string[] }[] }> {
+    const rows = await this.#perContact(scope, async (tx, contactId) => {
+      const result = await tx.query<{ id: string; contact_id: string; platform_account_id: string; provenance: Record<string, unknown> }>(
+        `SELECT id,contact_id,platform_account_id,provenance FROM data_messages
+         WHERE contact_id=$1 AND actor='unknown' AND deletion_status='active'
+         ORDER BY sent_at DESC,id LIMIT 200`, [contactId]);
+      return result.rows;
+    });
+    return { items: rows.map(row => {
+      const ref = row.provenance?.rawEventRef;
+      const prefix = `bridge:${row.platform_account_id}:`;
+      const safeRef = row.provenance?.source === 'onebot11_bridge' && typeof ref === 'string'
+        && ref.startsWith(prefix) && /^[a-f0-9]{32}$/.test(ref.slice(prefix.length)) ? ref : undefined;
+      return { messageId: row.id, contactId: row.contact_id, originStatus: 'unknown' as const,
+        originEvidenceRefs: safeRef ? [safeRef] : [] };
+    }) };
+  }
+
   async listFacts(scope: OwnerScope): Promise<{ items: unknown[] }> {
     const seen = new Set<string>();
     const rows = await this.#perContact(scope, async (tx, contactId) => {

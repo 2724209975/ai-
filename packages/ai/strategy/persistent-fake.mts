@@ -1,18 +1,12 @@
 import type { Draft } from '../../orchestration/conversations/engine.mts';
-import type { PersistentIntelligence } from '../../orchestration/postgres/confirmed-service.mts';
+import type { PersistentContext, PersistentIntelligence } from '../../orchestration/postgres/confirmed-service.mts';
 import type { Policy, Risk } from '../../orchestration/policy/evaluate.mts';
 import type { PgDataProvider } from '../../data/postgres/provider.mts';
-import { withTransaction, type PgPool } from '../../infrastructure/postgres/transaction.mts';
+import type { PgPool } from '../../infrastructure/postgres/transaction.mts';
 import { createFakeIntelligencePort } from '../index.mts';
-import { adaptDataContextProjection, type DataContextProjectionInput } from '../understanding/context-adapter.mts';
+import { adaptDataContextProjection } from '../understanding/context-adapter.mts';
 import { prepareReplyForOrchestration } from './orchestration-handoff.mts';
 import type { PolicyProjection, RiskCategory } from '../types.mts';
-
-type PgProjection = Awaited<ReturnType<PgDataProvider['buildContext']>>;
-export type ScopedProjectionLoader = (snapshotId: string, policy: Policy) => Promise<DataContextProjectionInput | PgProjection>;
-/** The smallest 02 → 04 envelope: the immutable snapshot reference 04 must re-verify on its own. */
-type SnapshotEnvelope = { snapshot: { id: string; conversationId: string; generation: number; policyVersion: number; hash: string;
-  messageRefs: readonly { id: string }[]; factRefs: readonly { id: string }[]; analysisRefs: readonly { id: string }[] } };
 
 function projectedPolicy(policy: Policy): PolicyProjection {
   return { contactId: policy.contactId, version: policy.version, goal: policy.goal,
@@ -28,30 +22,20 @@ const riskMap: Record<RiskCategory, Risk> = {
   SENSITIVE_DATA: 'sensitive', MISSING_FACT: 'unknown_fact',
 };
 
-function sameIds(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
-}
-
-/** 02 hands 04 the projection it just built. 04 re-reads the snapshot in its own transaction and
- * refuses any envelope whose identity, hash, versions or references no longer match, so a forged
- * or lossy 02 envelope can never replace 03's stored snapshot. */
-async function scopedContext(context: SnapshotEnvelope, policy: Policy, load: ScopedProjectionLoader) {
-  const envelope = context.snapshot;
-  const full = adaptDataContextProjection(await load(envelope.id, policy));
-  if (full.contactId !== policy.contactId || full.snapshot.id !== envelope.id || full.snapshot.conversationId !== envelope.conversationId ||
-    full.snapshot.generation !== envelope.generation || full.snapshot.policyVersion !== envelope.policyVersion ||
-    full.snapshot.policyVersion !== policy.version || full.snapshot.hash !== envelope.hash ||
-    !sameIds(full.snapshot.messageRefs, envelope.messageRefs.map(r => r.id)) || !sameIds(full.snapshot.factRefs.map(r => r.id), envelope.factRefs.map(r => r.id)) ||
-    !sameIds(full.snapshot.analysisRefs.map(r => r.id), envelope.analysisRefs.map(r => r.id))) throw new Error('STALE_CONTEXT');
+/** 02 passes the full 03 projection; 04 checks its scope and versions before use. */
+function scopedContext(context: PersistentContext, policy: Policy) {
+  const full = adaptDataContextProjection(context);
+  if (full.contactId !== policy.contactId || full.snapshot.policyVersion !== policy.version ||
+    !Number.isSafeInteger(context.dependencyEpoch) || context.dependencyEpoch < 0) throw new Error('STALE_CONTEXT');
   return full;
 }
 
 /** Shape consumed by 02 PgConfirmedService; 04 never receives a send capability. */
-export function createPersistentFakeIntelligence(load: ScopedProjectionLoader): PersistentIntelligence {
+export function createPersistentFakeIntelligence(): PersistentIntelligence {
   const ai = createFakeIntelligencePort();
   return {
     async propose(context, policy): Promise<Draft> {
-      const full = await scopedContext(context, policy, load);
+      const full = scopedContext(context, policy);
       const prepared = await prepareReplyForOrchestration(ai, full, projectedPolicy(policy));
       if (!prepared.ok) {
         const code = prepared.error.code;
@@ -71,7 +55,7 @@ export function createPersistentFakeIntelligence(load: ScopedProjectionLoader): 
     },
     async checkEdited(context, policy, parts) {
       try {
-        const full = await scopedContext(context, policy, load);
+        const full = scopedContext(context, policy);
         const decision = ai.makeDecision({ context: full, policy: projectedPolicy(policy) });
         if (!decision.ok) return { allowed: false, reasons: [decision.error.code] };
         if (!decision.value.shouldReply) return { allowed: false, reasons: decision.value.confirmationReasons.length ? decision.value.confirmationReasons : ['POLICY_BLOCKED'] };
@@ -87,11 +71,7 @@ export function createPersistentFakeIntelligence(load: ScopedProjectionLoader): 
   };
 }
 
-/** Uses 03's current epoch and readContextProjection in one read transaction. */
-export function createPgPersistentFakeIntelligence(options: { pool: PgPool; data: PgDataProvider }): PersistentIntelligence {
-  return createPersistentFakeIntelligence((snapshotId, policy) => withTransaction(options.pool, async tx => {
-    const epoch = await options.data.getDependencyEpoch(tx, policy.contactId, policy.contactId);
-    return options.data.readContextProjection(tx, { callerContactId: policy.contactId, contactId: policy.contactId,
-      snapshotId, allowedScopes: policy.factScopes, expectedDependencyEpoch: epoch });
-  }));
+/** Compatibility alias for 07 CLI; pool/data are no longer read by 04. */
+export function createPgPersistentFakeIntelligence(_legacyOptions?: { pool: PgPool; data: PgDataProvider }): PersistentIntelligence {
+  return createPersistentFakeIntelligence();
 }

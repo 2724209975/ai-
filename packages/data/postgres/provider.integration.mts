@@ -108,6 +108,58 @@ try {
     await setContactScope(client,b.id);
     assert.equal((await client.query(`SELECT count(*)::int AS n FROM data_facts WHERE content='scoped-global-write'`)).rows[0]?.n,1);
     await client.query('COMMIT');
+
+    // A self message whose origin is still unknown remains evidence, but cannot seed a fact.
+    await client.query('BEGIN');
+    const unknown = await provider.appendObservedMessage(client,{ ...messageInput,
+      contactId: b.id, conversationId: b.conversationId, platformMessageId: 'self-unknown',
+      platformEventId: 'self-event', actor: 'unknown', contentRef: 'unattributed owner text',
+      provenance: { source: 'onebot11_bridge', rawEventRef: 'fixture:raw' } },randomUUID());
+    const unknownRows = await provider.queryMessages(client,{ callerContactId: b.id, contactId: b.id,
+      allowedScopes: [a.id,b.id], cutoffTime: now, mode: 'live' });
+    assert.equal(unknownRows.find(row => row.id === unknown.id)?.actor,'unknown');
+    await assert.rejects(provider.createFact(client,b.id,{ subject: 'owner', scope: b.id,
+      content: 'must not trust this', sourceCategory: 'owner-message-candidate',
+      evidenceRefs: [{ id: unknown.id, version: 1 }], validFrom: now },randomUUID()),/VALIDATION_FAILED/);
+    await client.query('ROLLBACK');
+
+    // A/B may share a platform message id. Mutation must bind the live account/conversation,
+    // tombstone only B's evidence, and invalidate its fact, snapshot, epoch and outbox once.
+    await client.query('BEGIN');
+    const bMessage = await provider.appendObservedMessage(client,{ ...messageInput,
+      contactId: b.id, conversationId: b.conversationId, platformMessageId: 'm1',
+      platformEventId: 'b-e1', actor: 'contact', contentRef: 'B evidence' },randomUUID());
+    const bFact = await provider.createFact(client,b.id,{ subject: 'contact', scope: b.id,
+      content: 'B fact', sourceCategory: 'owner-confirmed', evidenceRefs: [{ id: bMessage.id, version: 1 }], validFrom: now },randomUUID());
+    const generation = Number((await client.query<{ generation: string }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1',[b.conversationId])).rows[0]!.generation);
+    const bContext = await provider.buildContext(client,{ callerContactId: b.id, contactId: b.id,
+      cutoffTime: now, generation, allowedScopes: [b.id], policyVersion: 1, mode: 'live' });
+    assert.equal(bContext.facts.some(f => f.id === bFact.id),true);
+    await client.query('COMMIT');
+    await client.query('BEGIN');
+    const beforeMutation = await provider.getDependencyEpoch(client,b.id,b.id);
+    const outboxBeforeMutation = Number((await client.query<{ n: string }>('SELECT count(*)::text AS n FROM event_outbox')).rows[0]!.n);
+    const mutation = { callerContactId: b.id, contactId: b.id, conversationId: b.conversationId,
+      platformAccountId: b.accountId, platformMessageId: 'm1', mutation: 'edit' as const };
+    assert.deepEqual(await provider.invalidatePlatformMutation(client,mutation,randomUUID()),{ linked: true, messageId: bMessage.id });
+    assert.equal(await provider.getDependencyEpoch(client,b.id,b.id),beforeMutation+1);
+    await assert.rejects(provider.readContextProjection(client,{ callerContactId: b.id, contactId: b.id,
+      snapshotId: bContext.snapshot.id, allowedScopes: [b.id], expectedDependencyEpoch: beforeMutation }),/STALE_CONTEXT/);
+    await setContactScope(client,b.id);
+    assert.deepEqual((await client.query('SELECT content_ref,deletion_status FROM data_messages WHERE id=$1',[bMessage.id])).rows,
+      [{ content_ref: null, deletion_status: 'deleted' }]);
+    assert.deepEqual((await client.query('SELECT content,deletion_status FROM data_facts WHERE id=$1',[bFact.id])).rows,
+      [{ content: null, deletion_status: 'deleted' }]);
+    assert.equal((await client.query<{ status: string }>('SELECT status FROM data_context_snapshots WHERE id=$1',[bContext.snapshot.id])).rows[0]!.status,'invalid');
+    assert.equal(Number((await client.query<{ n: string }>('SELECT count(*)::text AS n FROM event_outbox')).rows[0]!.n),outboxBeforeMutation+1);
+    assert.deepEqual(await provider.invalidatePlatformMutation(client,mutation,randomUUID()),{ linked: true, messageId: bMessage.id });
+    assert.equal(await provider.getDependencyEpoch(client,b.id,b.id),beforeMutation+1);
+    assert.deepEqual(await provider.invalidatePlatformMutation(client,{ ...mutation, platformMessageId: 'missing' },randomUUID()),{ linked: false });
+    assert.equal(await provider.getDependencyEpoch(client,b.id,b.id),beforeMutation+1);
+    await assert.rejects(provider.invalidatePlatformMutation(client,{ ...mutation, conversationId: a.conversationId },randomUUID()),/FORBIDDEN/);
+    await setContactScope(client,a.id);
+    assert.equal((await client.query<{ deletion_status: string }>('SELECT deletion_status FROM data_messages WHERE id=$1',[first.id])).rows[0]!.deletion_status,'active');
+    await client.query('COMMIT');
   } finally { await client.query('ROLLBACK'); await client.query('RESET ROLE'); }
 } finally {
   await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);

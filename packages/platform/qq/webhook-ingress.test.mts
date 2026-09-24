@@ -45,6 +45,15 @@ test('same ID in different peer conversation does not collapse', async () => {
   await ingestOneBotWebhook(request(), deps); await ingestOneBotWebhook(request({ ...event, user_id: 10003 }), deps);
   assert.equal(rows.size, 2);
 });
+test('authenticated self event without verified peer is persisted as private unmapped evidence, never contact inbound', async () => {
+  const { deps, rows } = setup();
+  const self = { ...event, post_type: 'message_sent', user_id: 10001, target_id: 10002, actor: 'owner' };
+  const result = await ingestOneBotWebhook(request(self), deps);
+  assert.equal(result.status, 204);
+  const saved = [...rows.values()][0] as { observation: { kind: string; externalContactRef?: string } };
+  assert.equal(saved.observation.kind, 'unmapped_self');
+  assert.equal(saved.observation.externalContactRef, undefined);
+});
 test('replay after handler recreation relies on shared store; signature alone is not freshness', async () => {
   const { deps } = setup(); await ingestOneBotWebhook(request(), deps);
   const nextHandlerDeps = { ...deps, rawEventRef: 'fixture:redelivery' };

@@ -33,7 +33,9 @@ test('mixed segments retain order, reference and unknown segment with raw pointe
 });
 test('message_sent never automatically becomes owner; peer mapping is mandatory', () => {
   const x = { ...base, post_type: 'message_sent', user_id: 10001, verifiedOwnerEvidence: 'forged', actor: 'owner' };
-  assert.throws(() => decodePrivateEvent(x, context));
+  const quarantined = decodePrivateEvent(x, context);
+  assert.equal(quarantined.kind, 'unmapped_self');
+  assert.ok(!JSON.stringify(quarantined).includes('forged'));
   const e = decodePrivateEvent(x, { ...context, selfMessagePeer: '10002' });
   if (e.kind !== 'message') throw new Error('expected message');
   assert.equal(e.actor, 'unknown'); assert.equal(e.direction, 'self');

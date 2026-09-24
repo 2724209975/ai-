@@ -43,6 +43,10 @@ export type WireMessage = {
 export type WireObservation = WireMessage | {
   kind: 'recall'; platform: 'qq'; externalAccountRef: string; externalContactRef: string;
   platformMessageId: string; sentAt: string; rawEventRef: string; dedupeKey: string;
+} | {
+  /** Authenticated own-account private event without independently verified peer mapping. */
+  kind: 'unmapped_self'; platform: 'qq'; externalAccountRef: string;
+  platformMessageId: string; sentAt: string; rawEventRef: string; dedupeKey: string;
 };
 
 /** Transport layer must authenticate before calling. Inputs are never trusted owner evidence. */
@@ -63,10 +67,15 @@ export function decodePrivateEvent(input: unknown, context: {
   if (!['message', 'message_sent'].includes(String(x.post_type)) || x.message_type !== 'private' || x.sub_type !== 'friend') throw new WireError('UNSUPPORTED_CAPABILITY');
   const message = externalId(x.message_id, true); const sender = externalId(x.user_id);
   const self = x.post_type === 'message_sent' || sender === account;
+  if (!Array.isArray(x.message)) throw new WireError('UNSUPPORTED_CAPABILITY');
+  if (x.message.length === 0 || x.message.length > 256) throw new WireError();
+  if (self && !context.selfMessagePeer) {
+    return { kind: 'unmapped_self', platform: 'qq', externalAccountRef: account,
+      platformMessageId: message, sentAt, rawEventRef,
+      dedupeKey: JSON.stringify(['qq', account, 'unmapped-self', message, 'message']) };
+  }
   const peer = self ? externalId(context.selfMessagePeer) : sender;
   if (peer === account) throw new WireError('UNSUPPORTED_CAPABILITY');
-  if (!Array.isArray(x.message)) throw new WireError('UNSUPPORTED_CAPABILITY'); // Require messagePostFormat=array; do not guess CQ strings.
-  if (x.message.length === 0 || x.message.length > 256) throw new WireError();
   const parts: WirePart[] = x.message.map((v, index) => {
     const s = obj(v); const d = obj(s.data); const segmentType = str(s.type);
     switch (segmentType) {

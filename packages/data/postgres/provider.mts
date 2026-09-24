@@ -133,7 +133,29 @@ export class PgDataProvider {
     return { id: f.id, version: next };
   }
 
-  async deleteMessage(tx: PgClient, input: { callerContactId: string; contactId: string; messageId: string; expectedVersion: number }, correlationId: string): Promise<Ref> {
+  /** Called by 02 inside its receive/dispatch transaction. An unlinked mutation is unsafe to
+   * treat as harmless: 02 must pause the contact and request owner review. */
+  async invalidatePlatformMutation(tx: PgClient, input: { callerContactId: string; contactId: string; conversationId: string; platformAccountId: string; platformMessageId: string; mutation: 'recall' | 'edit' }, correlationId: string): Promise<{ linked: boolean; messageId?: string }> {
+    requireScope(input.callerContactId,input.contactId,[]);
+    if (!input.platformMessageId?.trim() || !['recall','edit'].includes(input.mutation)) throw new Error('VALIDATION_FAILED');
+    await this.#boundary(tx);
+    await this.#scope(tx,input.callerContactId,input.contactId,[]);
+    const contact = await this.#contact(tx,input.contactId);
+    if (contact.conversation_id !== input.conversationId || contact.platform_account_id !== input.platformAccountId) throw new Error('FORBIDDEN');
+    const found = await tx.query<{ id: string; version: string | number; deletion_status: string }>(
+      `SELECT id,version,deletion_status FROM data_messages
+       WHERE contact_id=$1 AND conversation_id=$2 AND platform_account_id=$3
+         AND platform_message_id=$4 AND mode='live' FOR UPDATE`,
+      [input.contactId,input.conversationId,input.platformAccountId,input.platformMessageId]);
+    const message = found.rows[0];
+    if (!message) return { linked: false };
+    if (message.deletion_status === 'active') await this.deleteMessage(tx,{ callerContactId: input.callerContactId,
+      contactId: input.contactId, messageId: message.id, expectedVersion: Number(message.version) },
+      correlationId, `platform_${input.mutation}`);
+    return { linked: true, messageId: message.id };
+  }
+
+  async deleteMessage(tx: PgClient, input: { callerContactId: string; contactId: string; messageId: string; expectedVersion: number }, correlationId: string, reason = 'message_deleted'): Promise<Ref> {
     await this.#boundary(tx);
     await this.#scope(tx,input.callerContactId,input.contactId,[]);
     const found = await tx.query<DbMessage>('SELECT * FROM data_messages WHERE id=$1 AND contact_id=$2 FOR UPDATE', [input.messageId,input.contactId]);
@@ -147,7 +169,7 @@ export class PgDataProvider {
     await tx.query(`UPDATE data_analyses SET status='invalid',claims='[]'::jsonb,stage_hypotheses='[]'::jsonb,supporting_evidence='[]'::jsonb,counter_evidence='[]'::jsonb,trend=NULL,corrections='[]'::jsonb,version=version+1,updated_at=now()
       WHERE id IN (SELECT owner_id FROM data_evidence WHERE owner_kind='analysis' AND (source_kind='message' AND source_id=$1 OR source_kind='fact' AND source_id=ANY($2::uuid[])))`, [m.id,factIds]);
     await tx.query(`DELETE FROM data_evidence WHERE owner_kind='fact' AND owner_id=ANY($1::uuid[])`, [factIds]);
-    await this.#invalidate(tx,input.contactId,'EvidenceInvalidated',{ id: m.id, version: input.expectedVersion + 1 },correlationId,'message_deleted');
+    await this.#invalidate(tx,input.contactId,'EvidenceInvalidated',{ id: m.id, version: input.expectedVersion + 1 },correlationId,reason);
     return { id: m.id, version: input.expectedVersion + 1 };
   }
 

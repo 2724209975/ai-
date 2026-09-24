@@ -6,7 +6,6 @@
  * interpret it yet.
  */
 import type { EventEnvelope, MessageType } from '../../contracts/index.mts';
-import { WireError } from './onebot-codec.mts';
 import type { WireObservation, WirePart } from './onebot-codec.mts';
 
 export type NormalizeContext = {
@@ -26,22 +25,22 @@ function bodyParts(parts: readonly WirePart[]): WirePart[] {
   return parts.filter(part => part.kind !== 'reply');
 }
 
-/** The trailing body part decides the message type; anything we cannot represent is `unsupported`. */
+/** Never discard a valid wire observation merely because its body has no single safe type. */
 function bodyType(parts: readonly WirePart[]): { type: MessageType; contentRef?: string } {
   const body = bodyParts(parts);
-  if (body.length !== 1) throw new WireError('UNSUPPORTED_CAPABILITY');
+  if (body.length !== 1) return { type: 'unsupported' };
   const part = body[0]!;
   switch (part.kind) {
     case 'text': {
       const text = part.text.trim();
-      if (!text) throw new WireError('UNSUPPORTED_CAPABILITY');
+      if (!text) return { type: 'unsupported' };
       return { type: 'text', contentRef: part.text };
     }
     case 'media': return { type: part.mediaKind === 'voice' ? 'voice' : 'image' };
     // A native QQ face is not the same object as a platform sticker; do not claim one.
     case 'native_face': return { type: 'unsupported' };
     case 'unsupported': return { type: 'unsupported' };
-    default: throw new WireError('UNSUPPORTED_CAPABILITY');
+    default: return { type: 'unsupported' };
   }
 }
 
@@ -57,6 +56,7 @@ function envelope<T extends EventEnvelope['eventType']>(context: NormalizeContex
  * analysis, candidates or sends.
  */
 export function normalizeObservation(observation: WireObservation, context: NormalizeContext): EventEnvelope | undefined {
+  if (observation.kind === 'unmapped_self') return undefined; // Account-level quarantine; no conversation can be guessed.
   const conversationRef = { accountId: context.accountId, conversationId: context.conversationId, externalContactRef: observation.externalContactRef };
   const provenance = { source: 'onebot11_bridge', rawEventRef: observation.rawEventRef, adapterVersion: context.adapterVersion };
 
@@ -89,6 +89,6 @@ export function normalizeObservation(observation: WireObservation, context: Norm
 
   if (!context.conversationId) return undefined;
   return envelope(context, 'PlatformInboundObserved', context.conversationId, 1, {
-    ...shared, actor: 'contact', isAgentGenerated: false, requiresReview: observation.requiresReview,
+    ...shared, actor: 'contact', isAgentGenerated: false, requiresReview: observation.requiresReview || type === 'unsupported',
   });
 }

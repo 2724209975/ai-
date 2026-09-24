@@ -8,10 +8,12 @@ import { interpretWithFallback, interpretWithGateway } from './understanding/med
 import { adaptDataContextProjection } from './understanding/context-adapter.mts';
 import { prepareReplyForOrchestration } from './strategy/orchestration-handoff.mts';
 import { createPersistentFakeIntelligence, createPgPersistentFakeIntelligence } from './strategy/persistent-fake.mts';
+import { createTextCandidateGateway } from './generation/text-provider-contract.mts';
 import type { PolicyProjection, ReplyDecision, ReplyPartProposal, ScopedContext } from './types.mts';
 
 export type * from './types.mts';
-export { FakeCandidateGateway, proposeWithFallback, proposeWithGateway, validateScopedContext, adaptDataContextProjection, prepareReplyForOrchestration, interpretWithGateway, interpretWithFallback, createPersistentFakeIntelligence, createPgPersistentFakeIntelligence };
+export { FakeCandidateGateway, proposeWithFallback, proposeWithGateway, validateScopedContext, adaptDataContextProjection, prepareReplyForOrchestration, interpretWithGateway, interpretWithFallback, createPersistentFakeIntelligence, createPgPersistentFakeIntelligence, createTextCandidateGateway };
+export type { TextModelProvider, TextModelMeasurement } from './generation/text-provider-contract.mts';
 export type { MediaGateway } from './understanding/media-gateway.mts';
 
 export function createFakeIntelligencePort(gateway: CandidateGateway = new FakeCandidateGateway(), fallback: CandidateGateway | null = null) {

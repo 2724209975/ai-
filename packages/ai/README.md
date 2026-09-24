@@ -39,7 +39,7 @@ for (const alternative of proposal.value.alternatives) {
 
 ## 07 命令行闭环使用的 PostgreSQL fake 端口
 
-02 的 `PgConfirmedService` 使用 `PersistentIntelligence`。04 提供 `createPgPersistentFakeIntelligence({ pool, data })`，可直接交给 02：
+02 的 `PgConfirmedService` 使用 `PersistentIntelligence`，并直接传入 03 的完整 `PersistentContext` 投影。04 提供 `createPgPersistentFakeIntelligence()`：
 
 ```ts
 import { PgDataProvider } from './packages/data/postgres/provider.mts';
@@ -47,12 +47,14 @@ import { createPgPersistentFakeIntelligence } from './packages/ai/index.mts';
 import { PgConfirmedService } from './packages/orchestration/postgres/confirmed-service.mts';
 
 const data = new PgDataProvider();
-const intelligence = createPgPersistentFakeIntelligence({ pool, data });
+const intelligence = createPgPersistentFakeIntelligence();
 const service = new PgConfirmedService({ pool, data, intelligence, platform: mockPlatform, authority });
 ```
 
-这里的 `pool`、`mockPlatform`、`authority` 由 07/02 的 CLI 初始化。04 端口只用 03 的 `getDependencyEpoch` 与 `readContextProjection` 复核完整裁剪快照；02 传入的压缩 `ProposedContext` 仅作 ID、generation、版本、hash 和引用一致性校验，不能代替正文。文字输入返回 1–3 个结构化候选和依赖版本；本人编辑后调用 `checkEdited` 重新检查，缺本人事实返回 `MISSING_FACT`。无可靠媒体解释返回 `media_uncertain` 且不生成候选。02 仍拥有名单、确认、状态、持久化和唯一发送授权。
+这里的 `pool`、`mockPlatform`、`authority` 由 07/02 的 CLI 初始化。02 负责从 03 `buildContext/readContextProjection` 获取已裁剪且经依赖版本复核的完整投影；04 直接验证联系人、策略版本、快照引用和截止时间，不二次查询数据库。文字输入返回 1–3 个结构化候选和依赖版本；本人编辑后调用 `checkEdited` 重新检查，缺本人事实返回 `MISSING_FACT`。无可靠媒体解释返回 `media_uncertain` 且不生成候选。02 仍拥有名单、确认、状态、持久化和唯一发送授权。
 
-不连接 PostgreSQL 的离线测试可注入 `createPersistentFakeIntelligence(loadProjection)`，其中 `loadProjection(snapshotId, policy)` 必须从 03 授权裁剪端口读取完整快照；不要用 02 压缩的消息文本伪造投影。当前仅为 fake 模型和 mock 平台闭环接口，D06/D08 未决，不能用于自动发送质量放行。运行 `node --test packages/ai/strategy/persistent-fake.test.mts` 验证该端口。
+离线测试可用 `createPersistentFakeIntelligence()` 接收 03 内存投影。静态检查运行 `node packages/ai/eval/typecheck.mts`，以实际 02 `PersistentIntelligence` 类型编译 04 代码。真实 PostgreSQL 回归用例为 `packages/ai/strategy/persistent-fake.pg.integration.mts`，需要隔离测试库及 `TEST_DATABASE_URL`；缺数据库时明确 skip，不能记为实跑通过。当前仅为 fake 模型和 mock 平台闭环接口，D06/D08 未决，不能用于自动发送质量放行。
+
+`createTextCandidateGateway(provider)` 定义了后续真实文本候选 provider 的模型/提示版本、数据地区、留存声明和可选 token/延迟/成功或失败观测；观测不包含聊天内容或异常正文，观测器异常不会覆盖 provider 结果。目前只有测试 stub，没有外部请求。小样本评测设计见 `eval/text-sample-plan.md`。
 
 运行测试：`node --test packages/ai/index.test.mts`。

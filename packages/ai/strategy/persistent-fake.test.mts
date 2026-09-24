@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MemoryDataContextStore } from '../../data/context/store.mts';
 import { defaultPolicy } from '../../orchestration/policy/evaluate.mts';
+import type { PersistentContext } from '../../orchestration/postgres/confirmed-service.mts';
 import { createPersistentFakeIntelligence } from '../index.mts';
 
 const now = '2026-09-23T12:00:00.000Z';
@@ -15,14 +16,10 @@ function setup(type: 'text' | 'image' = 'text') {
     sentAt: '2026-09-23T11:59:00.000Z', receivedAt: '2026-09-23T11:59:00.000Z',
     provenance: 'fixture', isAgentGenerated: false, mode: 'live' });
   const policy = defaultPolicy(contact.id, 'Asia/Shanghai', '轻松交流');
-  // 02 hands 04 the projection it just built, exactly as PgConfirmedService does.
-  const context = store.buildContext({ callerContactId: contact.id, contactId: contact.id,
+  const projection = store.buildContext({ callerContactId: contact.id, contactId: contact.id,
     cutoffTime: now, generation: 1, allowedScopes: policy.factScopes, policyVersion: policy.version });
-  const ai = createPersistentFakeIntelligence(async snapshotId => {
-    assert.equal(snapshotId, context.snapshot.id);
-    return store.readContextProjection({ callerContactId: contact.id, contactId: contact.id,
-      snapshotId, allowedScopes: policy.factScopes });
-  });
+  const context = { ...projection, dependencyEpoch: 0 } as unknown as PersistentContext;
+  const ai = createPersistentFakeIntelligence();
   return { ai, context, policy };
 }
 
@@ -40,12 +37,15 @@ test('02 PersistentIntelligence gets 03 scoped text and returns checked structur
   assert.ok(unsupportedFact.reasons.includes('MISSING_FACT'));
 });
 
-test('lossy 02 envelope cannot replace or stale 03 snapshot', async () => {
+test('contact, policy and snapshot mismatch are rejected', async () => {
   const { ai, context, policy } = setup();
-  const wrong = { ...context, snapshot: { ...context.snapshot, hash: 'forged-hash' } };
+  const wrong = { ...context, snapshot: { ...context.snapshot, policyVersion: policy.version + 1 } };
   await assert.rejects(() => ai.propose(wrong, policy), /STALE_CONTEXT/);
   const checked = await ai.checkEdited(wrong, policy, [{ type: 'text', content: '你好' }]);
   assert.deepEqual(checked, { allowed: false, reasons: ['STALE_CONTEXT'] });
+  await assert.rejects(() => ai.propose(context, { ...policy, contactId: 'contact-b' }), /STALE_CONTEXT/);
+  const future = { ...context, messages: context.messages.map(m => ({ ...m, sentAt: '2026-09-24T00:00:00.000Z' })) } as PersistentContext;
+  await assert.rejects(() => ai.propose(future, policy), /VALIDATION_FAILED/);
 });
 
 test('uninterpreted media yields media_uncertain without a reply plan', async () => {

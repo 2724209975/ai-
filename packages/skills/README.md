@@ -15,3 +15,5 @@
 ## 尚需集成
 
 当前库与 journal 是内存骨架，不提供跨进程持久化。不可变版本、grant 与同步 skill epoch 先做接口协调；公共迁移和完整 REST 定型暂缓。02 仍须在未发方案失效及每条发送前复核版本，04/06 后续接入各自端口。`skillEventAffectsPendingPlan` 只是 02 消费事件的纯判断助手，不能替代同步 epoch。试用要在 API 和数据库层继续隔离。详见 05 提案和交付记录。
+
+`registry/pg-store.mts` 与 `registry/schema.proposed.sql` 是待审持久化纵切。写方法必须由调用方放在同一 PostgreSQL 事务内，版本/grant、02 现有 `dispatch_control.skill_epoch`、outbox 和 owner 命令回放记录共同提交。候选全局迁移号为 0008（0007 已归 02），尚未写入 `db/migrations`。本地夹具验证回滚；隔离 PostgreSQL 用例已验证断开重连后的读取、事件/epoch 和受限角色 RLS。数据库服务重启与 02 失效消费者尚未联测。

@@ -2,11 +2,16 @@
 export type Operable = { id: string; version: number; allowedActions: string[]; status: string; reasonCodes?: string[]; invalidationReason?: string; correlationId?: string };
 export type ReplyPart = { replyPartId: string; sequence: number; type: 'text' | 'approved_sticker'; content?: string; assetId?: string };
 export type Alternative = { alternativeId: string; strategySummary: string; parts: ReplyPart[] };
-export type SendTask = { sendTaskId: string; sequence: number; status: string; receiptLevel?: string; platformMessageId?: string; lastError?: string; correlationId?: string };
+export type SendTask = { sendTaskId: string; sequence: number; status: string; approvalSource?: string; receiptLevel?: string; platformMessageId?: string; lastError?: string; correlationId?: string };
 export type Task = Operable & { taskId: string; taskVersion: number; planId: string; planVersion: number; contactId: string; contactName: string; conversationId: string; triggerMessages: { id: string; type: string; text?: string; at: string }[]; reasonCodes: string[]; requiredInputs?: string[]; alternatives: Alternative[]; sends: SendTask[]; contextSnapshotId?: string; policyVersion?: number };
-export type Overview = { version: number; globalPaused: boolean; allowedActions: string[]; pendingCount: number; unknownSendCount: number; connections: { id: string; platform: string; state: string; limitations?: string[] }[]; faults: { id: string; status: string; summary: string }[] };
+export type Overview = { version: number; globalPaused: boolean; allowedActions: string[]; pendingCount: number; unknownSendCount: number;
+  /** Optional G2 proposal. Omission means the projection has not proved coverage. */
+  connectionQueryStatus?: 'ready' | 'unavailable'; faultQueryStatus?: 'ready' | 'unavailable';
+  connections: { accountId?: string; id?: string; platform: string; connectionState?: string; state?: string; verificationStatus?: string; limitations?: string[];
+    lastReconciledAt?: string; recovery?: { status: string; historyComplete: boolean; gaps?: string[]; unresolvedSendCount?: number } }[];
+  faults: { id: string; status: string; summary: string }[] };
 export type Contact = Operable & { name: string; platform: string; agentEnabled: boolean; sendMode: string; goal: string; relationshipStatus?: string; stylePreference?: string; activeContactEnabled: boolean; activeConfessionEnabled: boolean; allowedWindows?: string[]; restrictions?: string[]; pauseReasons?: string[]; policyVersion: number };
-export type Conversation = Operable & { contactId: string; contactName: string; revision: number; generation: number; pauseReasons: string[]; messages: { id: string; actor: string; type: string; text?: string; at: string; mediaId?: string }[]; sends: SendTask[] };
+export type Conversation = Operable & { contactId: string; contactName: string; revision: number; generation: number; pauseReasons: string[]; messages: { id: string; actor: string; type: string; text?: string; at: string; mediaId?: string; originStatus?: string; originEvidenceRefs?: string[] }[]; sends: SendTask[] };
 export type Fact = Operable & { content: string; scope: string; sourceKind: string; evidenceRefs?: string[]; updatedAt: string; expiresAt?: string; confirmed: boolean };
 export type Analysis = Operable & { contactId: string; contactName: string; analysisVersion: string; taxonomyVersion: string; cutoffAt: string; sampleRange: string; claims: { label: string; hypothesis: string; supportingEvidence: string[]; counterEvidence: string[]; alternativeExplanation?: string; uncertainty: string }[] };
 export type Media = Operable & { contactId: string; kind: string; capturedAt: string; previewUrl?: string; recognition?: string; uncertainty?: string; approvedPlatforms?: string[]; source?: string };

@@ -75,8 +75,18 @@ test('an unattributed self message never becomes a contact inbound message', () 
 });
 
 test('space-only text and multi-body messages stay unsupported instead of being guessed', () => {
-  assert.throws(() => normalizeObservation(decode({ message: [{ type: 'text', data: { text: '   ' } }] }), context()), /UNSUPPORTED_CAPABILITY/);
-  assert.throws(() => normalizeObservation(decode({ message: [{ type: 'text', data: { text: '嗨' } }, { type: 'image', data: { file: 'cdn://x' } }] }), context()), /UNSUPPORTED_CAPABILITY/);
+  for (const message of [
+    [{ type: 'text', data: { text: '   ' } }],
+    [{ type: 'text', data: { text: '嗨' } }, { type: 'image', data: { file: 'cdn://x' } }],
+  ]) {
+    const event = normalizeObservation(decode({ message }), context());
+    assert.equal(event?.eventType, 'PlatformInboundObserved');
+    const payload = event?.payload as Record<string, unknown>;
+    assert.equal(payload.type, 'unsupported');
+    assert.equal(payload.contentRef, undefined);
+    assert.equal(payload.requiresReview, true);
+    assert.equal((payload.provenance as Record<string, unknown>).rawEventRef, 'raw:1');
+  }
 });
 
 test('an unenrolled peer produces no business event at all', () => {

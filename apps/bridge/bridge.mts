@@ -15,6 +15,7 @@ import { createQqPlatformPort } from '../../packages/platform/qq/napcat-bridge.m
 import { failureResponse, ingestAuthenticatedOneBotEvent } from '../../packages/platform/qq/webhook-ingress.mts';
 import type { SubmissionTransport } from '../../packages/platform/qq/send-executor.mts';
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
+import { createQqOutboxPump } from './outbox-pump.mts';
 
 export const QQ_BRIDGE_ADAPTER_VERSION = 'qq-onebot-bridge-0.1.0';
 
@@ -34,6 +35,8 @@ export type QqBridgeOptions = {
   aggregationWindowMs?: number;
   maxAggregationMs?: number;
   workerIntervalMs?: number;
+  /** Pending outbox replay interval; tests set it high so only their own tick runs. */
+  outboxIntervalMs?: number;
   now?: () => number;
   onError?(error: unknown, phase: string): void;
 };
@@ -48,7 +51,9 @@ export function createQqBridge(options: QqBridgeOptions) {
   if (!options.accountId || !options.selfId || !options.bridgeToken || !options.transport || !options.rawStore) throw new Error('BRIDGE_CONFIG_INVALID');
   const maxBodyBytes = options.maxBodyBytes ?? 1_048_576;
   const now = options.now ?? Date.now;
-  const report = options.onError ?? ((error: unknown, phase: string) => process.stderr.write(`bridge ${phase} failed: ${error instanceof Error ? error.message : 'unknown'}\n`));
+  // Transport/SQL exceptions may embed chat content or credentials. The diagnostic phase is safe;
+  // the original error stays local to a caller-provided sink if an operator needs private tracing.
+  const report = options.onError ?? ((_error: unknown, phase: string) => process.stderr.write(`bridge ${phase} failed\n`));
   const authority = {};
   const platform = createQqPlatformPort({ accountId: options.accountId, transport: options.transport, authority, now });
   const data = new PgDataProvider();
@@ -69,7 +74,12 @@ export function createQqBridge(options: QqBridgeOptions) {
     },
     // Raw evidence and the outbox row are committed before any business consumer runs.
     async onEvent(event) { await service.ingestPlatformEvent(event); },
+    async onUnmappedSelf(tx, input) { await service.pauseAccountForUnmappedSelf(tx, input.accountId, input); },
   });
+  const outbox = createQqOutboxPump({ pool: options.pool, accountId: options.accountId,
+    onEvent: event => service.ingestPlatformEvent(event),
+    intervalMs: options.outboxIntervalMs ?? 2_000,
+    onError: error => report(error, 'outbox'), });
   const worker = createDispatchWorker({ pool: options.pool, service, intervalMs: options.workerIntervalMs ?? 2_000,
     onError: (error, phase) => report(error, `worker-${phase}`) });
 
@@ -113,11 +123,16 @@ export function createQqBridge(options: QqBridgeOptions) {
   }
 
   return {
-    server, service, worker, platform,
-    async start(): Promise<void> { await service.recover(); },
+    server, service, worker, platform, outbox,
+    async start(): Promise<void> {
+      await service.recover();
+      await outbox.tick();
+      outbox.start();
+    },
     async stop(): Promise<void> {
       await new Promise<void>(done => server.close(() => done()));
       await worker.stop();
+      await outbox.stop();
     },
   };
 }
