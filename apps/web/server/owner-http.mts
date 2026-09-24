@@ -26,12 +26,18 @@ export type OwnerPort = {
   changeFact(ownerId: string, factId: string, command: FactCommand): Promise<CommandResult>;
   correctAnalysis(ownerId: string, analysisId: string, command: AnalysisCommand): Promise<CommandResult>;
   setMediaApproval(ownerId: string, mediaId: string, command: MediaApprovalCommand): Promise<CommandResult>;
+  /** An unknown send (RESULT_UNKNOWN) can only be resolved with platform evidence. */
+  resolveSend(ownerId: string, sendTaskId: string, command: ResolveSendCommand): Promise<CommandResult>;
 };
 export type ConfirmCommand = {
   taskVersion: number; planVersion: number; alternativeId: string;
   editedParts: { type: 'text'; content: string }[]; contentHash: string; idempotencyKey: string;
 };
 export type VersionCommand = { expectedVersion: number; idempotencyKey: string; reason?: string };
+export type ResolveSendCommand = {
+  status: 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE';
+  evidenceRef: string; expectedVersion: number; idempotencyKey: string; platformMessageId?: string;
+};
 export type PolicyPatch = {
   goal?: string; sendMode?: 'confirm' | 'auto'; agentEnabled?: boolean;
   activeContactEnabled?: boolean; activeConfessionEnabled?: boolean;
@@ -72,6 +78,16 @@ function confirmCommand(value: unknown): ConfirmCommand {
     !value.editedParts.every(part => isObject(part) && part.type === 'text' && typeof part.content === 'string' && part.content.trim() && part.content.length <= 4000) ||
     typeof value.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.contentHash) || !isKey(value.idempotencyKey)) throw new HttpError(400, 'VALIDATION_FAILED');
   return value as ConfirmCommand;
+}
+/** Resolving an unknown send requires evidence: the owner records what they checked. */
+function resolveSendCommand(value: unknown): ResolveSendCommand {
+  if (!isObject(value) || !isVersion(value.expectedVersion) || !isKey(value.idempotencyKey)
+    || !['SUBMITTED', 'DELIVERED', 'FAILED_DEFINITE'].includes(String(value.status))
+    || !isShortText(value.evidenceRef, 200)) throw new HttpError(400, 'VALIDATION_FAILED');
+  if (value.platformMessageId !== undefined && !isShortText(value.platformMessageId, 128)) throw new HttpError(400, 'VALIDATION_FAILED');
+  return { status: value.status as ResolveSendCommand['status'], evidenceRef: value.evidenceRef as string,
+    expectedVersion: value.expectedVersion, idempotencyKey: value.idempotencyKey,
+    ...(value.platformMessageId === undefined ? {} : { platformMessageId: value.platformMessageId as string }) };
 }
 function policyCommand(value: unknown): PolicyCommand {
   if (!isObject(value) || !isVersion(value.expectedVersion) || !isKey(value.idempotencyKey) || !isObject(value.policy)) throw new HttpError(400, 'VALIDATION_FAILED');
@@ -182,6 +198,11 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
         return send(response, 200, match[2] === 'confirm'
           ? await deps.ownerPort.confirm(ownerId, taskId, confirmCommand(body))
           : await deps.ownerPort.reject(ownerId, taskId, versionCommand(body)));
+      }
+      match = /^\/api\/v1\/sends\/([^/]+)\/resolve$/.exec(path);
+      if (match) {
+        const sendTaskId = resourceId(match[1]);
+        return send(response, 200, await deps.ownerPort.resolveSend(ownerId, sendTaskId, resolveSendCommand(await readJson(request))));
       }
       match = /^\/api\/v1\/contacts\/([^/]+)\/(pauseContact|resumeContact|updatePolicy)$/.exec(path);
       if (match) {

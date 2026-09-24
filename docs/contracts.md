@@ -72,7 +72,8 @@
 
 - `enrollContact`、`updatePolicy`、`pauseContact/resumeContact`、`pauseAll/resumeAll`。
 - `ingestPlatformEvent`、`confirmPlan`、`rejectPlan`、`submitOwnerReply`、`cancelPlan`、`scheduleActiveContact`。
-- `confirmPlan` 必须带 `taskVersion,planVersion,alternativeId,editedParts,contentHash,idempotencyKey`。后端重新计算 allowedAction，不能信任前端布尔值。`pauseAccountForUnmappedSelf(accountId,{rawEventRef,correlationId})` 由 01 在无法以受信来源确定对端时调用：02 在发送边界锁下暂停该账号已登记会话、失效候选与未提交发送并标记 `OWNER_ORIGIN_UNMAPPED`，不虚造 contactId 或消息，后续只能由本人核对后显式恢复。
+- `confirmPlan` 必须带 `taskVersion,planVersion,alternativeId,editedParts,contentHash,idempotencyKey`。后端重新计算 allowedAction，不能信任前端布尔值。
+- `resolveUnknownSend(sendTaskId,{status,evidenceRef,platformMessageId?,expectedVersion,idempotencyKey})`：仅本人可用且必须给出核对证据。只允许把 `RESULT_UNKNOWN` 改成 `SUBMITTED/DELIVERED/FAILED_DEFINITE`（与发送账本允许的迁移一致；`FAILED_DEFINITE` 必须有证据引用）。它**不重发**，也不自动解除联系人暂停——本人需另行 `resumeContact` 明确恢复；结果写入审计与 `SendTaskStateChanged`。`pauseAccountForUnmappedSelf(accountId,{rawEventRef,correlationId})` 由 01 在无法以受信来源确定对端时调用：02 在发送边界锁下暂停该账号已登记会话、失效候选与未提交发送并标记 `OWNER_ORIGIN_UNMAPPED`，不虚造 contactId 或消息，后续只能由本人核对后显式恢复。
 
 ### 基础设施事务端口（总控与 03 实现）
 
@@ -125,7 +126,7 @@
 
 ### 发送任务状态
 
-`CREATED -> PREFLIGHT -> LEASED -> SUBMITTING -> SUBMITTED -> DELIVERED`。旁路终态：`CANCELLED_PRE_SUBMIT | REJECTED_PREFLIGHT | FAILED_DEFINITE | RESULT_UNKNOWN`。只有有平台证据“未接受/未发送”时，才可按同一 sendKey 和 adapter 约定重试；超时、断线、进程崩溃发生于可能提交之后，一律先 `RESULT_UNKNOWN` 和 reconcile。
+`CREATED -> PREFLIGHT -> LEASED -> SUBMITTING -> SUBMITTED -> DELIVERED`。旁路终态：`CANCELLED_PRE_SUBMIT | REJECTED_PREFLIGHT | FAILED_DEFINITE | RESULT_UNKNOWN`。只有有平台证据“未接受/未发送”时，才可按同一 sendKey 和 adapter 约定重试；超时、断线、进程崩溃发生于可能提交之后，一律先 `RESULT_UNKNOWN` 和 reconcile；未知结果只能由本人在核对后经 `resolveUnknownSend` 处置，处置本身不重发。
 
 发送前检查按顺序验证：live 模式、全局状态、连接/能力、联系人 enrollment 与控制状态、发送模式/专项权限、plan ACTIVE、conversation generation、policy/fact/analysis/skill 版本、触发消息仍为最新决策范围、事实有效期、媒体批准与平台支持、确认票据、时段/冷却、sendKey 未成功/未知。任一失败记录 reason code 并拒绝。
 

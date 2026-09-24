@@ -605,6 +605,41 @@ export class PgConfirmedService {
   }
 
   /** Owner management projection across contacts: each contact is read under its own scope. */
+  /** Owner decision for a send whose platform result could not be established (RESULT_UNKNOWN).
+   * Only evidence-backed outcomes are accepted, the transition must be one the dispatch journal
+   * allows out of RESULT_UNKNOWN, and nothing here retries: the owner resumes the contact as a
+   * separate explicit action after reviewing. */
+  async resolveUnknownSend(sendTaskId: string, input: { status: 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE'; evidenceRef: string; expectedVersion: number; idempotencyKey: string; platformMessageId?: string }) {
+    requireText(input.idempotencyKey);
+    requireText(input.evidenceRef);
+    if (!['SUBMITTED', 'DELIVERED', 'FAILED_DEFINITE'].includes(input.status)) fail('VALIDATION_FAILED');
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) fail('VALIDATION_FAILED');
+    if (input.platformMessageId !== undefined) requireText(input.platformMessageId);
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const scope = `send:${sendTaskId}`;
+      const hash = sha256(JSON.stringify({ action: 'resolveUnknownSend', sendTaskId, status: input.status,
+        evidenceRef: input.evidenceRef, platformMessageId: input.platformMessageId ?? null, expectedVersion: input.expectedVersion }));
+      const previous = (await tx.query<{ command_hash: string; result_version: number | string; correlation_id: string }>(
+        'SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [scope, input.idempotencyKey])).rows[0];
+      if (previous) {
+        if (previous.command_hash !== hash) fail('CONFLICT_VERSION');
+        return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: input.status };
+      }
+      const found = await tx.query<SendRow>('SELECT * FROM orch_send_tasks WHERE id=$1 FOR UPDATE', [sendTaskId]);
+      const send = found.rows[0]; if (!send) fail('NOT_FOUND');
+      if (Number(send.version) !== input.expectedVersion) fail('CONFLICT_VERSION');
+      if (send.status !== 'RESULT_UNKNOWN') fail('STALE_PLAN');
+      await finishDispatch(tx, send.send_key, { status: input.status, platformMessageId: input.platformMessageId, evidenceRef: input.evidenceRef });
+      await this.#recordSendResult(tx, send.id, input.status, input.platformMessageId ?? null);
+      const version = Number(send.version) + 1;
+      const correlationId = newId(this.#now());
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)',
+        [scope, input.idempotencyKey, hash, version, correlationId]);
+      return { resultVersion: version, correlationId, status: input.status };
+    });
+  }
+
   async ownerContactIds(): Promise<string[]> {
     return withTransaction(this.#pool, async tx => (await tx.query<{ contact_id: string }>('SELECT contact_id FROM orch_conversations ORDER BY contact_id')).rows.map(row => row.contact_id));
   }
