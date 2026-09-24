@@ -1,12 +1,13 @@
-/** Replays only this QQ account's platform observations. Every consumer is inbox-idempotent. */
+/** Replays one platform account's observations. Every consumer is inbox-idempotent. */
 import { assertEventEnvelope, type EventEnvelope } from '../../packages/contracts/index.mts';
 import { withTransaction, type PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
 
 const deliveredTypes = ['PlatformInboundObserved', 'PlatformSelfMessageUnattributed', 'PlatformMessageMutationObserved'] as const;
 
-export function createQqOutboxPump(options: {
+export function createPlatformOutboxPump(options: {
   pool: PgPool;
   accountId: string;
+  platform?: 'qq' | 'wechat';
   onEvent(event: EventEnvelope): Promise<unknown>;
   intervalMs?: number;
   batchSize?: number;
@@ -14,7 +15,8 @@ export function createQqOutboxPump(options: {
 }) {
   const intervalMs = options.intervalMs ?? 2_000;
   const batchSize = options.batchSize ?? 20;
-  if (!options.pool || !options.accountId || !Number.isSafeInteger(intervalMs) || intervalMs < 100
+  const platform = options.platform ?? 'qq';
+  if (!options.pool || !options.accountId || !['qq','wechat'].includes(platform) || !Number.isSafeInteger(intervalMs) || intervalMs < 100
     || !Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 200) throw new Error('OUTBOX_PUMP_CONFIG_INVALID');
   let timer: ReturnType<typeof setInterval> | undefined;
   let running = false;
@@ -34,13 +36,15 @@ export function createQqOutboxPump(options: {
           const rows = await tx.query<{ id: string; envelope: unknown }>(`SELECT id,envelope FROM event_outbox
             WHERE published_at IS NULL AND event_type=ANY($1::text[])
               AND envelope->'payload'->>'accountId'=$2
-            ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`, [deliveredTypes, options.accountId]);
+              AND envelope->'payload'->>'platform'=$3
+            ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`, [deliveredTypes, options.accountId, platform]);
           const row = rows.rows[0];
           if (!row) return undefined;
           assertEventEnvelope(row.envelope);
           const event = row.envelope;
           if (event.eventId !== row.id || !deliveredTypes.includes(event.eventType as typeof deliveredTypes[number])
-            || (event.payload as Record<string, unknown>).accountId !== options.accountId) throw new Error('OUTBOX_ENVELOPE_CONFLICT');
+            || (event.payload as Record<string, unknown>).accountId !== options.accountId
+            || (event.payload as Record<string, unknown>).platform !== platform) throw new Error('OUTBOX_ENVELOPE_CONFLICT');
           return event;
         });
         if (!claimed) break;
@@ -66,3 +70,6 @@ export function createQqOutboxPump(options: {
     },
   };
 }
+
+/** Existing QQ call sites retain their name while the receive-only WeChat bridge shares the pump. */
+export const createQqOutboxPump = createPlatformOutboxPump;

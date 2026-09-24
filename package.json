@@ -13,6 +13,7 @@
     "owner:password": "node scripts/owner-password.mts",
     "serve:owner": "node apps/web/server/main.mts",
     "serve:bridge": "node apps/bridge/main.mts",
+    "serve:wechat-receive": "node apps/bridge/wechat-main.mts",
     "spike:posture": "node scripts/qq-spike-summary.mts posture",
     "spike:preflight": "node scripts/qq-spike-preflight.mts",
     "spike:report": "node scripts/qq-spike-report.mts",

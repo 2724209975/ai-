@@ -22,12 +22,12 @@ export type RawEventStore = {
 };
 
 /** Filesystem raw store for a single-host deployment. Object storage replaces this behind the port. */
-export function createFileRawEventStore(root: string, clock: () => number = Date.now): RawEventStore {
+export function createFileRawEventStore(root: string, clock: () => number = Date.now, platform: 'qq' | 'wechat' = 'qq'): RawEventStore {
   if (!root || !root.trim()) throw new Error('RAW_STORE_ROOT_REQUIRED');
   return {
     async put({ accountId, receivedAt, sha256, bytes }): Promise<string> {
       const month = new Date(receivedAt).toISOString().slice(0, 7);
-      const relative = join('qq', safeSegment(accountId), month, `${sha256}.bin`);
+      const relative = join(platform, safeSegment(accountId), month, `${sha256}.bin`);
       const target = join(root, relative);
       await mkdir(dirname(target), { recursive: true, mode: 0o700 });
       const temporary = `${target}.${newId(clock())}.tmp`;
@@ -41,10 +41,10 @@ export function createFileRawEventStore(root: string, clock: () => number = Date
 }
 
 /** Read-only audit after a crash between file write and DB commit; never deletes evidence. */
-export async function auditRawEventFiles(root: string, pool: PgPool, accountId: string): Promise<{ files: number; unreferenced: string[] }> {
-  const accountRoot = join(root, 'qq', safeSegment(accountId));
+export async function auditRawEventFiles(root: string, pool: PgPool, accountId: string, platform: 'qq' | 'wechat' = 'qq'): Promise<{ files: number; unreferenced: string[] }> {
+  const accountRoot = join(root, platform, safeSegment(accountId));
   const known = await withTransaction(pool, async tx => (await tx.query<{ payload_ref: string }>(
-    `SELECT payload_ref FROM platform_inbox_raw WHERE platform='qq' AND account_id=$1 AND payload_ref NOT LIKE 'discovery:%'`, [accountId]
+    `SELECT payload_ref FROM platform_inbox_raw WHERE platform=$2 AND account_id=$1 AND payload_ref NOT LIKE 'discovery:%'`, [accountId, platform]
   )).rows.map(row => row.payload_ref));
   const referenced = new Set(known);
   const found: string[] = [];

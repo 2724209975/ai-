@@ -6,6 +6,8 @@
 
 **当前执行口径**：上文 2026-09-23 基线数字及下方原始看板是历史快照；最新本机门禁见 [07 G2 集成记录](reports/07-g2-integration-2026-09-24.md)：208 unit、9 contract、24 PostgreSQL integration、13 E2E 和网页构建通过，0 fail/skip。全局迁移已到 `0009`，01–07 仍为 In progress。42 条完整 AC 均 blocked，微信/QQ real 栏均 blocked；只有 AC03/AC15 的 mock 子项 pass。当前先收拢未提交工作和远程 CI，再补 QQ 自身来源、已批准表情、历史/媒体能力，随后接入微信接收链路，最后做生产部署与 AC23。远程仓库未配置，首次远程 CI 仍无证据。
 
+**2026-09-24 后续执行**：本地变更已分批提交；QQ 完成一次逐条批准的系统回显对照，随后按本人新顺序暂缓 QQ 缺口。微信接收链路已进入 `packages/platform/wechat` 与 `apps/bridge`，隔离 PostgreSQL + HTTP 测试、旧真实字节离线重放和新实时文字入站通过；无微信出站。最新完整本机门禁为 **212 unit、9 contract、27 PostgreSQL integration、13 E2E 与网页构建，0 fail/skip**，见 [接入报告](reports/wechat-receive-bridge-2026-09-24.md)。远程仓库及阿里云 SSH 仍未就绪，按本人要求先完成本机。上段测试数量是接入前快照。
+
 ## 1. 集成顺序与门槛
 
 | 阶段 | 交付 | 可并行 | 退出门槛 |

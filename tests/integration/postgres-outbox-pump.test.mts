@@ -28,7 +28,7 @@ test('real PostgreSQL: bridge outbox pump delivers pending events once and retri
     const envelope = (account: string, messageId: string): EventEnvelope => ({ eventId: newId(), eventType: 'PlatformInboundObserved',
       eventVersion: 1, occurredAt: '2026-09-24T02:00:00.000Z', correlationId: newId(), causationId: 'cause',
       aggregateId: newId(), aggregateVersion: 1,
-      payload: { accountId: account, platformMessageId: messageId, conversationRef: { accountId: account, conversationId: 'c', externalContactRef: '20002' } } });
+      payload: { platform: 'qq', accountId: account, platformMessageId: messageId, conversationRef: { accountId: account, conversationId: 'c', externalContactRef: '20002' } } });
     async function enqueue(event: EventEnvelope): Promise<void> {
       await pool!.query(`INSERT INTO event_outbox(id,event_type,event_version,aggregate_id,aggregate_version,envelope)
         VALUES($1,$2,$3,$4,$5,$6::jsonb)`, [event.eventId, event.eventType, event.eventVersion, event.aggregateId, event.aggregateVersion, JSON.stringify(event)]);

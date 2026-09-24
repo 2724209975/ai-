@@ -2,6 +2,8 @@
 
 日期：2026-09-24。状态：**只接收已实测通过（偏移移植后），发送侧未做**。本文件是计划与中止条件；能力结论只以 [platform-wechat-capability-snapshot-2026-09-24.json](../reports/platform-wechat-capability-snapshot-2026-09-24.json) 为准——目前只有 `receive_types` 是 `tested`，总体仍 `unknown`。完整过程、崩溃记录与偏移移植细节见 [platform-wechat-wxhelper-2026-09-24.md](../reports/platform-wechat-wxhelper-2026-09-24.md)。
 
+**接入更新**：只接收推送现已接入正式 `packages/platform/wechat` 解码和 `apps/bridge/wechat-main.mts`，走私有原始事件、PostgreSQL inbox/outbox 与 02 消费；前次真实原始字节离线重放和新的实时文字入站均通过，发送仍关闭。证据见 [微信接入报告](../reports/wechat-receive-bridge-2026-09-24.md)。下方“尚未接入”的文字属于接入前历史步骤。
+
 ## 0. 第一道门禁：先过登录，再过版本（登录已由本机实测解除）
 
 只读核查（2026-09-24，GitHub 仓库与 issue，未安装未运行）得到的门禁事实：
