@@ -25,6 +25,7 @@ test('the raw shape reports exactly what the runbook needs to decide', () => {
   assert.equal(shape.messageType, 'private');
   assert.equal(shape.subType, 'friend');
   assert.deepEqual(shape.present, { selfId: true, userId: true, targetId: true, groupId: false, messageId: true, time: true, sender: true, message: true });
+  assert.deepEqual(shape.idRelations, { userToSelf: 'different', targetToSelf: 'different', userToTarget: 'same', senderToSelf: 'same' });
   assert.deepEqual(shape.senderKeys, ['nickname', 'user_id']);
   assert.deepEqual(shape.segmentTypes, ['text', 'image']);
   assert.deepEqual(shape.segmentDataKeys, [['text'], ['file']], 'field names are useful, field values are not');
@@ -44,6 +45,13 @@ test('unknown and malformed events are described as such instead of guessed', ()
   assert.equal(empty.postType, 'absent');
   assert.deepEqual(empty.topLevelKeys, []);
   assert.deepEqual(empty.present, { selfId: false, userId: false, targetId: false, groupId: false, messageId: false, time: false, sender: false, message: false });
+  assert.deepEqual(empty.idRelations, { userToSelf: 'unavailable', targetToSelf: 'unavailable', userToTarget: 'unavailable', senderToSelf: 'unavailable' });
+});
+
+test('identifier comparisons normalize decimal strings but never claim a peer or source', () => {
+  const shape = describeRawShape({ self_id: '001', user_id: 1, target_id: '002', sender: { user_id: '001' } });
+  assert.deepEqual(shape.idRelations, { userToSelf: 'same', targetToSelf: 'different', userToTarget: 'different', senderToSelf: 'same' });
+  assert.doesNotMatch(JSON.stringify(shape.idRelations), /001|002/);
 });
 
 test('recall notices keep their shape without carrying the message body', () => {

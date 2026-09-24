@@ -20,6 +20,9 @@ export type RawShape = {
   subType: (typeof SUB_TYPES)[number] | 'other' | 'absent';
   noticeType: (typeof NOTICE_TYPES)[number] | 'other' | 'absent';
   present: { selfId: boolean; userId: boolean; targetId: boolean; groupId: boolean; messageId: boolean; time: boolean; sender: boolean; message: boolean };
+  /** Equality only; never expose an identifier or treat this as owner-origin proof. */
+  idRelations: { userToSelf: 'same' | 'different' | 'unavailable'; targetToSelf: 'same' | 'different' | 'unavailable';
+    userToTarget: 'same' | 'different' | 'unavailable'; senderToSelf: 'same' | 'different' | 'unavailable' };
   senderKeys: string[];
   messageArray: boolean;
   segmentCount: number;
@@ -35,6 +38,16 @@ function allowed<T extends readonly string[]>(list: T, value: unknown): T[number
 }
 function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function compareIds(a: unknown, b: unknown): 'same' | 'different' | 'unavailable' {
+  const normalize = (value: unknown): string | undefined => {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
+    if (typeof value === 'string' && /^\d+$/.test(value) && BigInt(value) > 0n) return BigInt(value).toString();
+    return undefined;
+  };
+  const left = normalize(a), right = normalize(b);
+  return left === undefined || right === undefined ? 'unavailable' : left === right ? 'same' : 'different';
 }
 
 export function describeRawShape(input: unknown, options: { byteLength?: number } = {}): RawShape {
@@ -63,6 +76,8 @@ export function describeRawShape(input: unknown, options: { byteLength?: number 
     present: { selfId: event.self_id !== undefined, userId: event.user_id !== undefined, targetId: event.target_id !== undefined,
       groupId: event.group_id !== undefined, messageId: event.message_id !== undefined, time: event.time !== undefined,
       sender: sender !== undefined, message: event.message !== undefined },
+    idRelations: { userToSelf: compareIds(event.user_id, event.self_id), targetToSelf: compareIds(event.target_id, event.self_id),
+      userToTarget: compareIds(event.user_id, event.target_id), senderToSelf: compareIds(sender?.user_id, event.self_id) },
     senderKeys: sender ? Object.keys(sender).sort() : [], messageArray: Array.isArray(event.message),
     segmentCount: message.length, segmentTypes, segmentDataKeys, notes };
 }
