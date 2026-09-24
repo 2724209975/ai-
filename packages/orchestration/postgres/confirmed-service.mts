@@ -57,7 +57,7 @@ function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode
   if (has('MISSING_FACT')) return 'PAUSED_MISSING_FACT';
   if (has('MEDIA_UNCERTAIN')) return 'PAUSED_MEDIA';
   if (has('UNKNOWN_SEND')) return 'PAUSED_UNKNOWN_SEND';
-  if (has('RECEIPT_CONFLICT') || has('SEND_FAILURE') || has('INTELLIGENCE_FAILURE')) return 'PAUSED_FAILURE';
+  if (has('RECEIPT_CONFLICT') || has('SEND_FAILURE') || has('INTELLIGENCE_FAILURE') || has('PLATFORM_MUTATION_UNVERIFIED')) return 'PAUSED_FAILURE';
   if (has('AWAITING_MANUAL_RESUME') || has('CONFIRMATION_REJECTED')) return 'PAUSED_POLICY';
   return sendMode === 'auto' ? 'READY_AUTO' : 'READY_CONFIRM';
 }
@@ -190,15 +190,35 @@ export class PgConfirmedService {
   async #handleMutation(event: Event): Promise<undefined> {
     const p = event.payload as Record<string, unknown>;
     const ref = conversationRefOf(event, p, this.#platform.accountId);
+    const mutation = String(p.mutation ?? '');
+    const provenance = (p.provenance ?? {}) as Record<string, unknown>;
+    const rawEventRef = typeof provenance.rawEventRef === 'string' ? provenance.rawEventRef : '';
+    const platformEventId = String(p.platformEventId ?? '');
+    if (!['recall', 'edit'].includes(mutation) || !rawEventRef.trim() || !platformEventId.trim()) fail('VALIDATION_FAILED');
     await withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
       await consumeOnce(tx, '02-mutation', event.eventId, async () => {
         const row = await this.#conversation(tx, ref.conversationId, true);
         if (!row) return;
         if (row.account_id !== ref.accountId || row.external_contact_ref !== ref.externalContactRef) fail('VALIDATION_FAILED');
-        await this.#invalidate(tx, row.conversation_id, 'PLATFORM_MUTATION');
+        // 03 records the append-only audit row and invalidates the message's dependants in this very
+        // transaction. An unlinked mutation is a risk, not a no-op.
+        const outcome = await this.#data.invalidatePlatformMessage(tx, {
+          callerContactId: row.contact_id, contactId: row.contact_id, conversationId: row.conversation_id,
+          platformAccountId: row.account_id, platformMessageId: String(p.platformMessageId), platformEventId,
+          mutation: mutation as 'recall' | 'edit', rawEventRef, receivedAt: String(p.receivedAt),
+        }, event.correlationId);
+        await this.#invalidate(tx, row.conversation_id, outcome.status === 'unmatched' ? 'PLATFORM_MUTATION_UNVERIFIED' : 'PLATFORM_MUTATION');
         const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
-        await tx.query(`UPDATE orch_conversations SET generation=$2,version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, Number(control.rows[0]?.generation)]);
+        const generation = Number(control.rows[0]?.generation);
+        // Applied or not, the old evidence is no longer trustworthy: pause until the owner reviews.
+        // Nothing here ever resumes the contact automatically.
+        if (row.pause_reasons.includes('PLATFORM_MUTATION_UNVERIFIED')) {
+          await tx.query(`UPDATE orch_conversations SET generation=$2,version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation]);
+        } else {
+          await changeContactPause(tx, row.conversation_id, true);
+          await tx.query(`UPDATE orch_conversations SET generation=$2,state='PAUSED_FAILURE',pause_reasons=array_append(pause_reasons,'PLATFORM_MUTATION_UNVERIFIED'),version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation]);
+        }
       });
     });
     return undefined;

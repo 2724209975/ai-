@@ -155,6 +155,58 @@ export class PgDataProvider {
     return { linked: true, messageId: message.id };
   }
 
+  /** A19 port: append-only audit and replay dedupe around the conservative tombstone above.
+   * 02 calls this inside its own consume/dispatch transaction, so any rejection rolls back with it.
+   * A mutation that cannot be linked is recorded as `unmatched` and is never a safe no-op. */
+  async invalidatePlatformMessage(tx: PgClient, input: {
+    callerContactId: string; contactId: string; conversationId: string; platformAccountId: string;
+    platformMessageId: string; platformEventId: string; mutation: 'recall' | 'edit'; rawEventRef: string; receivedAt: string;
+  }, correlationId: string): Promise<
+    | { status: 'applied'; messageId: string; oldVersion: number; newVersion: number }
+    | { status: 'duplicate'; messageId?: string }
+    | { status: 'unmatched'; affectedContactId: string }> {
+    requireScope(input.callerContactId, input.contactId, []);
+    if (!input.platformMessageId?.trim() || !input.platformEventId?.trim() || !input.rawEventRef?.trim() || !['recall', 'edit'].includes(input.mutation)) throw new Error('VALIDATION_FAILED');
+    time(input.receivedAt);
+    await this.#boundary(tx);
+    await this.#scope(tx, input.callerContactId, input.contactId, []);
+    const contact = await this.#contact(tx, input.contactId);
+    if (contact.conversation_id !== input.conversationId || contact.platform_account_id !== input.platformAccountId) throw new Error('FORBIDDEN');
+    const prior = await tx.query<{ message_id: string | null; platform_message_id: string; mutation: string; raw_event_ref: string }>(
+      `SELECT message_id,platform_message_id,mutation,raw_event_ref FROM data_platform_message_mutations
+       WHERE platform_account_id=$1 AND conversation_id=$2 AND platform_event_id=$3`,
+      [input.platformAccountId, input.conversationId, input.platformEventId]);
+    const previous = prior.rows[0];
+    if (previous) {
+      if (previous.platform_message_id !== input.platformMessageId || previous.mutation !== input.mutation || previous.raw_event_ref !== input.rawEventRef) throw new Error('CONFLICT_VERSION');
+      return previous.message_id ? { status: 'duplicate', messageId: previous.message_id } : { status: 'duplicate' };
+    }
+    // Located by live + account + conversation + platform message id only, never across contacts.
+    const existing = await tx.query<{ id: string; version: string | number; deletion_status: string }>(
+      `SELECT id,version,deletion_status FROM data_messages
+       WHERE contact_id=$1 AND conversation_id=$2 AND platform_account_id=$3 AND platform_message_id=$4 AND mode='live' FOR UPDATE`,
+      [input.contactId, input.conversationId, input.platformAccountId, input.platformMessageId]);
+    const message = existing.rows[0];
+    const at = new Date().toISOString();
+    if (!message) {
+      await tx.query(`INSERT INTO data_platform_message_mutations(id,contact_id,conversation_id,platform_account_id,platform_message_id,platform_event_id,message_id,mutation,raw_event_ref,received_at,status,old_version,new_version,created_at)
+        VALUES($1,$2,$3,$4,$5,$6,NULL,$7,$8,$9,'unmatched',NULL,NULL,$10)`,
+        [uuid7(), input.contactId, input.conversationId, input.platformAccountId, input.platformMessageId, input.platformEventId, input.mutation, input.rawEventRef, input.receivedAt, at]);
+      return { status: 'unmatched', affectedContactId: input.contactId };
+    }
+    const oldVersion = Number(message.version);
+    // Tombstones the body, cascades to dependent facts/analyses/snapshots, bumps the dependency
+    // epoch and writes the outbox event in this same transaction.
+    await this.invalidatePlatformMutation(tx, { callerContactId: input.callerContactId, contactId: input.contactId,
+      conversationId: input.conversationId, platformAccountId: input.platformAccountId,
+      platformMessageId: input.platformMessageId, mutation: input.mutation }, correlationId);
+    const newVersion = oldVersion + (message.deletion_status === 'active' ? 1 : 0);
+    await tx.query(`INSERT INTO data_platform_message_mutations(id,contact_id,conversation_id,platform_account_id,platform_message_id,platform_event_id,message_id,mutation,raw_event_ref,received_at,status,old_version,new_version,created_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'applied',$11,$12,$13)`,
+      [uuid7(), input.contactId, input.conversationId, input.platformAccountId, input.platformMessageId, input.platformEventId, message.id, input.mutation, input.rawEventRef, input.receivedAt, oldVersion, newVersion, at]);
+    return { status: 'applied', messageId: message.id, oldVersion, newVersion };
+  }
+
   async deleteMessage(tx: PgClient, input: { callerContactId: string; contactId: string; messageId: string; expectedVersion: number }, correlationId: string, reason = 'message_deleted'): Promise<Ref> {
     await this.#boundary(tx);
     await this.#scope(tx,input.callerContactId,input.contactId,[]);

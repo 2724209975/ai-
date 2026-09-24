@@ -64,7 +64,8 @@ export function normalizeObservation(observation: WireObservation, context: Norm
     if (!context.conversationId) return undefined;
     return envelope(context, 'PlatformMessageMutationObserved', context.conversationId, 1, {
       adapter: 'qq-onebot', platform: 'qq', accountId: context.accountId, conversationRef,
-      platformMessageId: observation.platformMessageId, mutation: 'recall', sentAt: observation.sentAt,
+      platformMessageId: observation.platformMessageId, platformEventId: observation.dedupeKey,
+      mutation: 'recall', sentAt: observation.sentAt,
       receivedAt: context.receivedAt, requiresReview: true, provenance,
     });
   }
