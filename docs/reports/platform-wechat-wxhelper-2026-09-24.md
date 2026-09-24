@@ -36,6 +36,16 @@ wxhelper 路线在本机微信 **3.9.11.17（x64）** 上**通过第 0.5 步**�
 3. 探针 DLL 在被注入进程内报告：`cwd=C:\Program Files (x86)\Tencent\WeChat`、`created_logs_dir=0 err=5`（拒绝访问）、`config_ini_openable=1` → 命中第 3 处本地改动的原因。
 4. 改日志路径重建后：`LoadLibraryW` 成功，`127.0.0.1:19088` 出现监听，`/api/checkLogin` 返回 `code=1`。
 
+## 运行期事故记录：修复前的 DLL 让微信崩了两次
+
+Windows 应用程序日志（本机时间）显示 `WeChat.exe` 3.9.11.17 在 **17:39:35 与 17:39:50** 各有一次 `APPCRASH`：
+
+- 异常代码 `0xe06d7363`（MSVC 未处理的 C++ 异常），故障模块 `KERNELBASE.dll`；
+- 时间点对应**日志路径修复之前**的两次注入尝试，与第 3 处本地改动的原因完全吻合：`Config::init()` 里的 `spdlog::daily_logger_mt` 在只读安装目录上抛 `spdlog_ex`，异常穿出 `DllMain`，微信被终止（随后微信自行重启，因此当时仍能观察到进程）；
+- 修复日志路径后的注入（17:41:28）之后，**没有**再出现任何 WeChat 崩溃事件，`/api/checkLogin` 正常返回，HTTP 路由表（52 条）加载完成。
+
+结论：**"日志写只读目录"这个缺陷会崩掉宿主进程，不只是加载失败**；修复后的版本在观测窗口内未见崩溃。凡是要重跑本流程，必须使用修复后的 DLL，不要用上游原版直接注入。
+
 ## 已确认的接口契约（读源码所得，非实测收发）
 
 - 装/卸消息 hook：`POST /api/hookSyncMsg`、`POST /api/unhookSyncMsg`（hook 的是消息接收路径 `kDoAddMsg`）。

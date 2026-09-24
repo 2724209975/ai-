@@ -13,3 +13,4 @@ playwright-report/
 !.env.example
 .local-napcat/
 .local-wxhelper/
+.local-wechat-spike/
