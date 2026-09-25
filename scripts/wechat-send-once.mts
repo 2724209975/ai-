@@ -1,5 +1,5 @@
 /** Operator-only, one-task WeChat send spike. Never run without exact per-message approval.
- * Requires an isolated chat_agent_wechat_send database with one already confirmed task.
+ * Requires the clean replay database with one already confirmed task.
  * The normal receive bridge never starts this script or a dispatch worker.
  */
 import { createHash } from 'node:crypto';
@@ -24,7 +24,7 @@ if (process.env.WECHAT_SEND_ENABLED !== '1') throw new Error('OUTBOUND_DISABLED'
 const databaseUrl = required('DATABASE_URL');
 const database = new URL(databaseUrl);
 if (!['postgres:', 'postgresql:'].includes(database.protocol) || database.hostname !== '127.0.0.1'
-  || database.port !== '55418' || database.pathname !== '/chat_agent_wechat_send')
+  || database.port !== '55418' || database.pathname !== '/chat_agent_wechat_send_clean')
   throw new Error('ISOLATED_DB_REQUIRED');
 const accountId = required('WECHAT_ACCOUNT_ID');
 const peerRef = required('WECHAT_SPIKE_PEER');
