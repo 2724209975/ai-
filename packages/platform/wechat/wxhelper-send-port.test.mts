@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { createWxhelperSendCandidate } from './wxhelper-send-port.mts';
 
@@ -46,4 +47,17 @@ test('unresponsive transport times out once and aborts its signal', async () => 
   assert.equal((await port.submitSend(envelope, authority, async () => true)).status, 'RESULT_UNKNOWN');
   assert.equal(calls, 1);
   assert.equal(signal?.aborted, true);
+});
+
+test('one-shot permit pins task, peer and content and is consumed before any async work', async () => {
+  const authority = {}; let calls = 0;
+  const digest = createHash('sha256').update('fixture text').digest('hex');
+  const port = createWxhelperSendCandidate({ accountId: 'account', authority,
+    permit: { sendTaskId: 'task', externalContactRef: 'fixture-peer', contentSha256: digest },
+    transport: { async submitOnce() { calls++; return { code: 2 }; } } });
+  await assert.rejects(() => port.submitSend({ ...envelope, content: 'different' }, authority, async () => true), /POLICY_BLOCKED/);
+  await assert.rejects(() => port.submitSend({ ...envelope, sendTaskId: 'other' }, authority, async () => true), /POLICY_BLOCKED/);
+  assert.equal((await port.submitSend(envelope, authority, async () => true)).status, 'RESULT_UNKNOWN');
+  await assert.rejects(() => port.submitSend(envelope, authority, async () => true), /POLICY_BLOCKED/);
+  assert.equal(calls, 1);
 });

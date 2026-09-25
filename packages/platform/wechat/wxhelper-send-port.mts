@@ -1,4 +1,5 @@
-/** Offline send candidate. The live bridge does not import or instantiate this port. */
+/** 02-only send candidate. The receive bridge never instantiates this port. */
+import { createHash } from 'node:crypto';
 import type { SendEnvelope } from '../mock/adapter.mts';
 
 export type WxhelperSendTransport = {
@@ -7,6 +8,8 @@ export type WxhelperSendTransport = {
 
 export function createWxhelperSendCandidate(options: {
   accountId: string; authority: object; transport: WxhelperSendTransport;
+  /** A real one-shot run must pin the exact approved task, peer and content hash. */
+  permit?: { sendTaskId: string; externalContactRef: string; contentSha256: string };
   now?: () => number; timeoutMs?: number; maxTextBytes?: number;
 }) {
   const now = options.now ?? Date.now;
@@ -14,6 +17,9 @@ export function createWxhelperSendCandidate(options: {
   const maxTextBytes = options.maxTextBytes ?? 4_096;
   if (!options.accountId || !options.transport || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1
     || !Number.isSafeInteger(maxTextBytes) || maxTextBytes < 1) throw new Error('VALIDATION_FAILED');
+  if (options.permit && (!options.permit.sendTaskId || !options.permit.externalContactRef
+    || !/^[a-f0-9]{64}$/i.test(options.permit.contentSha256))) throw new Error('VALIDATION_FAILED');
+  let permitConsumed = false;
   return {
     platform: 'wechat' as const, accountId: options.accountId,
     async submitSend(envelope: SendEnvelope, authority: object,
@@ -28,6 +34,14 @@ export function createWxhelperSendCandidate(options: {
         || !envelope.conversationRef.externalContactRef) throw new Error('VALIDATION_FAILED');
       const remaining = Date.parse(envelope.deadline) - now();
       if (!Number.isFinite(remaining) || remaining <= 0) throw new Error('STALE_PLAN');
+      if (options.permit) {
+        const digest = createHash('sha256').update(envelope.content, 'utf8').digest('hex');
+        if (permitConsumed || envelope.sendTaskId !== options.permit.sendTaskId
+          || envelope.conversationRef.externalContactRef !== options.permit.externalContactRef
+          || digest !== options.permit.contentSha256.toLowerCase()) throw new Error('POLICY_BLOCKED');
+        // Consume before the first await. Even a failed preflight cannot authorize a retry.
+        permitConsumed = true;
+      }
       if (typeof preflight !== 'function' || !(await preflight(envelope))) throw new Error('POLICY_BLOCKED');
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -44,8 +58,8 @@ export function createWxhelperSendCandidate(options: {
       } finally {
         if (timer) clearTimeout(timer);
       }
-      // Current wxhelper SendTextMsg discards its internal result and returns 0 unconditionally.
-      // Its HTTP response is therefore not acceptance evidence, even when code is 0.
+      // Even the locally patched wxhelper can only say the function returned, not that WeChat
+      // accepted the message. Every HTTP response therefore remains unknown pending reconciliation.
       return { status: 'RESULT_UNKNOWN' as const, receiptLevel: 'unknown' as const,
         correlationId: envelope.correlationId };
     },

@@ -9,6 +9,7 @@ import { changeGlobalPause } from '../../packages/infrastructure/postgres/dispat
 import { setContactScope, withTransaction } from '../../packages/infrastructure/postgres/transaction.mts';
 import { MockPlatformAdapter } from '../../packages/platform/mock/adapter.mts';
 import { createWxhelperSendCandidate } from '../../packages/platform/wechat/wxhelper-send-port.mts';
+import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-http-transport.mts';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
 import { PgConfirmedService } from '../../packages/orchestration/postgres/confirmed-service.mts';
 import { newId } from '../../packages/orchestration/postgres/ids.mts';
@@ -40,7 +41,13 @@ test('fake wxhelper response cannot advance a two-part confirmed plan past an un
       });
       const authority = {}; let submissions = 0;
       const platform = createWxhelperSendCandidate({ accountId, authority,
-        transport: { async submitOnce() { submissions++; return { code: 0, msg: 'success' }; } } });
+        transport: new WxhelperHttpTransport({ baseUrl: 'http://127.0.0.1:19088/',
+          fetchImpl: async (_url, init) => {
+            submissions++;
+            assert.deepEqual(JSON.parse(String(init?.body)), { wxid: 'fixture-peer', msg: '第一条' });
+            return new Response(JSON.stringify({ code: 2, msg: 'result_unknown' }),
+              { status: 200, headers: { 'content-type': 'application/json' } });
+          } }) });
       const intelligence = {
         async propose() { return { shouldReply: true, risks: ['ordinary' as const], timing: 'now' as const,
           generatorVersion: 'fake', alternatives: [{ key: 'a', strategySummary: '普通回应', parts: [
