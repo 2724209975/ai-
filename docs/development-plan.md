@@ -14,6 +14,8 @@
 
 **2026-09-26 真机主链跑通（P1 首条真实出站）**：测试小号（3.9.11.25 + 移植 DLL `9F1A96D9…`，`checkLogin=code 1`、`hookSyncMsg=code 0`）对知情测试好友完成一次完整确认模式闭环：真实来信 → 3 候选 → **本人在页面点「确认并发送」**（内容来自持久 fake）→ 桥接收到派发、经真 helper 调 `/api/sendTextMsg` → 发送账本与 `dispatch_attempts` 均记 `RESULT_UNKNOWN`、联系人暂停、余下分条取消 → **本人核对好友已收到** → 页面「记已送达」（证据「本人核对：手机已收到」）→ 显式恢复 `READY_CONFIRM`。核心进程全程未派发。同批修复 06 缺失的核对入口（[记录](reports/wechat-real-send-2026-09-26.md)）。仍未完成：平台消息 ID 与 `accepted` 级以上回执、本人回显区分、媒体完整获取、真实模型（D06）、AC23 关机运行；42 行 AC 矩阵与微信 real 栏不变。
 
+**2026-09-26 真实模型接入（D06 选型落地）**：本人选定 DeepSeek。新增 `packages/ai/generation/deepseek-provider.mts`（OpenAI 兼容 `chat/completions`，JSON 输出模式，回答归一化为 04 校验的候选结构）与 `deepseek-env.mts`（只读自己的环境变量，密钥不进配置/日志/错误，缺密钥启动即失败）；`createTextModelIntelligence` 复用原有决策、事实与边界检查，**只有候选文本换成模型**。核心 `INTELLIGENCE_PROVIDER=deepseek`、微信桥接 `WECHAT_INTELLIGENCE=deepseek` 各自可选，与出站开关独立。同批修订 04 内部端口：生成阶段现在收到策略投影（原先被丢弃，prompt 拿不到目标与限制）。完整本机门禁 **244 unit、10 contract、31 PostgreSQL integration、22 E2E 与网页构建，0 fail/skip**（假端点用例，无网络）。未完成：尚未发出真实 API 调用、预算上限未定、QQ 桥接仍固定 fake、`deepseek-reasoner` 未启用。见 [记录](reports/deepseek-provider-2026-09-26.md) 与 [A25](decisions.md)。
+
 ## 1. 集成顺序与门槛
 
 | 阶段 | 交付 | 可并行 | 退出门槛 |

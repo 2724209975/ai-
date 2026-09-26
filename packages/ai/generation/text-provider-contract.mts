@@ -1,5 +1,5 @@
 import type { CandidateGateway } from './fake-provider.mts';
-import type { ReplyDecision, ScopedContext } from '../types.mts';
+import type { PolicyProjection, ReplyDecision, ScopedContext } from '../types.mts';
 
 /** Provider selection, region and retention are D06 decisions, not defaults here. */
 export interface TextModelProvider {
@@ -9,7 +9,7 @@ export interface TextModelProvider {
   readonly promptVersion: string;
   readonly dataRegion: string;
   readonly retentionPolicy: string;
-  invoke(input: { context: ScopedContext; decision: ReplyDecision; signal: AbortSignal }): Promise<{
+  invoke(input: { context: ScopedContext; decision: ReplyDecision; policy: PolicyProjection; signal: AbortSignal }): Promise<{
     alternatives: unknown;
     usage?: { inputTokens?: number; outputTokens?: number };
   }>;
@@ -30,12 +30,12 @@ export function createTextCandidateGateway(provider: TextModelProvider, observe?
   return {
     version: `${provider.providerId}/${provider.modelId}@${provider.modelVersion}`,
     promptVersion: provider.promptVersion,
-    async generate({ context, decision, signal }) {
+    async generate({ context, decision, policy, signal }) {
       const started = performance.now();
       let usage: { inputTokens?: number; outputTokens?: number } | undefined;
       let outcome: TextModelMeasurement['outcome'] = 'error';
       try {
-        const result = await provider.invoke({ context, decision, signal });
+        const result = await provider.invoke({ context, decision, policy, signal });
         usage = result?.usage;
         outcome = 'ok';
         return result?.alternatives;

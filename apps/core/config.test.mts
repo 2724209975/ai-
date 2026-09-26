@@ -59,6 +59,12 @@ test('a public origin must be HTTPS and the bind address must be opted into expl
 test('the intelligence provider must be named and only the implemented one is accepted', () => {
   assert.throws(() => readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'openai' }), { message: 'UNSUPPORTED_INTELLIGENCE_PROVIDER' });
   assert.equal(readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'PERSISTENT-FAKE' }).intelligenceProvider, 'persistent-fake');
+  // Naming DeepSeek without a key must fail at startup, not on the first inbound message.
+  assert.throws(() => readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'deepseek' }), { message: 'MISSING_ENV:DEEPSEEK_API_KEY' });
+  const deepSeek = readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'unit-test', DEEPSEEK_MODEL: 'deepseek-reasoner' });
+  assert.equal(deepSeek.intelligenceProvider, 'deepseek');
+  assert.equal(deepSeek.deepSeekModelId, 'deepseek-reasoner');
+  assert.equal(JSON.stringify(deepSeek).includes('unit-test'), false, 'the key must not be copied into the config');
 });
 
 test('an operator can opt out of the paused start, but only explicitly', () => {

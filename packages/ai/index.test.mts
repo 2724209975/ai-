@@ -180,7 +180,7 @@ test('provider malformed, unavailable and timeout produce no sendable plan', asy
     if (!result.ok) assert.equal(result.error.code, 'MODEL_UNAVAILABLE');
   }
   const slow: CandidateGateway = { version: 'slow-1', promptVersion: 'test-1', generate: async () => new Promise(() => {}) };
-  const timed = await proposeWithGateway(context, decision.value, slow, 20);
+  const timed = await proposeWithGateway(context, decision.value, policy, slow, 20);
   assert.equal(timed.ok, false);
   if (!timed.ok) assert.equal(timed.error.code, 'MODEL_UNAVAILABLE');
   const recovered = await createFakeIntelligencePort(gateways[1], new FakeCandidateGateway()).proposeReply({ context, policy, decision: decision.value });

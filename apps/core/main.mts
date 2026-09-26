@@ -6,6 +6,7 @@
  * START_PAUSED=0. See docs/reports/00-control-core-root-2026-09-26.md and deploy/runbook.md.
  */
 import { createJsonLogger } from '../../packages/infrastructure/observability/logger.mts';
+import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv } from '../../packages/ai/index.mts';
 import { readCoreConfig } from './config.mts';
 import { createCoreRuntime, type CoreRuntime } from './runtime.mts';
 
@@ -38,7 +39,13 @@ try {
 
 let runtime: CoreRuntime | undefined;
 try {
-  runtime = createCoreRuntime({ config, pool, logger });
+  // A real model is opt-in and named; the key is read here and never copied into the logged config.
+  const intelligence = config.intelligenceProvider === 'deepseek'
+    ? (() => { const described = describeDeepSeekEnv(readDeepSeekEnv(process.env));
+        logger.info('model_provider_selected', { provider: 'deepseek', ...described });
+        return createTextModelIntelligence(createDeepSeekFromEnv(process.env)); })()
+    : undefined;
+  runtime = createCoreRuntime({ config, pool, logger, intelligence });
   await runtime.start();
   await runtime.listen();
 } catch (error) {

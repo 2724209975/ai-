@@ -1,10 +1,11 @@
-import type { ReplyAlternativeProposal, ReplyDecision, ReplyProposal, Result, ScopedContext } from '../types.mts';
+import type { PolicyProjection, ReplyAlternativeProposal, ReplyDecision, ReplyProposal, Result, ScopedContext } from '../types.mts';
 import { FAKE_MODEL_VERSION, FAKE_PROMPT_VERSION, pendingContactBatch } from '../strategy/fake-decision.mts';
 
 export interface CandidateGateway {
   readonly version: string;
   readonly promptVersion: string;
-  generate(input: { context: ScopedContext; decision: ReplyDecision; signal: AbortSignal }): Promise<unknown>;
+  /** The policy projection is prompt input for a real model, so it travels with the request. */
+  generate(input: { context: ScopedContext; decision: ReplyDecision; policy: PolicyProjection; signal: AbortSignal }): Promise<unknown>;
 }
 
 /** Deterministic fixture. It makes no claim to imitate the owner's style. */
@@ -36,7 +37,7 @@ function validateAlternatives(value: unknown): value is ReplyAlternativeProposal
   return true;
 }
 
-export async function proposeWithGateway(context: ScopedContext, decision: ReplyDecision, gateway: CandidateGateway, timeoutMs = 3000): Promise<Result<ReplyProposal>> {
+export async function proposeWithGateway(context: ScopedContext, decision: ReplyDecision, policy: PolicyProjection, gateway: CandidateGateway, timeoutMs = 3000): Promise<Result<ReplyProposal>> {
   if (decision.contextSnapshotId !== context.snapshot.id || decision.conversationId !== context.snapshot.conversationId) return { ok: false, error: { code: 'VALIDATION_FAILED', message: '决策与快照不匹配', retryable: false } };
   if (!decision.shouldReply) return { ok: false, error: { code: decision.requiredFacts.length ? 'MISSING_FACT' : 'VALIDATION_FAILED', message: '本轮决策不生成回复候选', retryable: false, details: decision.requiredFacts } };
   if (!gateway.version?.trim() || !gateway.promptVersion?.trim()) return { ok: false, error: { code: 'VALIDATION_FAILED', message: '候选模型版本或提示版本缺失', retryable: false } };
@@ -45,7 +46,7 @@ export async function proposeWithGateway(context: ScopedContext, decision: Reply
   const controller = new AbortController();
   try {
     const raw = await Promise.race([
-      gateway.generate({ context, decision, signal: controller.signal }),
+      gateway.generate({ context, decision, policy, signal: controller.signal }),
       new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('MODEL_TIMEOUT')); }, timeoutMs); }),
     ]);
     if (!validateAlternatives(raw)) return { ok: false, error: { code: 'MODEL_UNAVAILABLE', message: '模型候选结构无效或不完整', retryable: false } };
@@ -67,8 +68,8 @@ export async function proposeWithGateway(context: ScopedContext, decision: Reply
   }
 }
 
-export async function proposeWithFallback(context: ScopedContext, decision: ReplyDecision, primary: CandidateGateway, fallback: CandidateGateway | null, timeoutMs = 3000): Promise<Result<ReplyProposal>> {
-  const first = await proposeWithGateway(context, decision, primary, timeoutMs);
+export async function proposeWithFallback(context: ScopedContext, decision: ReplyDecision, policy: PolicyProjection, primary: CandidateGateway, fallback: CandidateGateway | null, timeoutMs = 3000): Promise<Result<ReplyProposal>> {
+  const first = await proposeWithGateway(context, decision, policy, primary, timeoutMs);
   if (first.ok || !fallback || first.error.code !== 'MODEL_UNAVAILABLE') return first;
-  return proposeWithGateway(context, decision, fallback, timeoutMs);
+  return proposeWithGateway(context, decision, policy, fallback, timeoutMs);
 }

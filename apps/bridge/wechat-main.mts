@@ -3,6 +3,7 @@
 import { resolve } from 'node:path';
 import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-http-transport.mts';
+import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv } from '../../packages/ai/index.mts';
 import { createWxBridge } from './wechat-bridge.mts';
 import { resolveWxBridgeRunMode } from './run-mode.mts';
 
@@ -23,10 +24,20 @@ if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(acco
   || !/^[a-f0-9]{64}$/.test(ingressToken)) throw new Error('WX_BRIDGE_CONFIG_INVALID');
 const runMode = resolveWxBridgeRunMode(process.env);
 const wxhelperBaseUrl = runMode.outboundEnabled ? required('WECHAT_WXHELPER_BASE_URL') : undefined;
+// Candidates come from whichever provider the operator names; anything else is refused outright.
+const intelligenceProvider = (process.env.WECHAT_INTELLIGENCE?.trim() || 'persistent-fake').toLowerCase();
+if (!['persistent-fake', 'deepseek'].includes(intelligenceProvider)) throw new Error('UNSUPPORTED_INTELLIGENCE_PROVIDER');
+const intelligence = intelligenceProvider === 'deepseek'
+  ? (() => {
+      process.stdout.write(`wechat bridge model provider: ${JSON.stringify(describeDeepSeekEnv(readDeepSeekEnv(process.env)))}\n`);
+      return createTextModelIntelligence(createDeepSeekFromEnv(process.env));
+    })()
+  : undefined;
 const { Pool } = await import('pg');
 const pool = new Pool({ connectionString: required('DATABASE_URL'), max: 8 });
 const bridge = createWxBridge({ pool, accountId,
   selfRef, ingressToken,
+  ...(intelligence ? { intelligence } : {}),
   rawStore: createFileRawEventStore(resolve(process.env.RAW_EVENT_DIR?.trim() || '.local-wechat-raw'), Date.now, 'wechat'),
   // The transport itself enforces the private loopback helper endpoint; this process holds no
   // WeChat credential and never talks to Tencent directly.
@@ -43,6 +54,7 @@ try {
     bridge.server.listen(port, host, () => { bridge.server.off('error', fail); ready(); });
   });
   process.stdout.write(`wechat bridge listening on http://${host}:${port} · outbound ${runMode.outboundEnabled ? 'enabled' : 'disabled'}\n`);
+  process.stdout.write(`candidate provider: ${intelligenceProvider}${intelligenceProvider === 'deepseek' ? ` (${process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-chat'})` : ''}\n`);
   process.stdout.write('the helper endpoint stays loopback-only; a sent part is recorded as RESULT_UNKNOWN until an operator reconciles it\n');
 } catch (error) { await pool.end(); throw error; }
 let closing = false;

@@ -10,10 +10,11 @@
  */
 import { isLogLevel, type LogLevel } from '../../packages/infrastructure/observability/logger.mts';
 import { isPasswordHash } from '../../packages/infrastructure/auth/password.mts';
+import { readDeepSeekEnv } from '../../packages/ai/generation/deepseek-env.mts';
 
 export const CORE_PLATFORMS = ['wechat', 'qq'] as const;
 export type CorePlatform = (typeof CORE_PLATFORMS)[number];
-export const SUPPORTED_INTELLIGENCE_PROVIDERS = ['persistent-fake'] as const;
+export const SUPPORTED_INTELLIGENCE_PROVIDERS = ['persistent-fake', 'deepseek'] as const;
 export type IntelligenceProvider = (typeof SUPPORTED_INTELLIGENCE_PROVIDERS)[number];
 
 export type CoreConfig = {
@@ -36,6 +37,8 @@ export type CoreConfig = {
   pgPoolMax: number;
   logLevel: LogLevel;
   intelligenceProvider: IntelligenceProvider;
+  /** Safe to log; the API key is read at wiring time and never stored on the config. */
+  deepSeekModelId: string | null;
 };
 
 export type EnvLike = Record<string, string | undefined>;
@@ -92,6 +95,8 @@ export function readCoreConfig(env: EnvLike): CoreConfig {
 
   const intelligenceProvider = text(env, 'INTELLIGENCE_PROVIDER', 'persistent-fake').toLowerCase();
   if (!SUPPORTED_INTELLIGENCE_PROVIDERS.includes(intelligenceProvider as IntelligenceProvider)) throw new Error('UNSUPPORTED_INTELLIGENCE_PROVIDER');
+  // Fail before the process starts rather than on the first inbound message.
+  const deepSeekModelId = intelligenceProvider === 'deepseek' ? readDeepSeekEnv(env).modelId : null;
 
   const logLevelRaw = text(env, 'LOG_LEVEL', 'info').toLowerCase();
   if (!isLogLevel(logLevelRaw)) throw invalid('LOG_LEVEL');
@@ -114,5 +119,6 @@ export function readCoreConfig(env: EnvLike): CoreConfig {
     pgPoolMax: integer(env, 'PG_POOL_MAX', 8, 1, 100),
     logLevel: logLevelRaw,
     intelligenceProvider,
+    deepSeekModelId,
   };
 }

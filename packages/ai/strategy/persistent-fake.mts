@@ -6,6 +6,7 @@ import type { PgPool } from '../../infrastructure/postgres/transaction.mts';
 import { createFakeIntelligencePort } from '../index.mts';
 import { adaptDataContextProjection } from '../understanding/context-adapter.mts';
 import { prepareReplyForOrchestration } from './orchestration-handoff.mts';
+import { createTextCandidateGateway, type TextModelProvider } from '../generation/text-provider-contract.mts';
 import type { PolicyProjection, RiskCategory } from '../types.mts';
 
 function projectedPolicy(policy: Policy): PolicyProjection {
@@ -31,16 +32,15 @@ function scopedContext(context: PersistentContext, policy: Policy) {
 }
 
 /** Shape consumed by 02 PgConfirmedService; 04 never receives a send capability. */
-export function createPersistentFakeIntelligence(): PersistentIntelligence {
-  const ai = createFakeIntelligencePort();
+function intelligenceFromPort(ai: ReturnType<typeof createFakeIntelligencePort>, generatorPrefix: string): PersistentIntelligence {
   return {
     async propose(context, policy): Promise<Draft> {
       const full = scopedContext(context, policy);
       const prepared = await prepareReplyForOrchestration(ai, full, projectedPolicy(policy));
       if (!prepared.ok) {
         const code = prepared.error.code;
-        if (code === 'MEDIA_UNCERTAIN' || code === 'UNSUPPORTED_CAPABILITY') return { shouldReply: false, risks: ['media_uncertain'], alternatives: [], generatorVersion: 'fake-deterministic-1', timing: 'no_reply' };
-        if (code === 'MISSING_FACT') return { shouldReply: false, risks: ['unknown_fact'], alternatives: [], generatorVersion: 'fake-deterministic-1', timing: 'no_reply' };
+        if (code === 'MEDIA_UNCERTAIN' || code === 'UNSUPPORTED_CAPABILITY') return { shouldReply: false, risks: ['media_uncertain'], alternatives: [], generatorVersion: generatorPrefix, timing: 'no_reply' };
+        if (code === 'MISSING_FACT') return { shouldReply: false, risks: ['unknown_fact'], alternatives: [], generatorVersion: generatorPrefix, timing: 'no_reply' };
         throw new Error(code);
       }
       const { decision, proposal } = prepared.value;
@@ -69,6 +69,21 @@ export function createPersistentFakeIntelligence(): PersistentIntelligence {
       }
     },
   };
+}
+
+export function createPersistentFakeIntelligence(): PersistentIntelligence {
+  return intelligenceFromPort(createFakeIntelligencePort(), 'fake-deterministic-1');
+}
+
+/** Same decision, checks and persistence as the fake path; only candidate text comes from the model.
+ * A model that fails to answer yields MODEL_UNAVAILABLE, which 02 turns into a paused contact. */
+export function createTextModelIntelligence(provider: TextModelProvider): PersistentIntelligence {
+  return intelligenceFromPort(createFakeIntelligencePort(createTextCandidateGateway(provider)), 'fake-deterministic-1');
+}
+
+/** Compatibility wrapper used by the composition roots. */
+export function createPgTextModelIntelligence(options: { provider: TextModelProvider }): PersistentIntelligence {
+  return createTextModelIntelligence(options.provider);
 }
 
 /** Compatibility alias for 07 CLI; pool/data are no longer read by 04. */

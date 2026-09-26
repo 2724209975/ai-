@@ -7,13 +7,18 @@ import { interpretFakeMedia } from './understanding/media.mts';
 import { interpretWithFallback, interpretWithGateway } from './understanding/media-gateway.mts';
 import { adaptDataContextProjection } from './understanding/context-adapter.mts';
 import { prepareReplyForOrchestration } from './strategy/orchestration-handoff.mts';
-import { createPersistentFakeIntelligence, createPgPersistentFakeIntelligence } from './strategy/persistent-fake.mts';
+import { createPersistentFakeIntelligence, createPgPersistentFakeIntelligence, createPgTextModelIntelligence, createTextModelIntelligence } from './strategy/persistent-fake.mts';
 import { createTextCandidateGateway } from './generation/text-provider-contract.mts';
+import { createDeepSeekTextProvider } from './generation/deepseek-provider.mts';
+import { createDeepSeekFromEnv, describeDeepSeekEnv, readDeepSeekEnv } from './generation/deepseek-env.mts';
 import type { PolicyProjection, ReplyDecision, ReplyPartProposal, ScopedContext } from './types.mts';
 
 export type * from './types.mts';
-export { FakeCandidateGateway, proposeWithFallback, proposeWithGateway, validateScopedContext, adaptDataContextProjection, prepareReplyForOrchestration, interpretWithGateway, interpretWithFallback, createPersistentFakeIntelligence, createPgPersistentFakeIntelligence, createTextCandidateGateway };
+export { FakeCandidateGateway, proposeWithFallback, proposeWithGateway, validateScopedContext, adaptDataContextProjection, prepareReplyForOrchestration, interpretWithGateway, interpretWithFallback, createPersistentFakeIntelligence, createPgPersistentFakeIntelligence, createTextModelIntelligence, createPgTextModelIntelligence, createTextCandidateGateway, createDeepSeekTextProvider, createDeepSeekFromEnv, readDeepSeekEnv, describeDeepSeekEnv };
 export type { TextModelProvider, TextModelMeasurement } from './generation/text-provider-contract.mts';
+export type { DeepSeekProviderOptions } from './generation/deepseek-provider.mts';
+export type { DeepSeekEnv } from './generation/deepseek-env.mts';
+export { DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROMPT_VERSION } from './generation/deepseek-provider.mts';
 export type { MediaGateway } from './understanding/media-gateway.mts';
 
 export function createFakeIntelligencePort(gateway: CandidateGateway = new FakeCandidateGateway(), fallback: CandidateGateway | null = null) {
@@ -24,7 +29,7 @@ export function createFakeIntelligencePort(gateway: CandidateGateway = new FakeC
     proposeReply: ({ context, policy, decision }: { context: ScopedContext; policy: PolicyProjection; decision: ReplyDecision }) => {
       const valid = validateScopedContext(context, policy);
       if (!valid.ok) return Promise.resolve(valid);
-      return proposeWithFallback(context, decision, gateway, fallback).then(result => {
+      return proposeWithFallback(context, decision, policy, gateway, fallback).then(result => {
         if (!result.ok) return result;
         for (const alternative of result.value.alternatives) {
           const check = checkFakeReply(context, policy, decision, alternative.parts);

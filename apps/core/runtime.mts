@@ -16,7 +16,7 @@ import { createSkillOutboxPump } from '../../packages/infrastructure/postgres/sk
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
 import { PgOwnerDataPort } from '../../packages/data/postgres/owner-data-port.mts';
-import { PgConfirmedService, type DispatchPlatform } from '../../packages/orchestration/postgres/confirmed-service.mts';
+import { PgConfirmedService, type DispatchPlatform, type PersistentIntelligence } from '../../packages/orchestration/postgres/confirmed-service.mts';
 import { createDispatchWorker } from '../../packages/orchestration/postgres/worker.mts';
 import { createPgPersistentFakeIntelligence } from '../../packages/ai/index.mts';
 import { createPgOwnerPort } from '../web/server/pg-owner-port.mts';
@@ -34,6 +34,8 @@ export type CoreRuntimeOptions = {
   logger?: Logger;
   now?: () => number;
   requestId?(request: IncomingMessage): string;
+  /** Substituted by the entry point when a real model is configured; defaults to the fake. */
+  intelligence?: PersistentIntelligence;
 };
 
 export type CoreRuntime = {
@@ -59,9 +61,10 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
   const idOf = options.requestId ?? requestIdOf;
 
   const data = new PgDataProvider();
+  const intelligence = options.intelligence ?? createPgPersistentFakeIntelligence({ pool, data });
   const service = new PgConfirmedService({
     pool, data,
-    intelligence: createPgPersistentFakeIntelligence({ pool, data }),
+    intelligence,
     platform: {
       platform: config.platform,
       accountId: CORE_NO_DISPATCH_ACCOUNT,
@@ -156,7 +159,8 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
       log.info('runtime_started', {
         host: config.host, port: config.port, startPaused: config.startPaused,
         collectionEnabled: config.collectionEnabled, dispatch: 'disabled',
-        intelligenceProvider: config.intelligenceProvider, aggregationWindowMs: config.aggregationWindowMs,
+        intelligenceProvider: config.intelligenceProvider, intelligenceModel: config.deepSeekModelId ?? 'n/a',
+        aggregationWindowMs: config.aggregationWindowMs,
       });
     },
     async listen(): Promise<{ host: string; port: number }> {
