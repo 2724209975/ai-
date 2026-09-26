@@ -45,3 +45,16 @@
 - 发送内容仍是 04 的持久 fake 产物（本次是占位文本），真实模型待 D06。
 - 微信客户端每次更新都要重做偏移移植；本次未验证其他 80 余个接口。
 - AC 矩阵不变：42 行仍 `blocked`，微信 real 栏不因本次单条发送而通过；AC23（关机持续运行）仍未做。
+
+## 闭环收尾（由本人授权，操作者代点）
+
+本人确认「测试好友已收到」之后，按本人指示在真实页面上点完了最后两步（新补的核对按钮首次投入使用）：
+
+| 步骤 | 界面结果 | 库内结果 |
+| --- | --- | --- |
+| 会话页 → 核对证据填「本人核对：手机已收到」→ 点「记已送达」 | 该条变为「已送达 · 本人确认 · 回执 delivered」，核对控件消失 | `orch_send_tasks.status=DELIVERED`（version 3，`receipt.platformMessageId=null`）；`dispatch_attempts.evidence_ref='本人核对：手机已收到'`；`orch_control_commands` 记录 scope=`send:01a0de28…` |
+| 联系人页 → 点「恢复联系人」 | 徽标回到 `READY_CONFIRM`，暂停原因为「无」，提示 `RESUMED` | `orch_conversations.state='READY_CONFIRM'`、`pause_reasons={}`、version 23；`dispatch_control.unresolved_send_key=NULL`、`paused=false` |
+
+界面证据：`apps/web/evidence/mainline-resolve-390.png`（记已送达后）与 `apps/web/evidence/mainline-resumed-390.png`（恢复后）。
+
+全链路由此闭合：真实来信 → 候选 → 本人确认 → 桥接真实发送 → `RESULT_UNKNOWN` → 本人核对 → 记录结果 → 显式恢复。**端到端只有两处人工授权**：本人点「确认并发送」，本人确认「好友已收到」；其余每一步都留下账本和审计行。

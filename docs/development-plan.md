@@ -12,6 +12,8 @@
 
 **2026-09-26 主线推进（P0 第 1、2 步）**：微信桥接接入出站派发，默认仍是只接收——`WECHAT_ENABLE_OUTBOUND=1` + `WECHAT_WXHELPER_BASE_URL` 才创建传输与 worker，只接收却开 worker 直接拒绝启动；派发沿用 02 的租约、账本与逐条 preflight，helper 无论回什么都记 `RESULT_UNKNOWN` 并暂停该联系人（[A24](decisions.md)）。随后用一整套本机进程（核心 8787 + 微信桥接 19099 + fixture helper 19088 + 手机宽度网页）走完一次主线：合成入站 → 3 候选 → 页面点「确认并发送」→ 桥接提交 → `RESULT_UNKNOWN` → 暂停 → 人工核对记为已送达 → 显式恢复为 `READY_CONFIRM`。过程中修复「全新库 `pause_epoch=0` 被 HTTP 版本校验拒绝、第一次恢复返回 400」的缺陷。完整本机门禁为 **238 unit、10 contract、31 PostgreSQL integration、22 E2E 与网页构建，0 fail/skip**。见[记录](reports/wechat-bridge-dispatch-2026-09-26.md)。下一门槛：真实微信发送需逐条授权（收件人/原文/次数）与测试号进程；真实模型需 D06；本人回显与真实回执仍无样本。
 
+**2026-09-26 真机主链跑通（P1 首条真实出站）**：测试小号（3.9.11.25 + 移植 DLL `9F1A96D9…`，`checkLogin=code 1`、`hookSyncMsg=code 0`）对知情测试好友完成一次完整确认模式闭环：真实来信 → 3 候选 → **本人在页面点「确认并发送」**（内容来自持久 fake）→ 桥接收到派发、经真 helper 调 `/api/sendTextMsg` → 发送账本与 `dispatch_attempts` 均记 `RESULT_UNKNOWN`、联系人暂停、余下分条取消 → **本人核对好友已收到** → 页面「记已送达」（证据「本人核对：手机已收到」）→ 显式恢复 `READY_CONFIRM`。核心进程全程未派发。同批修复 06 缺失的核对入口（[记录](reports/wechat-real-send-2026-09-26.md)）。仍未完成：平台消息 ID 与 `accepted` 级以上回执、本人回显区分、媒体完整获取、真实模型（D06）、AC23 关机运行；42 行 AC 矩阵与微信 real 栏不变。
+
 ## 1. 集成顺序与门槛
 
 | 阶段 | 交付 | 可并行 | 退出门槛 |
