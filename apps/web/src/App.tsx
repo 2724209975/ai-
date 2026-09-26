@@ -41,7 +41,31 @@ const formatError = (error: unknown) => {
 };
 const safeMediaUrl = (url?: string) => url?.startsWith('/api/v1/media/') && !url.includes('..') ? url : undefined;
 
-function SendState({ sends }: { sends: SendTask[] }) {
+/** The platform never proves delivery, so an unknown part stays blocked until the owner states what
+ * they checked. Recording the result and resuming the contact stay separate actions. */
+function UnknownSendActions({ send, run }: { send: SendTask; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
+  const [evidence, setEvidence] = useState('本人核对');
+  const [busy, setBusy] = useState(false);
+  const missingVersion = !send.version;
+  const record = (status: 'DELIVERED' | 'FAILED_DEFINITE') => {
+    if (busy || missingVersion) return;
+    setBusy(true);
+    void run(`/sends/${encodeURIComponent(send.sendTaskId)}/resolve`, {
+      status, evidenceRef: evidence.trim() || '本人核对', expectedVersion: send.version, idempotencyKey: key(),
+    }).catch(() => {}).finally(() => setBusy(false));
+  };
+  return <div className="editor">
+    <label>核对证据<input type="text" value={evidence} maxLength={120} disabled={busy}
+      onChange={event => setEvidence(event.target.value)} placeholder="例如：手机已收到" /></label>
+    <div className="actions">
+      <button disabled={busy || missingVersion} onClick={() => record('DELIVERED')}>记已送达</button>
+      <button disabled={busy || missingVersion} onClick={() => record('FAILED_DEFINITE')}>记明确失败</button>
+    </div>
+    {missingVersion && <p className="muted">缺少版本信息，无法核对。</p>}
+  </div>;
+}
+
+function SendState({ sends, run }: { sends: SendTask[]; run?: (path: string, body: Record<string, unknown>) => Promise<void> }) {
   if (!sends.length) return <p className="muted">尚无发送任务，不代表已发送。</p>;
   return <ol className="send-list">{sends.map(send => <li key={send.sendTaskId}><strong>第 {send.sequence} 条：{label(send.status)}</strong>
     {send.approvalSource === 'mock_auto' && <span> · 自动决策（仅 mock 平台）</span>}
@@ -49,6 +73,7 @@ function SendState({ sends }: { sends: SendTask[] }) {
     {send.receiptLevel && (['SUBMITTED', 'DELIVERED', 'RESULT_UNKNOWN'].includes(send.status)) && <span> · 回执 {send.receiptLevel}</span>}
     {send.lastError && <p className="muted">{send.lastError}</p>}
     {send.correlationId && <small>追踪 {send.correlationId}</small>}
+    {send.status === 'RESULT_UNKNOWN' && run && <UnknownSendActions send={send} run={run} />}
   </li>)}</ol>;
 }
 
@@ -96,7 +121,7 @@ function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<
       {can(task, 'confirmPlan') && <button className="primary" disabled={busy} onClick={() => void submit()}>确认并发送</button>}
       {can(task, 'rejectPlan') && <button disabled={busy} onClick={() => void run(`/tasks/${encodeURIComponent(task.taskId)}/reject`, { expectedVersion: task.taskVersion, idempotencyKey: key() })}>拒绝候选</button>}
     </div>
-    <h4>逐条发送状态</h4><SendState sends={task.sends} />
+    <h4>逐条发送状态</h4><SendState sends={task.sends} run={run} />
   </article>;
 }
 
@@ -219,10 +244,10 @@ function App() {
     </article>)}</section>}
     {!loading && !error && page === 'conversations' && <section className="stack">{list<Conversation>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.contactName}</h3><span className="badge">{label(row.status)}</span></div><p className="muted">修订 {row.revision} · generation {row.generation} · 暂停 {row.pauseReasons.map(reason).join('、') || '无'}</p>
       {(row.pauseReasons.includes('OWNER_ORIGIN') || row.messages.some(message => message.actor === 'unknown')) && <p role="alert" className="warning">存在来源未明的自身账号消息。此状态不能自动判为本人发言或系统回显；请人工核对，恢复须以后端允许动作为准。</p>}
-      {row.sends.some(send => send.status === 'RESULT_UNKNOWN') && <p role="alert" className="warning">发送结果未知。核对前不要重复发送。</p>}
+      {row.sends.some(send => send.status === 'RESULT_UNKNOWN') && <p role="alert" className="warning">发送结果未知。核对前不要重复发送；核对后用下方按钮记录结果。</p>}
       {row.messages.map(message => <blockquote key={message.id}><small>{message.at} · {message.actor === 'unknown' ? '来源未明' : message.actor} · {message.type}</small><p>{message.text ?? '媒体内容请到媒体页面查看'}</p>
         {message.actor === 'unknown' && message.originEvidenceRefs?.length ? <small>核对证据引用：{message.originEvidenceRefs.join('、')}</small> : null}
-      </blockquote>)}<h4>发送记录</h4><SendState sends={row.sends} /></article>)}</section>}
+      </blockquote>)}<h4>发送记录</h4><SendState sends={row.sends} run={(path, body) => run(path, body).catch(() => {})} /></article>)}</section>}
     {!loading && !error && page === 'facts' && <section className="stack">{list<Fact>().map(row => <article className="card" key={row.id}><h3>{row.content}</h3><p>范围 {row.scope} · 来源 {row.sourceKind} · {row.confirmed ? '已确认' : '未确认'}</p><p>更新 {row.updatedAt} · 有效期 {row.expiresAt ?? '未设置'}</p><p>证据 {row.evidenceRefs?.join('、') || '无'}</p>
       {can(row, 'correctFact') && <label>纠正内容<input value={drafts[row.id] ?? row.content} onChange={event => setDrafts(old => ({ ...old, [row.id]: event.target.value }))} /></label>}
       <div className="actions">{can(row, 'correctFact') && <button onClick={() => void run(`/facts/${encodeURIComponent(row.id)}/correctFact`, { expectedVersion: row.version, content: drafts[row.id] ?? row.content, idempotencyKey: key() }).catch(() => {})}>保存纠正</button>}</div>
