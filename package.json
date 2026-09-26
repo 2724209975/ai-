@@ -12,6 +12,7 @@
     "build:web": "npm --prefix apps/web run build",
     "owner:password": "node scripts/owner-password.mts",
     "serve:owner": "node apps/web/server/main.mts",
+    "serve:core": "node apps/core/main.mts",
     "serve:bridge": "node apps/bridge/main.mts",
     "serve:wechat-receive": "node apps/bridge/wechat-main.mts",
     "spike:posture": "node scripts/qq-spike-summary.mts posture",

@@ -3,7 +3,7 @@
  * Reads are protected by the session cookie; writes additionally require Origin + CSRF.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { requestIdOf } from '../../../packages/infrastructure/observability/request-id.mts';
 
 type Session = { ownerId: string };
 export type CommandResult = { resultVersion: number; correlationId: string; status?: string };
@@ -159,7 +159,9 @@ function resourceId(raw: string | undefined): string {
 export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerHttpDependencies<S>) {
   if (!deps?.ownerPort || !deps.authenticate || !deps.verifyWrite) throw new Error('OWNER_HTTP_SECURITY_DEPENDENCY_REQUIRED');
   return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    const correlationId = randomUUID();
+    // The runtime sets a request id and logs it; reusing it here keeps the error body and the log
+    // line correlatable. Anything that is not a plain token is replaced, so it cannot be forged.
+    const correlationId = requestIdOf(request);
     try {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
       if (!path.startsWith('/api/v1/')) throw new HttpError(404, 'NOT_FOUND');

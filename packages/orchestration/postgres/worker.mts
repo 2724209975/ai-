@@ -10,6 +10,9 @@ export type DispatchWorkerOptions = {
   service: PgConfirmedService;
   intervalMs?: number;
   batchSize?: number;
+  /** Collection only. The production core has no platform adapter, so it must never dispatch:
+   * dispatch belongs to the per-account bridge, which holds 02's send lease. */
+  dispatchEnabled?: boolean;
   /** Upper bound of sends attempted per conversation per tick, so one contact cannot starve others. */
   maxSendsPerTick?: number;
   onError?(error: unknown, phase: 'collect' | 'dispatch'): void;
@@ -20,10 +23,12 @@ export function createDispatchWorker(options: DispatchWorkerOptions) {
   const intervalMs = options.intervalMs ?? 2_000;
   const batchSize = options.batchSize ?? 20;
   const maxSendsPerTick = options.maxSendsPerTick ?? 20;
+  const dispatchEnabled = options.dispatchEnabled ?? true;
   if (!options?.pool || !options?.service) throw new Error('WORKER_CONFIG_INVALID');
   if (!Number.isSafeInteger(intervalMs) || intervalMs < 100 || intervalMs > 600_000) throw new Error('WORKER_CONFIG_INVALID');
   if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 200) throw new Error('WORKER_CONFIG_INVALID');
   if (!Number.isSafeInteger(maxSendsPerTick) || maxSendsPerTick < 1 || maxSendsPerTick > 200) throw new Error('WORKER_CONFIG_INVALID');
+  if (typeof dispatchEnabled !== 'boolean') throw new Error('WORKER_CONFIG_INVALID');
   const report = options.onError ?? (() => {});
   let timer: ReturnType<typeof setInterval> | undefined;
   let running = false;
@@ -35,6 +40,7 @@ export function createDispatchWorker(options: DispatchWorkerOptions) {
         if (await options.service.flushDue(conversationId)) result.collected++;
       } catch (error) { result.failures++; report(error, 'collect'); }
     }
+    if (!dispatchEnabled) return result;
     for (const conversationId of await options.service.dispatchableConversations(batchSize)) {
       for (let index = 0; index < maxSendsPerTick; index++) {
         try {

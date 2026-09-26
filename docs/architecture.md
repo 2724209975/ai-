@@ -54,9 +54,9 @@ flowchart LR
 
 ```text
 apps/
-  api/                     # 总控启动与路由装配，06 实现管理 API 适配
-  worker/                  # 总控装配，02 调度，07 生命周期
+  core/                    # 总控: 生产常驻核心（本人管理 API + 聚合/收集 + 05 Skill outbox），结构上不派发（A22）
   web/                     # 06
+  web/server/              # 06 管理 API 适配与本地 mock 组合根（开发用，不是生产部署）
   bridge/                  # 01: QQ OneBot 桥接组合根（已落盘，需外部已登录桥接）
 packages/
   contracts/               # 总控维护 schema、类型、端口、错误、事件

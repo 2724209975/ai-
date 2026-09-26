@@ -8,6 +8,8 @@
 
 **2026-09-24 后续执行**：本地变更已分批提交；QQ 完成一次逐条批准的系统回显对照，随后按本人新顺序暂缓 QQ 缺口。微信接收链路已进入 `packages/platform/wechat` 与 `apps/bridge`，隔离 PostgreSQL + HTTP 测试、旧真实字节离线重放和新实时文字入站通过；无微信出站。最新完整本机门禁为 **212 unit、9 contract、27 PostgreSQL integration、13 E2E 与网页构建，0 fail/skip**，见 [接入报告](reports/wechat-receive-bridge-2026-09-24.md)。远程仓库及阿里云 SSH 仍未就绪，按本人要求先完成本机。上段测试数量是接入前快照。
 
+**2026-09-26 工程进展（P0 第 2 项）**：生产核心组合根 `apps/core`（`npm run serve:core`）落盘，关闭 07 记录中的「生产组合根尚未接线」缺口：常驻核心只做本人管理 API、聚合/收集与 05 Skill 内部 outbox，**派发留在各平台账号桥接**；核心以 `dispatchEnabled:false` 与只抛错的平台对象构造，并有契约测试禁止 `apps/core` 触达 `packages/platform/`、`apps/bridge/`、`submitSend(` 与 `dispatchEnabled: true`。启动即暂停（暂停态重启不重复抬高 epoch）、非回环 origin 必须 HTTPS、非回环监听需显式放行、智能提供方必须显式命名（当前仅 `persistent-fake`）。结构化日志为单行 JSON，凭据/正文键抹除、路由标签折叠标识段。完整本机门禁升至 **234 unit、10 contract、29 PostgreSQL integration、22 E2E 与网页构建，0 fail/skip**。见 [00 核心组合根记录](reports/00-control-core-root-2026-09-26.md) 与 [A22](decisions.md)。仍未完成：远程仓库与首次 CI（本机无 `gh`、无 remote）、账号→平台映射（[A23](decisions.md) 提案）、05/导入的 Owner REST 路由审定、生产镜像与反代。
+
 ## 1. 集成顺序与门槛
 
 | 阶段 | 交付 | 可并行 | 退出门槛 |

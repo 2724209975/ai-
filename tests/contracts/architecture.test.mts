@@ -41,3 +41,22 @@ test('global migrations have unique consecutive numbers and never use per-module
   assert.ok(names.length > 0, 'at least one global migration is required');
   names.forEach((name, index) => assert.match(name, new RegExp(`^${String(index + 1).padStart(4, '0')}_[a-z0-9_]+\\.sql$`)));
 });
+
+/** The production core shares a database with the bridges but must never be able to send. Being
+ * unable to reach an adapter is what makes that structural rather than a promise in a document. */
+test('the core runtime cannot reach a platform adapter, dispatch, or any send call', async () => {
+  const paths = await sources('apps/core');
+  assert.ok(paths.length > 0, 'apps/core must exist');
+  for (const path of paths) {
+    const content = await readFile(resolve(root, path), 'utf8');
+    for (const match of content.matchAll(/(?:\bfrom\s*|\bimport\s*\()\s*['"]([^'"]+)['"]/g)) {
+      const specifier = match[1]!;
+      if (!specifier.startsWith('.')) continue;
+      const target = relative(root, resolve(root, dirname(path), specifier)).replaceAll('\\', '/');
+      assert.ok(!target.startsWith('packages/platform/'), `${path} imports platform adapter ${target}`);
+      assert.ok(!target.startsWith('apps/bridge/'), `${path} imports a bridge composition root`);
+    }
+    assert.doesNotMatch(content, /\bsubmitSend\s*\(/, `${path} must not invoke platform sending`);
+    assert.doesNotMatch(content, /dispatchEnabled\s*:\s*true/, `${path} must not enable dispatch`);
+  }
+});
