@@ -34,6 +34,29 @@ export const DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com';
 export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-flash';
 export const DEEPSEEK_PROMPT_VERSION = 'reply-candidates-1';
 
+/** Carries the platform's status for operator tooling. The product path never logs it: 04's gateway
+ * turns any failure here into MODEL_UNAVAILABLE before it reaches a log or a contact. */
+export class DeepSeekHttpError extends Error {
+  readonly status: number;
+  readonly providerCode: string | null;
+  constructor(status: number, providerCode: string | null) {
+    super(`DEEPSEEK_HTTP_${status}`);
+    this.name = 'DeepSeekHttpError';
+    this.status = status;
+    this.providerCode = providerCode;
+  }
+}
+
+/** Reads at most a couple of KB and picks out the provider's own error code, never the message. */
+async function providerErrorCode(response: Response): Promise<string | null> {
+  try {
+    const text = (await response.text()).slice(0, 2_048);
+    const parsed = JSON.parse(text) as { error?: { code?: unknown; type?: unknown } };
+    const code = parsed?.error?.code ?? parsed?.error?.type;
+    return typeof code === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(code) ? code : null;
+  } catch { return null; }
+}
+
 const MAX_HISTORY = 20;
 const MAX_PART_CHARS = 200;
 const MAX_ALTERNATIVES = 3;
@@ -150,7 +173,7 @@ export function createDeepSeekTextProvider(options: DeepSeekProviderOptions): Te
           headers: { 'content-type': 'application/json', authorization: `Bearer ${options.apiKey.trim()}` },
           body: JSON.stringify(request),
         });
-        if (!response.ok) throw new Error('MODEL_UNAVAILABLE');
+        if (!response.ok) throw new DeepSeekHttpError(response.status, await providerErrorCode(response));
         const payload = await response.json() as { choices?: { message?: { content?: unknown } }[]; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
         const content = payload?.choices?.[0]?.message?.content;
         if (typeof content !== 'string' || !content.trim()) throw new Error('MODEL_UNAVAILABLE');

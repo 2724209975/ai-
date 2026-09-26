@@ -27,7 +27,7 @@ function number(env: EnvLike, name: string, fallback: number): number {
 }
 
 export function readDeepSeekEnv(env: EnvLike): DeepSeekEnv {
-  const apiKey = env.DEEPSEEK_API_KEY?.trim();
+  const apiKey = normaliseKey(env.DEEPSEEK_API_KEY);
   if (!apiKey) throw new Error('MISSING_ENV:DEEPSEEK_API_KEY');
   const modelId = text(env, 'DEEPSEEK_MODEL', DEEPSEEK_DEFAULT_MODEL);
   return {
@@ -42,6 +42,18 @@ export function readDeepSeekEnv(env: EnvLike): DeepSeekEnv {
     temperature: number(env, 'DEEPSEEK_TEMPERATURE', 1),
     thinking: readThinking(env),
   };
+}
+
+/** Operators paste into a file by hand, so tolerate quotes and a repeated variable name. */
+function normaliseKey(raw: string | undefined): string {
+  let value = (raw ?? '').trim();
+  for (let pass = 0; pass < 2; pass++) {
+    if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.slice(1, -1).trim();
+    }
+    if (/^DEEPSEEK_API_KEY=/i.test(value)) value = value.slice(value.indexOf('=') + 1).trim();
+  }
+  return value;
 }
 
 function readThinking(env: EnvLike): 'disabled' | 'enabled' {

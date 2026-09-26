@@ -123,6 +123,10 @@ test('configuration is validated and the key stays out of the describable view',
   assert.equal(createDeepSeekFromEnv({ DEEPSEEK_API_KEY: 'k' }).modelId, 'deepseek-flash');
   assert.equal(readDeepSeekEnv({ DEEPSEEK_API_KEY: 'k', DEEPSEEK_THINKING: 'ENABLED' }).thinking, 'enabled');
   assert.throws(() => readDeepSeekEnv({ DEEPSEEK_API_KEY: 'k', DEEPSEEK_THINKING: 'maybe' }), { message: 'INVALID_ENV:DEEPSEEK_THINKING' });
+  // Hand-edited files: quotes and a pasted variable name are normalised away.
+  assert.equal(readDeepSeekEnv({ DEEPSEEK_API_KEY: '  "sk-abc"  ' }).apiKey, 'sk-abc');
+  assert.equal(readDeepSeekEnv({ DEEPSEEK_API_KEY: 'DEEPSEEK_API_KEY=sk-abc' }).apiKey, 'sk-abc');
+  assert.equal(readDeepSeekEnv({ DEEPSEEK_API_KEY: '"DEEPSEEK_API_KEY=sk-abc"' }).apiKey, 'sk-abc');
 });
 
 test('thinking mode can be turned back on, and the request says so explicitly either way', async () => {
