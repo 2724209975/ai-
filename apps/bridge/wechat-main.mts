@@ -3,7 +3,7 @@
 import { resolve } from 'node:path';
 import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-http-transport.mts';
-import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv } from '../../packages/ai/index.mts';
+import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv, DEEPSEEK_DEFAULT_MODEL } from '../../packages/ai/index.mts';
 import { createWxBridge } from './wechat-bridge.mts';
 import { resolveWxBridgeRunMode } from './run-mode.mts';
 
@@ -56,7 +56,7 @@ try {
     bridge.server.listen(port, host, () => { bridge.server.off('error', fail); ready(); });
   });
   process.stdout.write(`wechat bridge listening on http://${host}:${port} · outbound ${runMode.outboundEnabled ? 'enabled' : 'disabled'}\n`);
-  process.stdout.write(`candidate provider: ${intelligenceProvider}${intelligenceProvider === 'deepseek' ? ` (${process.env.DEEPSEEK_MODEL?.trim() || 'deepseek-chat'})` : ''}\n`);
+  process.stdout.write(`candidate provider: ${intelligenceProvider}${intelligenceProvider === 'deepseek' ? ` (${readDeepSeekEnv(process.env).modelId || DEEPSEEK_DEFAULT_MODEL})` : ''}\n`);
   process.stdout.write('the helper endpoint stays loopback-only; a sent part is recorded as RESULT_UNKNOWN until an operator reconciles it\n');
 } catch (error) { await pool.end(); throw error; }
 let closing = false;

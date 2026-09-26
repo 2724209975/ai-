@@ -34,8 +34,11 @@ export const MAX_LOG_VALUE_CHARS = 400;
 const REDACTED = '[redacted]';
 const NOT_A_SCALAR = '[not-a-scalar]';
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
-/** Never log a credential, a session artefact or a platform identity. */
-const SECRET_KEY = /(token|secret|password|passwd|credential|authorization|cookie|signature|api_?key|wxid|self_?ref|phone|email)/i;
+/** Never log a credential, a session artefact or a platform identity.
+ * `token` counts as a credential wherever it appears except as the plural `tokens`, so
+ * `bridgeToken`/`x-token` are redacted while the call-count fields `inputTokens`/`outputTokens`/
+ * `maxTokens` stay readable - those counts are what makes model cost visible. */
+const SECRET_KEY = /(secret|password|passwd|credential|authorization|cookie|signature|api_?key|wxid|self_?ref|phone|email)|token(?!s)/i;
 /** Never log chat or model content, whatever the caller calls the field. */
 const CONTENT_KEY = /^(content|body|text|message|messages|payload|raw|chat|prompt|reply|transcript|display_?name)$/i;
 const RESERVED_KEYS = new Set(['ts', 'level', 'service', 'event']);

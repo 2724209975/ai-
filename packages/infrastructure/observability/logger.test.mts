@@ -87,6 +87,22 @@ test('oversized values and oversized lines are summarised instead of written who
   assert.equal(bulky.entries()[0]?.['truncated'], true);
 });
 
+test('token counts stay readable while credentials named after a token are redacted', () => {
+  const sink = createMemorySink();
+  const logger = createJsonLogger({ service: 'core', sink, now: fixedClock });
+  const secret = ['shared', 'value', 'not', 'a', 'real', 'key'].join('-');
+  logger.info('model_call', {
+    inputTokens: 294, outputTokens: 83, maxTokens: 2000,
+    bridgeToken: secret, 'x-token': secret, apiKey: secret, selfRef: 'wxid_example',
+  });
+  const entry = sink.entries()[0]!;
+  assert.equal(entry['inputTokens'], 294, 'token counts are what makes cost visible');
+  assert.equal(entry['outputTokens'], 83);
+  assert.equal(entry['maxTokens'], 2000);
+  for (const key of ['bridgeToken', 'x-token', 'apiKey', 'selfRef']) assert.equal(entry[key], '[redacted]', `${key} must stay redacted`);
+  assert.ok(!sink.lines().join('').includes(secret));
+});
+
 test('a throwing sink is contained and non-scalar values are marked', () => {
   const logger = createJsonLogger({ service: 'core', now: fixedClock, sink: { write() { throw new Error('EPIPE'); } } });
   assert.doesNotThrow(() => logger.error('sink_broken'));
