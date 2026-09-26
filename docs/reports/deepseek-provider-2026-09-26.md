@@ -78,3 +78,20 @@ DEEPSEEK_TIMEOUT_MS=30000  DEEPSEEK_MAX_TOKENS=2000  DEEPSEEK_TEMPERATURE=1
 - 数据地区与保留策略目前是**操作者声明**，不是 DeepSeek 的承诺；如果本人要求核实，需要单独查证并写入 D06。
 - 未使用 `deepseek-v4-pro`：约为 flash 的 4.4 倍价，首版用 `deepseek-flash`；换模型只需改 `DEEPSEEK_MODEL`。
 - 只接了微信桥接与核心；QQ 桥接仍固定用 fake（`apps/bridge/bridge.mts` 的 intelligence 未做成可注入），属于后续一致化工作。
+
+## 首次真实调用（2026-09-26 22:58）
+
+密钥以手工方式写入 `.local-wechat-spike/deepseek.env`（目录已 gitignore）。解析器容忍手改文件：引号、整行 `DEEPSEEK_API_KEY=…` 都会被规范化（有用例）。首次真实调用用合成上下文完成，**没有发送任何真实聊天内容**：
+
+```
+event=smoke_result  model=deepseek-flash  elapsedMs=1320
+inputTokens=294  outputTokens=83
+estimatedCostUsd: off-peak 0.000094 / peak 0.000188
+候选：辛苦啦，回去好好歇会儿 ／ 这么累啊，那你先去躺着吧 + 跟我聊两句放松一下也行 ／ 累成这样还想着回我消息啊
+```
+
+观察：延迟约 1.1–1.3s（thinking 关闭）；三条候选没有编造事实、没有提见面时间或钱，语气贴近「简短、像日常聊天」的偏好——即 prompt 里的目标、限制与风格确实生效了。成本比预估更低（单次约 **$0.0001**）。
+
+同批加了**失控闸**（`packages/ai/generation/model-budget.mts`）：按 UTC 日统计调用次数与 token，超出即拒绝调用，04 会把拒绝映射成 `MODEL_UNAVAILABLE`，02 据此暂停该联系人转人工——不会静默继续花钱。默认每天 300 次或 500k token，可用 `DEEPSEEK_DAILY_CALL_LIMIT` / `DEEPSEEK_DAILY_TOKEN_LIMIT` 调整。**它是进程内的循环闸，不是计费控制**：重启即清零，不能当成月度预算或账单保证；月度成本仍以平台账单与 `model_call` 日志对账。
+
+失败诊断也补了：`DeepSeekHttpError` 带上 HTTP 状态与平台错误码，供运维脚本使用；产品路径仍只看到 `MODEL_UNAVAILABLE`，平台细节不进日志、不进联系人状态。用无效密钥实测返回 `httpStatus=401 providerCode=invalid_request_error`，并给出「key 无效或已被撤销」的说明。

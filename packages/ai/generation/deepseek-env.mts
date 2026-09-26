@@ -5,6 +5,7 @@
  * not promises from the provider.
  */
 import { createDeepSeekTextProvider, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROMPT_VERSION, type DeepSeekProviderOptions } from './deepseek-provider.mts';
+import { budgetOptionsFromEnv, withDailyBudget, type ModelBudgetOptions } from './model-budget.mts';
 import type { TextModelProvider } from './text-provider-contract.mts';
 
 export type EnvLike = Record<string, string | undefined>;
@@ -62,15 +63,17 @@ function readThinking(env: EnvLike): 'disabled' | 'enabled' {
   return value;
 }
 
-export function createDeepSeekFromEnv(env: EnvLike, overrides: Partial<DeepSeekProviderOptions> = {}): TextModelProvider {
+export function createDeepSeekFromEnv(env: EnvLike, overrides: Partial<DeepSeekProviderOptions> = {}, budget: { onRefusal?: ModelBudgetOptions['onRefusal'] } = {}): TextModelProvider {
   const config = readDeepSeekEnv(env);
-  return createDeepSeekTextProvider({
+  const provider = createDeepSeekTextProvider({
     apiKey: config.apiKey, modelId: config.modelId, modelVersion: config.modelVersion,
     promptVersion: DEEPSEEK_PROMPT_VERSION, dataRegion: config.dataRegion, retentionPolicy: config.retentionPolicy,
     baseUrl: config.baseUrl, timeoutMs: config.timeoutMs, maxTokens: config.maxTokens, temperature: config.temperature,
     thinking: config.thinking,
     ...overrides,
   });
+  // Every composition root gets the same guard: a loop cannot spend without bound.
+  return withDailyBudget(provider, budgetOptionsFromEnv(env, budget.onRefusal));
 }
 
 /** Safe to log: everything except the key. */

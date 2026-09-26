@@ -17,6 +17,8 @@
 
 默认 `INTELLIGENCE_PROVIDER=persistent-fake`。启用真实模型：设 `INTELLIGENCE_PROVIDER=deepseek` 与 `DEEPSEEK_API_KEY`（缺密钥进程启动即失败），可选 `DEEPSEEK_MODEL`（默认 `deepseek-flash`，可改 `deepseek-v4-pro`）、`DEEPSEEK_BASE_URL`、`DEEPSEEK_THINKING`（默认 `disabled`）、`DEEPSEEK_TIMEOUT_MS`、`DEEPSEEK_MAX_TOKENS`、`DEEPSEEK_TEMPERATURE`、`DEEPSEEK_DATA_REGION`、`DEEPSEEK_RETENTION_POLICY`。微信桥接另设 `WECHAT_INTELLIGENCE=deepseek`，与 `WECHAT_ENABLE_OUTBOUND` 相互独立。
 
+**失控闸**：`DEEPSEEK_DAILY_CALL_LIMIT`（默认 300）与 `DEEPSEEK_DAILY_TOKEN_LIMIT`（默认 500000）按 UTC 日计数，超出即拒绝调用；04 把拒绝映射成 `MODEL_UNAVAILABLE`，02 据此暂停该联系人转人工。它是**进程内的循环闸**：重启清零，不能当作月度预算、也不代表账单上限；月度成本以平台账单与 `model_call` 日志对账。
+
 密钥只从环境变量读取：不写入配置对象、日志或错误文本；baseUrl 只接受 https 且不得带凭据、查询或片段。地区与保留策略是操作者声明，默认 `provider-default-unverified`，不构成供应商承诺。模型只提供候选文本，决策、事实与边界检查、确认、租约、账本与未知结果处理都不变——**接入模型不放宽任何发送权限**。启动日志里出现 `model_provider_selected` 与 `runtime_started` 的 `intelligenceModel` 即表示已生效；每次调用另有一行 `model_call`（模型/提示版本/地区/结果/时延/输入输出 token，不含正文），用于对账成本。
 
 成本参考（2026-09-26 官方定价页）：`deepseek-flash` 每 1M token 输入未命中缓存 $0.15 谷/$0.3 峰、输出 $0.6 谷/$1.2 峰；峰时为 UTC 周一至周五 01:00–04:00 与 06:00–10:00（北京时间 09:00–12:00、14:00–18:00），其余时间为谷时。账单以平台为准，本手册只记录当时页面事实。
