@@ -1,7 +1,10 @@
-/** Receive-only wxhelper process. WECHAT_INGRESS_TOKEN is a private URL secret, never logged. */
+/** wxhelper bridge process. Receive-only unless WECHAT_ENABLE_OUTBOUND=1 is set explicitly.
+ * WECHAT_INGRESS_TOKEN is a private URL secret and is never logged. */
 import { resolve } from 'node:path';
 import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
+import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-http-transport.mts';
 import { createWxBridge } from './wechat-bridge.mts';
+import { resolveWxBridgeRunMode } from './run-mode.mts';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -18,18 +21,29 @@ const ingressToken = required('WECHAT_INGRESS_TOKEN');
 if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(accountId)
   || selfRef.length > 256 || /[\s\u0000-\u001f\u007f]/.test(selfRef)
   || !/^[a-f0-9]{64}$/.test(ingressToken)) throw new Error('WX_BRIDGE_CONFIG_INVALID');
+const runMode = resolveWxBridgeRunMode(process.env);
+const wxhelperBaseUrl = runMode.outboundEnabled ? required('WECHAT_WXHELPER_BASE_URL') : undefined;
 const { Pool } = await import('pg');
 const pool = new Pool({ connectionString: required('DATABASE_URL'), max: 8 });
 const bridge = createWxBridge({ pool, accountId,
   selfRef, ingressToken,
-  rawStore: createFileRawEventStore(resolve(process.env.RAW_EVENT_DIR?.trim() || '.local-wechat-raw'), Date.now, 'wechat') });
+  rawStore: createFileRawEventStore(resolve(process.env.RAW_EVENT_DIR?.trim() || '.local-wechat-raw'), Date.now, 'wechat'),
+  // The transport itself enforces the private loopback helper endpoint; this process holds no
+  // WeChat credential and never talks to Tencent directly.
+  dispatch: wxhelperBaseUrl
+    ? { transport: new WxhelperHttpTransport({ baseUrl: wxhelperBaseUrl }),
+        workerIntervalMs: Number(process.env.WORKER_INTERVAL_MS?.trim() || '2000'),
+        workerEnabled: runMode.workerEnabled }
+    : undefined,
+  outboxIntervalMs: Number(process.env.OUTBOX_INTERVAL_MS?.trim() || '2000') });
 try {
   await bridge.start();
   await new Promise<void>((ready, fail) => {
     bridge.server.once('error', fail);
     bridge.server.listen(port, host, () => { bridge.server.off('error', fail); ready(); });
   });
-  process.stdout.write(`wechat bridge listening on http://${host}:${port} · receive-only\n`);
+  process.stdout.write(`wechat bridge listening on http://${host}:${port} · outbound ${runMode.outboundEnabled ? 'enabled' : 'disabled'}\n`);
+  process.stdout.write('the helper endpoint stays loopback-only; a sent part is recorded as RESULT_UNKNOWN until an operator reconciles it\n');
 } catch (error) { await pool.end(); throw error; }
 let closing = false;
 async function shutdown() {

@@ -61,6 +61,9 @@ class HttpError extends Error {
 }
 const isObject = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const isVersion = (x: unknown): x is number => Number.isSafeInteger(x) && Number(x) > 0;
+/** The global pause epoch starts at 0 on a freshly migrated database, so it is the one version
+ * that legitimately accepts zero: the first owner action on a new deployment is a resume. */
+const isPauseEpoch = (x: unknown): x is number => Number.isSafeInteger(x) && Number(x) >= 0;
 const isKey = (x: unknown): x is string => typeof x === 'string' && x.length >= 8 && x.length <= 128;
 const isId = (x: string) => /^[A-Za-z0-9_-]{1,128}$/.test(x);
 const isShortText = (x: unknown, max: number): x is string => typeof x === 'string' && x.trim().length > 0 && x.length <= max;
@@ -68,6 +71,12 @@ const stringList = (x: unknown, max = 24): x is string[] => Array.isArray(x) && 
 
 function versionCommand(value: unknown): VersionCommand {
   if (!isObject(value) || !isVersion(value.expectedVersion) || !isKey(value.idempotencyKey)) throw new HttpError(400, 'VALIDATION_FAILED');
+  if (value.reason !== undefined && !isShortText(value.reason, 64)) throw new HttpError(400, 'VALIDATION_FAILED');
+  return { expectedVersion: value.expectedVersion, idempotencyKey: value.idempotencyKey, ...(value.reason === undefined ? {} : { reason: value.reason as string }) };
+}
+/** pauseAll/resumeAll only; every other resource version still has to be positive. */
+function controlCommand(value: unknown): VersionCommand {
+  if (!isObject(value) || !isPauseEpoch(value.expectedVersion) || !isKey(value.idempotencyKey)) throw new HttpError(400, 'VALIDATION_FAILED');
   if (value.reason !== undefined && !isShortText(value.reason, 64)) throw new HttpError(400, 'VALIDATION_FAILED');
   return { expectedVersion: value.expectedVersion, idempotencyKey: value.idempotencyKey, ...(value.reason === undefined ? {} : { reason: value.reason as string }) };
 }
@@ -190,8 +199,8 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
       if (method !== 'POST') throw new HttpError(405, 'VALIDATION_FAILED');
       if (!(await deps.verifyWrite(request, session))) throw new HttpError(403, 'FORBIDDEN');
 
-      if (path === '/api/v1/control/pause-all') return send(response, 200, await deps.ownerPort.pauseAll(ownerId, versionCommand(await readJson(request))));
-      if (path === '/api/v1/control/resume-all') return send(response, 200, await deps.ownerPort.resumeAll(ownerId, versionCommand(await readJson(request))));
+      if (path === '/api/v1/control/pause-all') return send(response, 200, await deps.ownerPort.pauseAll(ownerId, controlCommand(await readJson(request))));
+      if (path === '/api/v1/control/resume-all') return send(response, 200, await deps.ownerPort.resumeAll(ownerId, controlCommand(await readJson(request))));
 
       let match = /^\/api\/v1\/tasks\/([^/]+)\/(confirm|reject)$/.exec(path);
       if (match) {

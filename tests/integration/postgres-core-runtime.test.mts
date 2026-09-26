@@ -7,6 +7,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
@@ -137,6 +139,64 @@ test('real PostgreSQL: the core runtime is ready, starts paused and never dispat
     assert.ok(sink.entries().some(entry => entry['event'] === 'startup_pause_applied'));
     const raw = sink.lines().join('');
     for (const forbidden of [OWNER_PASSWORD_HASH, '你好', '已确认的第一条']) assert.ok(!raw.includes(forbidden), `the log leaked ${forbidden}`);
+  } finally {
+    if (runtime) await runtime.stop().catch(() => {});
+    if (pool) await pool.end();
+    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await admin.end();
+    await rm(sessionDir, { recursive: true, force: true });
+  }
+});
+
+/** A brand-new deployment is paused with epoch 0, so the first owner action is a resume. Requiring a
+ * positive version there made the API unusable exactly once — on the first real start. */
+test('real PostgreSQL: a freshly migrated database can be resumed over HTTP at epoch zero', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required in CI');
+  const { Client, Pool } = await import('pg');
+  const { hashPassword } = await import('../../packages/infrastructure/auth/password.mts');
+  const schema = `test_core_resume_${randomBytes(8).toString('hex')}`;
+  const admin = new Client({ connectionString: databaseUrl }); await admin.connect();
+  const sessionDir = await mkdtemp(join(tmpdir(), 'core-resume-sessions-'));
+  let pool: InstanceType<typeof Pool> | undefined;
+  let runtime: Awaited<ReturnType<typeof createCoreRuntime>> | undefined;
+  try {
+    await admin.query(`CREATE SCHEMA ${schema}`);
+    await admin.query(`SET search_path TO ${schema}`);
+    await applyMigrations(admin, resolve(root, 'db/migrations'));
+    pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 4 });
+    const password = 'core resume rehearsal password';
+    // Writes require an exact Origin match, so the test needs a known port rather than port 0.
+    const probe = createServer();
+    await new Promise<void>(ready => probe.listen(0, '127.0.0.1', ready));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise<void>(done => probe.close(() => done()));
+    const origin = `http://127.0.0.1:${port}`;
+    const config = { ...readCoreConfig({
+      DATABASE_URL: databaseUrl, OWNER_ID, OWNER_PASSWORD_HASH: await hashPassword(password),
+      PUBLIC_ORIGIN: origin, CORE_PLATFORM: 'wechat', SESSION_DIR: sessionDir,
+    }), port };
+    runtime = createCoreRuntime({ config, pool, logger: createJsonLogger({ service: 'core', level: 'error' }) });
+    await runtime.start();
+    await runtime.listen();
+
+    const login = await fetch(`${origin}/api/v1/session/login`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify({ password }) });
+    assert.equal(login.status, 200);
+    const { csrfToken } = await login.json() as { csrfToken: string };
+    const cookie = login.headers.getSetCookie?.()[0]?.split(';')[0] ?? '';
+    assert.ok(cookie && csrfToken);
+
+    const overview = await fetch(`${origin}/api/v1/overview`, { headers: { cookie } });
+    assert.deepEqual(await overview.json(), { id: 'global', version: 0, status: 'PAUSED', globalPaused: true,
+      allowedActions: ['resumeAll'], pendingCount: 0, unknownSendCount: 0,
+      connectionQueryStatus: 'unavailable', faultQueryStatus: 'unavailable', connections: [], faults: [] });
+
+    const resumed = await fetch(`${origin}/api/v1/control/resume-all`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: origin, cookie, 'x-csrf-token': csrfToken },
+      body: JSON.stringify({ expectedVersion: 0, idempotencyKey: 'resume-epoch-zero-1' }) });
+    assert.equal(resumed.status, 200, 'epoch zero must be a resumable version, not a validation error');
+    assert.equal((await resumed.json() as { status: string }).status, 'ACTIVE');
+    assert.equal((await runtime.service.ownerOverview()).globalPaused, false);
   } finally {
     if (runtime) await runtime.stop().catch(() => {});
     if (pool) await pool.end();

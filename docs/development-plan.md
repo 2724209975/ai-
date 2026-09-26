@@ -10,6 +10,8 @@
 
 **2026-09-26 工程进展（P0 第 2 项）**：生产核心组合根 `apps/core`（`npm run serve:core`）落盘，关闭 07 记录中的「生产组合根尚未接线」缺口：常驻核心只做本人管理 API、聚合/收集与 05 Skill 内部 outbox，**派发留在各平台账号桥接**；核心以 `dispatchEnabled:false` 与只抛错的平台对象构造，并有契约测试禁止 `apps/core` 触达 `packages/platform/`、`apps/bridge/`、`submitSend(` 与 `dispatchEnabled: true`。启动即暂停（暂停态重启不重复抬高 epoch）、非回环 origin 必须 HTTPS、非回环监听需显式放行、智能提供方必须显式命名（当前仅 `persistent-fake`）。结构化日志为单行 JSON，凭据/正文键抹除、路由标签折叠标识段。完整本机门禁升至 **234 unit、10 contract、29 PostgreSQL integration、22 E2E 与网页构建，0 fail/skip**。见 [00 核心组合根记录](reports/00-control-core-root-2026-09-26.md) 与 [A22](decisions.md)。仍未完成：远程仓库与首次 CI（本机无 `gh`、无 remote）、账号→平台映射（[A23](decisions.md) 提案）、05/导入的 Owner REST 路由审定、生产镜像与反代。
 
+**2026-09-26 主线推进（P0 第 1、2 步）**：微信桥接接入出站派发，默认仍是只接收——`WECHAT_ENABLE_OUTBOUND=1` + `WECHAT_WXHELPER_BASE_URL` 才创建传输与 worker，只接收却开 worker 直接拒绝启动；派发沿用 02 的租约、账本与逐条 preflight，helper 无论回什么都记 `RESULT_UNKNOWN` 并暂停该联系人（[A24](decisions.md)）。随后用一整套本机进程（核心 8787 + 微信桥接 19099 + fixture helper 19088 + 手机宽度网页）走完一次主线：合成入站 → 3 候选 → 页面点「确认并发送」→ 桥接提交 → `RESULT_UNKNOWN` → 暂停 → 人工核对记为已送达 → 显式恢复为 `READY_CONFIRM`。过程中修复「全新库 `pause_epoch=0` 被 HTTP 版本校验拒绝、第一次恢复返回 400」的缺陷。完整本机门禁为 **238 unit、10 contract、31 PostgreSQL integration、22 E2E 与网页构建，0 fail/skip**。见[记录](reports/wechat-bridge-dispatch-2026-09-26.md)。下一门槛：真实微信发送需逐条授权（收件人/原文/次数）与测试号进程；真实模型需 D06；本人回显与真实回执仍无样本。
+
 ## 1. 集成顺序与门槛
 
 | 阶段 | 交付 | 可并行 | 退出门槛 |
