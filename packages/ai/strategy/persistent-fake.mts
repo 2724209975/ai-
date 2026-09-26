@@ -6,7 +6,7 @@ import type { PgPool } from '../../infrastructure/postgres/transaction.mts';
 import { createFakeIntelligencePort } from '../index.mts';
 import { adaptDataContextProjection } from '../understanding/context-adapter.mts';
 import { prepareReplyForOrchestration } from './orchestration-handoff.mts';
-import { createTextCandidateGateway, type TextModelProvider } from '../generation/text-provider-contract.mts';
+import { createTextCandidateGateway, type TextModelMeasurement, type TextModelProvider } from '../generation/text-provider-contract.mts';
 import type { PolicyProjection, RiskCategory } from '../types.mts';
 
 function projectedPolicy(policy: Policy): PolicyProjection {
@@ -77,13 +77,13 @@ export function createPersistentFakeIntelligence(): PersistentIntelligence {
 
 /** Same decision, checks and persistence as the fake path; only candidate text comes from the model.
  * A model that fails to answer yields MODEL_UNAVAILABLE, which 02 turns into a paused contact. */
-export function createTextModelIntelligence(provider: TextModelProvider): PersistentIntelligence {
-  return intelligenceFromPort(createFakeIntelligencePort(createTextCandidateGateway(provider)), 'fake-deterministic-1');
+export function createTextModelIntelligence(provider: TextModelProvider, observe?: (measurement: TextModelMeasurement) => void): PersistentIntelligence {
+  return intelligenceFromPort(createFakeIntelligencePort(createTextCandidateGateway(provider, observe)), 'fake-deterministic-1');
 }
 
 /** Compatibility wrapper used by the composition roots. */
-export function createPgTextModelIntelligence(options: { provider: TextModelProvider }): PersistentIntelligence {
-  return createTextModelIntelligence(options.provider);
+export function createPgTextModelIntelligence(options: { provider: TextModelProvider; observe?: (measurement: TextModelMeasurement) => void }): PersistentIntelligence {
+  return createTextModelIntelligence(options.provider, options.observe);
 }
 
 /** Compatibility alias for 07 CLI; pool/data are no longer read by 04. */

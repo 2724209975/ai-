@@ -43,7 +43,13 @@ try {
   const intelligence = config.intelligenceProvider === 'deepseek'
     ? (() => { const described = describeDeepSeekEnv(readDeepSeekEnv(process.env));
         logger.info('model_provider_selected', { provider: 'deepseek', ...described });
-        return createTextModelIntelligence(createDeepSeekFromEnv(process.env)); })()
+        // The measurement carries versions, latency and token counts only - never prompt or answer.
+        return createTextModelIntelligence(createDeepSeekFromEnv(process.env), measurement => logger.info('model_call', {
+          providerId: measurement.providerId, modelId: measurement.modelId, modelVersion: measurement.modelVersion,
+          promptVersion: measurement.promptVersion, dataRegion: measurement.dataRegion,
+          outcome: measurement.outcome, elapsedMs: Math.round(measurement.elapsedMs),
+          inputTokens: measurement.inputTokens ?? undefined, outputTokens: measurement.outputTokens ?? undefined,
+        })); })()
     : undefined;
   runtime = createCoreRuntime({ config, pool, logger, intelligence });
   await runtime.start();

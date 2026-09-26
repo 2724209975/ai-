@@ -30,7 +30,9 @@ if (!['persistent-fake', 'deepseek'].includes(intelligenceProvider)) throw new E
 const intelligence = intelligenceProvider === 'deepseek'
   ? (() => {
       process.stdout.write(`wechat bridge model provider: ${JSON.stringify(describeDeepSeekEnv(readDeepSeekEnv(process.env)))}\n`);
-      return createTextModelIntelligence(createDeepSeekFromEnv(process.env));
+      // One JSON line per call: versions, latency and tokens only - never prompt or answer.
+      return createTextModelIntelligence(createDeepSeekFromEnv(process.env),
+        measurement => process.stdout.write(`${JSON.stringify({ at: new Date().toISOString(), event: 'model_call', ...measurement })}\n`));
     })()
   : undefined;
 const { Pool } = await import('pg');
