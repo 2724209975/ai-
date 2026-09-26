@@ -61,6 +61,7 @@ test('a well-formed answer becomes the validated alternative shape with usage re
   assert.equal((seen?.headers as Record<string, string>)['authorization'], 'Bearer unit-test-key');
   assert.deepEqual((seen?.body as { response_format: unknown }).response_format, { type: 'json_object' });
   assert.equal((seen?.body as { model: string }).model, 'deepseek-chat');
+  assert.deepEqual((seen?.body as { thinking: unknown }).thinking, { type: 'disabled' }, 'reply candidates default to non-thinking mode');
   assert.deepEqual(result.alternatives, [
     { clientAlternativeKey: 'a1', strategySummary: '简短回应', parts: [{ clientPartKey: 'a1-p1', sequence: 1, type: 'text', content: '嗯，我在呢。' }] },
     { clientAlternativeKey: 'a2', strategySummary: '接话', parts: [
@@ -113,11 +114,28 @@ test('configuration is validated and the key stays out of the describable view',
   assert.throws(() => readDeepSeekEnv({ DEEPSEEK_API_KEY: 'k', DEEPSEEK_MAX_TOKENS: 'lots' }), { message: 'INVALID_ENV:DEEPSEEK_MAX_TOKENS' });
 
   const env = readDeepSeekEnv({ DEEPSEEK_API_KEY: 'k' });
-  assert.equal(env.modelId, 'deepseek-chat');
+  assert.equal(env.modelId, 'deepseek-flash', 'the current API model name, not the legacy chat alias');
+  assert.equal(env.thinking, 'disabled');
+  assert.equal(env.maxTokens, 2_000);
   assert.equal(env.dataRegion, 'CN');
   assert.equal(env.retentionPolicy, 'provider-default-unverified');
   assert.equal(JSON.stringify(describeDeepSeekEnv(env)).includes('"k"'), false);
-  assert.equal(createDeepSeekFromEnv({ DEEPSEEK_API_KEY: 'k' }).modelId, 'deepseek-chat');
+  assert.equal(createDeepSeekFromEnv({ DEEPSEEK_API_KEY: 'k' }).modelId, 'deepseek-flash');
+  assert.equal(readDeepSeekEnv({ DEEPSEEK_API_KEY: 'k', DEEPSEEK_THINKING: 'ENABLED' }).thinking, 'enabled');
+  assert.throws(() => readDeepSeekEnv({ DEEPSEEK_API_KEY: 'k', DEEPSEEK_THINKING: 'maybe' }), { message: 'INVALID_ENV:DEEPSEEK_THINKING' });
+});
+
+test('thinking mode can be turned back on, and the request says so explicitly either way', async () => {
+  const bodies: Record<string, unknown>[] = [];
+  for (const thinking of ['disabled', 'enabled'] as const) {
+    const provider = createDeepSeekTextProvider({ apiKey: 'k', modelId: 'deepseek-v4-pro', promptVersion: 'p1',
+      dataRegion: 'CN', retentionPolicy: 'x', thinking,
+      fetchImpl: async (_url, init) => { bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return completion(JSON.stringify({ alternatives: [{ summary: 's', parts: ['ok'] }] })); } });
+    await provider.invoke({ context, decision, policy, signal: new AbortController().signal });
+  }
+  assert.deepEqual(bodies.map(body => body['thinking']), [{ type: 'disabled' }, { type: 'enabled' }]);
+  assert.deepEqual(bodies.map(body => body['model']), ['deepseek-v4-pro', 'deepseek-v4-pro']);
 });
 
 test('a slow endpoint aborts on our own timeout rather than hanging the contact', async () => {

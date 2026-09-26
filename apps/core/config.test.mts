@@ -61,9 +61,9 @@ test('the intelligence provider must be named and only the implemented one is ac
   assert.equal(readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'PERSISTENT-FAKE' }).intelligenceProvider, 'persistent-fake');
   // Naming DeepSeek without a key must fail at startup, not on the first inbound message.
   assert.throws(() => readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'deepseek' }), { message: 'MISSING_ENV:DEEPSEEK_API_KEY' });
-  const deepSeek = readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'unit-test', DEEPSEEK_MODEL: 'deepseek-reasoner' });
+  const deepSeek = readCoreConfig({ ...base, INTELLIGENCE_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: 'unit-test', DEEPSEEK_MODEL: 'deepseek-v4-pro' });
   assert.equal(deepSeek.intelligenceProvider, 'deepseek');
-  assert.equal(deepSeek.deepSeekModelId, 'deepseek-reasoner');
+  assert.equal(deepSeek.deepSeekModelId, 'deepseek-v4-pro');
   assert.equal(JSON.stringify(deepSeek).includes('unit-test'), false, 'the key must not be copied into the config');
 });
 

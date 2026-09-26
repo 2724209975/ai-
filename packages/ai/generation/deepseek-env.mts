@@ -11,6 +11,7 @@ export type EnvLike = Record<string, string | undefined>;
 export type DeepSeekEnv = {
   apiKey: string; modelId: string; modelVersion: string; baseUrl: string;
   dataRegion: string; retentionPolicy: string; timeoutMs: number; maxTokens: number; temperature: number;
+  thinking: 'disabled' | 'enabled';
 };
 
 function text(env: EnvLike, name: string, fallback: string): string {
@@ -37,9 +38,16 @@ export function readDeepSeekEnv(env: EnvLike): DeepSeekEnv {
     // Honest default: nobody has verified the provider's retention terms for this project.
     retentionPolicy: text(env, 'DEEPSEEK_RETENTION_POLICY', 'provider-default-unverified'),
     timeoutMs: number(env, 'DEEPSEEK_TIMEOUT_MS', 30_000),
-    maxTokens: number(env, 'DEEPSEEK_MAX_TOKENS', 800),
+    maxTokens: number(env, 'DEEPSEEK_MAX_TOKENS', 2_000),
     temperature: number(env, 'DEEPSEEK_TEMPERATURE', 1),
+    thinking: readThinking(env),
   };
+}
+
+function readThinking(env: EnvLike): 'disabled' | 'enabled' {
+  const value = text(env, 'DEEPSEEK_THINKING', 'disabled').toLowerCase();
+  if (value !== 'disabled' && value !== 'enabled') throw new Error('INVALID_ENV:DEEPSEEK_THINKING');
+  return value;
 }
 
 export function createDeepSeekFromEnv(env: EnvLike, overrides: Partial<DeepSeekProviderOptions> = {}): TextModelProvider {
@@ -48,6 +56,7 @@ export function createDeepSeekFromEnv(env: EnvLike, overrides: Partial<DeepSeekP
     apiKey: config.apiKey, modelId: config.modelId, modelVersion: config.modelVersion,
     promptVersion: DEEPSEEK_PROMPT_VERSION, dataRegion: config.dataRegion, retentionPolicy: config.retentionPolicy,
     baseUrl: config.baseUrl, timeoutMs: config.timeoutMs, maxTokens: config.maxTokens, temperature: config.temperature,
+    thinking: config.thinking,
     ...overrides,
   });
 }
@@ -55,5 +64,6 @@ export function createDeepSeekFromEnv(env: EnvLike, overrides: Partial<DeepSeekP
 /** Safe to log: everything except the key. */
 export function describeDeepSeekEnv(config: DeepSeekEnv): Record<string, string | number> {
   return { modelId: config.modelId, modelVersion: config.modelVersion, baseUrl: config.baseUrl,
-    dataRegion: config.dataRegion, retentionPolicy: config.retentionPolicy, timeoutMs: config.timeoutMs, maxTokens: config.maxTokens };
+    dataRegion: config.dataRegion, retentionPolicy: config.retentionPolicy, timeoutMs: config.timeoutMs,
+    maxTokens: config.maxTokens, thinking: config.thinking };
 }

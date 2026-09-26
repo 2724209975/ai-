@@ -25,10 +25,13 @@ export type DeepSeekProviderOptions = {
   timeoutMs?: number;
   maxTokens?: number;
   temperature?: number;
+  /** Provider default is thinking-on; reply candidates are short, so we default to non-thinking. */
+  thinking?: 'disabled' | 'enabled';
 };
 
 export const DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com';
-export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-chat';
+/** Current API model name; `deepseek-v4-flash` is a still-accepted legacy alias of the same model. */
+export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-flash';
 export const DEEPSEEK_PROMPT_VERSION = 'reply-candidates-1';
 
 const MAX_HISTORY = 20;
@@ -116,8 +119,10 @@ export function createDeepSeekTextProvider(options: DeepSeekProviderOptions): Te
   const timeoutMs = options.timeoutMs ?? 30_000;
   const maxTokens = options.maxTokens ?? 800;
   const temperature = options.temperature ?? 1;
+  const thinking = options.thinking ?? 'disabled';
+  if (thinking !== 'disabled' && thinking !== 'enabled') throw new Error('VALIDATION_FAILED');
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) throw new Error('VALIDATION_FAILED');
-  if (!Number.isSafeInteger(maxTokens) || maxTokens < 64 || maxTokens > 4_096) throw new Error('VALIDATION_FAILED');
+  if (!Number.isSafeInteger(maxTokens) || maxTokens < 64 || maxTokens > 32_768) throw new Error('VALIDATION_FAILED');
   if (!Number.isFinite(temperature) || temperature < 0 || temperature > 2) throw new Error('VALIDATION_FAILED');
 
   return {
@@ -133,6 +138,7 @@ export function createDeepSeekTextProvider(options: DeepSeekProviderOptions): Te
         model: options.modelId.trim(),
         messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
         temperature, max_tokens: maxTokens, response_format: { type: 'json_object' }, stream: false,
+        thinking: { type: thinking },
       };
       const timer = new AbortController();
       const onAbort = (): void => timer.abort();
