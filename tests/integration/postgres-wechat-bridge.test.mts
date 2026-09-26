@@ -62,6 +62,12 @@ test('wxhelper receive-only HTTP → raw inbox/outbox → 02, with scope and sel
       assert.equal((await pool.query(`SELECT count(*)::int AS n FROM event_outbox WHERE published_at IS NULL AND event_type='PlatformInboundObserved'`)).rows[0]?.n, 0);
       assert.equal((await send(push('wxid_stranger', self, '1234567890123456790'))).status, 200);
       assert.equal((await send(push('room@chatroom', self, '1234567890123456791'))).status, 200);
+      for (const op of [2, 4, 5, 11]) {
+        assert.equal((await send(push(self, peer, String(1234567890123456800n + BigInt(op)), 51,
+          `<msg><op id='${op}'><username>fixture</username><name></name><arg></arg></op></msg>`))).status, 200);
+      }
+      const beforeSelf = (await pool.query(`SELECT pause_reasons FROM orch_conversations WHERE conversation_id=$1`, [conversationId])).rows[0];
+      assert.ok(!beforeSelf.pause_reasons.includes('OWNER_ORIGIN_UNMAPPED'));
       assert.equal((await send(push(self, peer, '1234567890123456792', 51, '<op/>'))).status, 200);
       assert.equal((await pool.query(`SELECT count(*)::int AS n FROM data_messages`)).rows[0]?.n, 1);
       assert.equal((await pool.query(`SELECT count(*)::int AS n FROM orch_send_tasks`)).rows[0]?.n, 0);
@@ -70,7 +76,7 @@ test('wxhelper receive-only HTTP → raw inbox/outbox → 02, with scope and sel
       const audit = await auditRawEventFiles(rawRoot, pool, accountId, 'wechat');
       assert.equal(audit.files, 2); // enrolled inbound + unattributed self only
       assert.deepEqual(audit.unreferenced, []);
-      assert.equal((await pool.query(`SELECT count(*)::int AS n FROM platform_inbox_raw`)).rows[0]?.n, 4);
+      assert.equal((await pool.query(`SELECT count(*)::int AS n FROM platform_inbox_raw`)).rows[0]?.n, 8);
     } finally {
       if (bridge) await bridge.stop();
       await pool.end();

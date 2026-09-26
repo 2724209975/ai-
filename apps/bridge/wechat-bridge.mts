@@ -10,7 +10,7 @@ import { createWxReceptionPort } from '../../packages/platform/wechat/reception.
 import { decodeWxhelperPush, rawRef, WxWireError } from '../../packages/platform/wechat/wxhelper-codec.mts';
 import { createPlatformOutboxPump } from './outbox-pump.mts';
 
-export const WX_BRIDGE_ADAPTER_VERSION = 'wechat-wxhelper-receive-0.1.0';
+export const WX_BRIDGE_ADAPTER_VERSION = 'wechat-wxhelper-receive-0.1.1';
 
 function sameSecret(actual: string | null, expected: string): boolean {
   if (!actual) return false;

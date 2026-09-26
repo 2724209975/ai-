@@ -18,7 +18,7 @@ export type WxObservation = {
 /** Quote only the top-level msgId integer before JSON.parse can round its 64-bit value. */
 function preserveMessageId(source: string): string {
   let depth = 0, i = 0, replaceStart = -1, replaceEnd = -1, lexeme = '';
-  const critical = new Set(['msgId', 'fromUser', 'toUser', 'type', 'createTime']);
+  const critical = new Set(['msgId', 'fromUser', 'toUser', 'type', 'createTime', 'content']);
   const seen = new Set<string>();
   while (i < source.length) {
     const ch = source[i]!;
@@ -91,7 +91,13 @@ export function decodeWxhelperPush(bytes: Uint8Array, options: { expectedSelfRef
   const direction = from === self ? 'unmapped_self' : to === self ? 'incoming' : undefined;
   if (!direction) throw new WxWireError('FORBIDDEN');
   const peerRef = direction === 'incoming' ? from : to;
-  const outOfScope = peerRef.endsWith('@chatroom') || peerRef === 'filehelper';
+  // Fixed-client samples show type 51 op 2/4/5/11 status notifications, not chat text.
+  // Match only the observed envelope; unknown shapes retain the existing quarantine.
+  const statusNotify = direction === 'unmapped_self' && typeCode === 51
+    && typeof body.content === 'string'
+    && (/^\s*<msg>\s*<op\s+id=['"](?:2|5)['"]>\s*<username>[^<]*<\/username>\s*<name>[^<]*<\/name>\s*<arg>[^<]*<\/arg>\s*<\/op>\s*<\/msg>\s*$/.test(body.content)
+      || /^\s*<msg>\s*<op\s+id=['"](?:4|11)['"]>[\s\S]*<\/op>\s*<\/msg>\s*$/.test(body.content));
+  const outOfScope = statusNotify || peerRef.endsWith('@chatroom') || peerRef === 'filehelper';
   const kind = outOfScope ? 'out_of_scope' : direction;
   const contentRef = typeCode === 1 && typeof body.content === 'string' && body.content.trim() ? body.content : undefined;
   const type: MessageType = typeCode === 1 && contentRef ? 'text' : typeCode === 3 ? 'image' : typeCode === 34 ? 'voice' : 'unsupported';

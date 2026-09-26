@@ -33,8 +33,23 @@ test('unknown and media types keep review required; own-account traffic is quara
 });
 
 test('rejects spoofed account, duplicate critical keys, invalid id and body overreach', () => {
+  assert.throws(() => decode(body(',"content":"different"')));
   assert.throws(() => decode(Buffer.from(`{"fromUser":"${peer}","toUser":"another","msgId":1,"createTime":1727100000,"type":1,"content":"hi"}`)));
   assert.throws(() => decode(body(',"msgId":1234567890123456790')));
   assert.throws(() => decode(Buffer.from(`{"fromUser":"${peer}","toUser":"${self}","msgId":0,"createTime":1727100000,"type":1,"content":"hi"}`)));
   assert.equal(decode(Buffer.from(`{"fromUser":"${peer}","toUser":"${self}","msgId":1234567890123456789,"createTime":1727100000,"type":1,"content":"\\\"msgId\\\":999"}`)).platformMessageId, '1234567890123456789');
+});
+
+test('observed self status operations are metadata-only; text and unknown operations still quarantine', () => {
+  const content = (op: number) => `<msg><op id='${op}'><username>fixture</username><name></name><arg></arg></op></msg>`;
+  const own = (type: number, text: string) => decode(Buffer.from(JSON.stringify({
+    fromUser: self, toUser: peer, msgId: '1234567890123456799', createTime: 1727100000, type, content: text,
+  })));
+  for (const op of [2, 4, 5, 11]) assert.equal(own(51, content(op)).kind, 'out_of_scope');
+  assert.equal(own(51, "<msg><op id='4'><unreadchatlist><chat><username>fixture</username></chat></unreadchatlist></op></msg>").kind, 'out_of_scope');
+  assert.equal(own(51, '<msg><op id="11"><name>HandOffMaster</name><arg><handofflist opcode="4"></handofflist></arg></op></msg>').kind, 'out_of_scope');
+  assert.equal(own(1, content(2)).kind, 'unmapped_self');
+  assert.equal(own(51, content(6)).kind, 'unmapped_self');
+  assert.equal(own(51, content(2) + '<extra/>').kind, 'unmapped_self');
+  assert.equal(own(51, '<op/>').kind, 'unmapped_self');
 });

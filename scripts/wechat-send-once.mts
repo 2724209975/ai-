@@ -24,7 +24,7 @@ if (process.env.WECHAT_SEND_ENABLED !== '1') throw new Error('OUTBOUND_DISABLED'
 const databaseUrl = required('DATABASE_URL');
 const database = new URL(databaseUrl);
 if (!['postgres:', 'postgresql:'].includes(database.protocol) || database.hostname !== '127.0.0.1'
-  || database.port !== '55418' || database.pathname !== '/chat_agent_wechat_send_clean')
+  || database.port !== '55418' || database.pathname !== '/chat_agent_wechat_send_ready')
   throw new Error('ISOLATED_DB_REQUIRED');
 const accountId = required('WECHAT_ACCOUNT_ID');
 const peerRef = required('WECHAT_SPIKE_PEER');
@@ -38,9 +38,9 @@ if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(acco
   throw new Error('INVALID_PERMIT');
 if (process.env.WECHAT_ECHO_HOOK_CONFIRMED !== '1') throw new Error('ECHO_HOOK_NOT_CONFIRMED');
 const clientPath = 'C:\\Program Files (x86)\\Tencent\\WeChat\\[3.9.11.25]\\WeChatWin.dll';
-const helperPath = join(tmpdir(), 'wxhelper-inject-391125-send', 'wxhelper.dll');
+const helperPath = join(tmpdir(), 'wxhelper-inject-391125-diagnostics', 'wxhelper.dll');
 if (hash(clientPath) !== '2058A926258BAEAECF92B30668FF200382F4493B0A5323428781D0B993E19C51'
-  || hash(helperPath) !== '9F1A96D9E51738F62E0926845DEC274074999EDA9A174867D7507B52A7EBEB3D')
+  || hash(helperPath) !== 'B48BD850E4A3CBBF44022CFEEF82E11272958F3052C8BE8748904DEF3BCFCF12')
   throw new Error('BINARY_MISMATCH');
 const config = readFileSync('C:\\Program Files (x86)\\Tencent\\WeChat\\config.ini', 'utf8');
 if (!/^HttpServerHost=http:\/\/127\.0\.0\.1\s*$/im.test(config)) throw new Error('WX_LOOPBACK_ONLY');

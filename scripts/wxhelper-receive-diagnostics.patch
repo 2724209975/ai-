@@ -1,0 +1,243 @@
+diff --git a/app/wxhelper/src/sync_msg_hook.cc b/app/wxhelper/src/sync_msg_hook.cc
+index aa5ba6e..faafcbf 100644
+--- a/app/wxhelper/src/sync_msg_hook.cc
++++ b/app/wxhelper/src/sync_msg_hook.cc
+@@ -1,6 +1,7 @@
+ ﻿#include "sync_msg_hook.h"
+ 
+ #include "base64.h"
++#include "receive_diagnostics.h"
+ #include "config.h"
+ #include "nlohmann/json.hpp"
+ #include "offset.h"
+@@ -21,6 +22,8 @@ void SyncMsgHook::Init() {
+ }
+ 
+ void SyncMsgHook::HandleSyncMsg(int64_t param1, int64_t param2, int64_t param3) {
++  auto& diagnostic = ReceiveDiagnostics::Get();
++  ++diagnostic.observed;
+   nlohmann::json msg;
+ 
+   msg["pid"] = GetCurrentProcessId();
+@@ -33,6 +36,8 @@ void SyncMsgHook::HandleSyncMsg(int64_t param1, int64_t param2, int64_t param3)
+   msg["createTime"] = *(DWORD *)(param2 + 0x58);
+   msg["displayFullContent"] = wxutils::ReadWeChatStr(*(int64_t *)(param2 + 0x50));
+   DWORD type = *(DWORD *)(param2 + 0x24);
++  if (type == 1) ++diagnostic.text;
++  if (type == 51) ++diagnostic.type51;
+   msg["type"] = type;
+   if (type == 3) {
+     std::string img = wxutils::ReadSKBuiltinBuffer(*(int64_t *)(param2 + 0x40));
+@@ -49,6 +54,8 @@ void SyncMsgHook::HandleSyncMsg(int64_t param1, int64_t param2, int64_t param3)
+     bool add = base::ThreadPool::GetInstance().AddWork(
+         hook::SendHttpMsgCallback, inner_msg);
+     SPDLOG_INFO("add http msg work:{}", add);
++    if (add) ++diagnostic.queued;
++    else { ++diagnostic.queue_failed; delete inner_msg; }
+   } else if (mode == "tcp") {
+     bool add = base::ThreadPool::GetInstance().AddWork(hook::SendTcpMsgCallback,
+                                                        inner_msg);
+@@ -60,4 +67,4 @@ void SyncMsgHook::HandleSyncMsg(int64_t param1, int64_t param2, int64_t param3)
+   }
+   kDoAddMsg(param1, param2, param3);
+ }
+-}  // namespace wxhelper
+\ No newline at end of file
++}  // namespace wxhelper
+diff --git a/app/wxhelper/src/hook.cc b/app/wxhelper/src/hook.cc
+index eac3c1c..e88c1c6 100644
+--- a/app/wxhelper/src/hook.cc
++++ b/app/wxhelper/src/hook.cc
+@@ -1,5 +1,6 @@
+ ﻿#include <WinSock2.h>
+ #include "hook.h"
++#include "receive_diagnostics.h"
+ 
+ 
+ #include "client_socket.h"
+@@ -14,8 +15,11 @@
+ namespace hook {
+ void SendHttpMsgCallback(PTP_CALLBACK_INSTANCE instance, PVOID context,
+                          PTP_WORK Work) {
++  auto& diagnostic = wxhelper::ReceiveDiagnostics::Get();
++  ++diagnostic.http_started;
+   InnerMessageStruct *msg = (InnerMessageStruct *)context;
+   if (msg == NULL) {
++    ++diagnostic.parse_failed;
+     SPDLOG_INFO("http msg is null");
+     return;
+   }
+@@ -23,13 +27,15 @@ void SendHttpMsgCallback(PTP_CALLBACK_INSTANCE instance, PVOID context,
+   nlohmann::json j_msg = nlohmann::json::parse(
+       msg->buffer, msg->buffer + msg->length, nullptr, false);
+   if (j_msg.is_discarded()) {
++    ++diagnostic.parse_failed;
+     return;
+   }
+   std::string jstr = j_msg.dump() + "\n";
+   std::string url = wxhelper::Config::GetInstance().GetRecvHttpUrl();
+   int timeout = wxhelper::Config::GetInstance().GetRecvHttpTimeout();
+   http::HttpClient client{url, timeout};
+-  client.SendRequest(jstr);
++  if (client.SendRequest(jstr)) ++diagnostic.http_2xx;
++  else ++diagnostic.http_failed;
+ }
+ 
+ 
+@@ -89,4 +95,4 @@ int BaseHook::Unhook() {
+   return ret;
+ }
+ 
+-}  // namespace hook
+\ No newline at end of file
++}  // namespace hook
+diff --git a/app/wxhelper/src/http_client.cc b/app/wxhelper/src/http_client.cc
+index 9194cf4..d1f6e76 100644
+--- a/app/wxhelper/src/http_client.cc
++++ b/app/wxhelper/src/http_client.cc
+@@ -5,7 +5,7 @@ namespace http {
+ HttpClient::HttpClient(std::string url, int timeout)
+     : url_(url), timeout_(timeout) {}
+ 
+-void HttpClient::SendRequest(const std::string &content) {
++bool HttpClient::SendRequest(const std::string &content) {
+   struct mg_mgr mgr;
+   Data data;
+   data.done = false;
+@@ -13,12 +13,15 @@ void HttpClient::SendRequest(const std::string &content) {
+   data.url = url_;
+   data.timeout = timeout_;
+   mg_mgr_init(&mgr);
+-  mg_http_connect(&mgr, url_.c_str(), &HttpClient::OnHttpEvent, &data);
++  if (mg_http_connect(&mgr, url_.c_str(), &HttpClient::OnHttpEvent, &data) == nullptr) {
++    mg_mgr_free(&mgr);
++    return false;
++  }
+   while (!data.done) {
+     mg_mgr_poll(&mgr, 500);
+   }
+   mg_mgr_free(&mgr);
+-  data.done = false;
++  return data.accepted;
+ }
+ 
+ void HttpClient::OnHttpEvent(struct mg_connection *c, int ev, void *ev_data,
+@@ -51,6 +54,9 @@ void HttpClient::OnHttpEvent(struct mg_connection *c, int ev, void *ev_data,
+               mg_url_uri(s_url), (int)host.len, host.ptr, content_length);
+     mg_send(c, data->post_data.c_str(), content_length);
+   } else if (ev == MG_EV_HTTP_MSG) {
++    const auto* response = static_cast<struct mg_http_message*>(ev_data);
++    const int status = mg_http_status(response);
++    data->accepted = status >= 200 && status < 300;
+ // Response is received. Print it
+ #ifdef _DEBUG
+     struct mg_http_message *hm = (struct mg_http_message *)ev_data;
+@@ -72,4 +78,4 @@ void HttpClient::OnHttpEvent(struct mg_connection *c, int ev, void *ev_data,
+   }
+ }
+ 
+-}  // namespace http
+\ No newline at end of file
++}  // namespace http
+diff --git a/app/wxhelper/src/http_client.h b/app/wxhelper/src/http_client.h
+index 900bde7..703e6f9 100644
+--- a/app/wxhelper/src/http_client.h
++++ b/app/wxhelper/src/http_client.h
+@@ -10,6 +10,7 @@ namespace http {
+ 
+ struct Data {
+   bool done;
++  bool accepted = false;
+    int timeout;
+   std::string url;
+   std::string post_data;
+@@ -18,7 +19,7 @@ struct Data {
+ class HttpClient : public NonCopyable {
+  public:
+   explicit HttpClient(std::string url, int timeout);
+-  void SendRequest(const std::string &content);
++  bool SendRequest(const std::string &content);
+ private:
+  static void OnHttpEvent(struct mg_connection *c, int ev, void *ev_data,
+                    void *fn_data);
+@@ -29,4 +30,4 @@ private:
+ };
+ 
+ }  // namespace http
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/app/wxhelper/src/hook_controller.cc b/app/wxhelper/src/hook_controller.cc
+index 1a62dff..5a347db 100644
+--- a/app/wxhelper/src/hook_controller.cc
++++ b/app/wxhelper/src/hook_controller.cc
+@@ -3,9 +3,19 @@
+ #include "json_utils.h"
+ #include "nlohmann/json.hpp"
+ #include "sync_msg_hook.h"
++#include "receive_diagnostics.h"
+ 
+ namespace jsonutils = wxhelper::jsonutils;
+ namespace wxhelper {
++std::string HookController::ReceiveDiagnosticsSnapshot(std::string params) {
++  auto& d = ReceiveDiagnostics::Get();
++  nlohmann::json data = {{"observed", d.observed.load()}, {"text", d.text.load()},
++    {"type51", d.type51.load()}, {"queued", d.queued.load()},
++    {"queueFailed", d.queue_failed.load()}, {"httpStarted", d.http_started.load()},
++    {"http2xx", d.http_2xx.load()}, {"httpFailed", d.http_failed.load()},
++    {"parseFailed", d.parse_failed.load()}};
++  return nlohmann::json({{"code", 0}, {"data", data}, {"msg", "counters_only"}}).dump();
++}
+ std::string HookController::HookSyncMsg(std::string params) {
+   int success = SyncMsgHook::GetInstance().Hook();
+   nlohmann::json ret_data = {
+@@ -28,4 +38,4 @@ std::string HookController::UnHookLog(std::string params) {
+       {"code", 200}, {"data", {}}, {"msg", "Not Implemented"}};
+   return ret.dump();
+ }
+-}  // namespace wxhelper
+\ No newline at end of file
++}  // namespace wxhelper
+diff --git a/app/wxhelper/src/hook_controller.h b/app/wxhelper/src/hook_controller.h
+index a524fcc..76ae1a8 100644
+--- a/app/wxhelper/src/hook_controller.h
++++ b/app/wxhelper/src/hook_controller.h
+@@ -9,6 +9,7 @@ class HookController : public http::HttpController<HookController> {
+   PATHS_BEGIN
+   ADD_PATH("/api/hookSyncMsg", HookSyncMsg);
+   ADD_PATH("/api/unhookSyncMsg", UnHookSyncMsg);
++  ADD_PATH("/api/receiveDiagnostics", ReceiveDiagnosticsSnapshot);
+   ADD_PATH("/api/hookLog", HookLog);
+   ADD_PATH("/api/unhookLog", UnHookLog);
+   PATHS_END
+@@ -18,6 +19,7 @@ class HookController : public http::HttpController<HookController> {
+   /// @param params json
+   /// @return json
+   static std::string HookSyncMsg(std::string params);
++  static std::string ReceiveDiagnosticsSnapshot(std::string params);
+   /// @brief 取消hook消息
+   /// @param params json
+   /// @return json
+@@ -33,4 +35,4 @@ class HookController : public http::HttpController<HookController> {
+ };
+ }  // namespace wxhelper
+ 
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/app/wxhelper/src/receive_diagnostics.h b/app/wxhelper/src/receive_diagnostics.h
+new file mode 100644
+--- /dev/null
++++ b/app/wxhelper/src/receive_diagnostics.h
+@@ -0,0 +1,11 @@
++#pragma once
++#include <atomic>
++namespace wxhelper {
++// Process-lifetime counters; no message contents, identifiers or paths.
++struct ReceiveDiagnostics {
++  std::atomic<unsigned long long> observed{0}, text{0}, type51{0};
++  std::atomic<unsigned long long> queued{0}, queue_failed{0};
++  std::atomic<unsigned long long> http_started{0}, http_2xx{0}, http_failed{0}, parse_failed{0};
++  static ReceiveDiagnostics& Get() { static ReceiveDiagnostics value; return value; }
++};
++}
