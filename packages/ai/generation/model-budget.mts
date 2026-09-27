@@ -1,6 +1,6 @@
 /** A runaway guard for a paid model, not an accounting system.
  *
- * It counts calls and tokens per UTC day inside one process and refuses to call the provider once a
+ * It counts attempted calls and reported tokens per UTC day inside one process and refuses to call the provider once a
  * limit is reached; 04's gateway turns that refusal into MODEL_UNAVAILABLE, which 02 handles by
  * pausing the contact for a human — never by silently continuing to spend. Restarting the process
  * resets the counters, so this bounds a loop; it does not bound a month, and it must not be
@@ -27,6 +27,9 @@ export function withDailyBudget(provider: TextModelProvider, options: ModelBudge
   let day = '';
   let calls = 0;
   let tokens = 0;
+  // Usage arrives after the request. Serialize admissions so a burst cannot all pass the same
+  // pre-call check; this also keeps a late response from being charged to the next UTC day.
+  let tail: Promise<void> = Promise.resolve();
 
   const rollover = (): void => {
     const today = new Date(now()).toISOString().slice(0, 10);
@@ -37,13 +40,19 @@ export function withDailyBudget(provider: TextModelProvider, options: ModelBudge
     providerId: provider.providerId, modelId: provider.modelId, modelVersion: provider.modelVersion,
     promptVersion: provider.promptVersion, dataRegion: provider.dataRegion, retentionPolicy: provider.retentionPolicy,
     async invoke(input) {
-      rollover();
-      if (calls >= maxCalls) { options.onRefusal?.({ reason: 'calls', calls, tokens }); throw new Error('MODEL_BUDGET_EXHAUSTED'); }
-      if (tokens >= maxTokens) { options.onRefusal?.({ reason: 'tokens', calls, tokens }); throw new Error('MODEL_BUDGET_EXHAUSTED'); }
-      const result = await provider.invoke(input);
-      calls += 1;
-      tokens += (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
-      return result;
+      const previous = tail;
+      let release!: () => void;
+      tail = new Promise<void>(resolve => { release = resolve; });
+      await previous;
+      try {
+        rollover();
+        if (calls >= maxCalls) { options.onRefusal?.({ reason: 'calls', calls, tokens }); throw new Error('MODEL_BUDGET_EXHAUSTED'); }
+        if (tokens >= maxTokens) { options.onRefusal?.({ reason: 'tokens', calls, tokens }); throw new Error('MODEL_BUDGET_EXHAUSTED'); }
+        calls += 1; // Even a timeout or provider error is a paid attempt until proved otherwise.
+        const result = await provider.invoke(input);
+        tokens += (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
+        return result;
+      } finally { release(); }
     },
   };
 }

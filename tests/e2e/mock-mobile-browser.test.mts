@@ -68,6 +68,8 @@ test('mock mobile Chromium: edited confirmation payload and result-unknown displ
     await page.getByText('合成联系人').waitFor();
     assert.equal(server.commands.length, 0);
     await page.locator('textarea').fill('编辑后的文字');
+    await page.getByRole('button', { name: '刷新' }).click();
+    assert.equal(await page.locator('textarea').inputValue(), '编辑后的文字');
     await page.getByRole('button', { name: '确认并发送' }).click();
     await page.getByText('结果未知，禁止重复发送').first().waitFor();
     assert.equal(server.commands.length, 1);

@@ -26,6 +26,28 @@ test('a token limit refuses even when the call count is fine', async () => {
   await assert.rejects(provider.invoke({} as never), { message: 'MODEL_BUDGET_EXHAUSTED' });
 });
 
+test('failed provider attempts count toward the call ceiling', async () => {
+  let attempts = 0;
+  const failing = withDailyBudget({ ...base, async invoke() { attempts++; throw new Error('provider failed'); } }, { maxCallsPerDay: 2 });
+  await assert.rejects(failing.invoke({} as never), { message: 'provider failed' });
+  await assert.rejects(failing.invoke({} as never), { message: 'provider failed' });
+  await assert.rejects(failing.invoke({} as never), { message: 'MODEL_BUDGET_EXHAUSTED' });
+  assert.equal(attempts, 2);
+});
+
+test('concurrent calls cannot pass the same remaining slot', async () => {
+  let attempts = 0;
+  let finish!: () => void;
+  const waiting = new Promise<void>(resolve => { finish = resolve; });
+  const provider = withDailyBudget({ ...base, async invoke() { attempts++; await waiting; return { alternatives: [], usage: { inputTokens: 1 } }; } }, { maxCallsPerDay: 1 });
+  const first = provider.invoke({} as never);
+  const second = provider.invoke({} as never);
+  finish();
+  await first;
+  await assert.rejects(second, { message: 'MODEL_BUDGET_EXHAUSTED' });
+  assert.equal(attempts, 1);
+});
+
 test('counters roll over with the UTC day', async () => {
   let clock = Date.parse('2026-09-26T23:00:00.000Z');
   const provider = withDailyBudget(base, { maxCallsPerDay: 1, now: () => clock });
