@@ -12,6 +12,11 @@ const evidence = resolve(dirname(fileURLToPath(import.meta.url)), '../evidence')
 
 async function fixture(mode: 'stale' | 'unknown' | 'ready') {
   let stale = false;
+  let contact = { id: 'contact-1', version: 1, status: 'READY_CONFIRM', allowedActions: ['updatePolicy'],
+    name: '测试联系人', platform: 'wechat', agentEnabled: true, sendMode: 'confirm', goal: '自然聊天',
+    activeContactEnabled: false, activeConfessionEnabled: false, allowedWindows: [],
+    restrictions: [] as string[], stylePreferences: [] as string[], pauseReasons: [] as string[], policyVersion: 1 };
+  let savedPolicy: Record<string, unknown> | undefined;
   const task = () => ({ id: 'task-1', taskId: 'task-1', taskVersion: stale ? 2 : 1, version: stale ? 2 : 1,
     planId: 'plan-1', planVersion: stale ? 2 : 1, contactId: 'contact-1', contactName: '测试联系人',
     conversationId: 'conversation-1', status: stale ? 'INVALIDATED' : 'AWAITING_CONFIRMATION',
@@ -23,6 +28,15 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready') {
     const path = new URL(request.url ?? '/', 'http://localhost').pathname;
     const json = (status: number, body: unknown) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); };
     if (path === '/api/v1/session') return json(200, { ownerId: 'fixture-owner', csrfToken: 'fixture', expiresAt: '2099-01-01T00:00:00Z' });
+    if (path === '/api/v1/contacts' && request.method === 'GET') return json(200, { items: [contact] });
+    if (path === '/api/v1/contacts/contact-1/updatePolicy' && request.method === 'POST') {
+      let body = '';
+      for await (const chunk of request) body += chunk;
+      const command = JSON.parse(body) as { policy: Record<string, unknown> };
+      savedPolicy = command.policy;
+      contact = { ...contact, ...command.policy, version: contact.version + 1, policyVersion: contact.policyVersion + 1 } as typeof contact;
+      return json(200, { resultVersion: contact.version, correlationId: 'policy-saved', status: 'UPDATED' });
+    }
     if (path === '/api/v1/overview') return json(200, { version: 1, globalPaused: false, allowedActions: [],
       pendingCount: 1, unknownSendCount: 1,
       ...(mode === 'ready' ? { connectionQueryStatus: 'ready', faultQueryStatus: 'ready' } : {}),
@@ -56,8 +70,24 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready') {
   });
   await new Promise<void>(resolveListening => server.listen(0, '127.0.0.1', resolveListening));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
-  return { url: `http://127.0.0.1:${address.port}`, close: () => new Promise<void>(resolveClose => server.close(() => resolveClose())) };
+  return { url: `http://127.0.0.1:${address.port}`, savedPolicy: () => savedPolicy,
+    close: () => new Promise<void>(resolveClose => server.close(() => resolveClose())) };
 }
+
+test('390px: contact expression preferences and restrictions save together', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
+  const { chromium } = await import('playwright');
+  const api = await fixture('ready'); const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await page.goto(api.url + '/#contacts');
+    await page.getByLabel('表达偏好（每行一条）').fill('简短\n口语化');
+    await page.getByLabel('避免内容（每行一条）').fill('不提钱');
+    await page.getByRole('button', { name: '保存聊天设置' }).click();
+    await page.getByText('表达偏好：简短、口语化').waitFor();
+    assert.deepEqual(api.savedPolicy(), { goal: '自然聊天', stylePreferences: ['简短', '口语化'], restrictions: ['不提钱'] });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+  } finally { await browser.close(); await api.close(); }
+});
 
 test('320px: unprovided connection/fault status, auto fallback and stale 409', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
   const { chromium } = await import('playwright');

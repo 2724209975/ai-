@@ -86,7 +86,7 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     // A policy edit invalidates pending plans, bumps the version and is idempotent per key.
     await service.ingestPlatformEvent(inbound('message-2', '再问一句'));
     const contactVersion = (await service.ownerContacts()).items.find(item => item.id === contactId)!.version;
-    const policyEdit = await service.updatePolicy(contactId, { expectedVersion: contactVersion, idempotencyKey: 'policy-1', policy: { goal: '推进见面', restrictions: ['不提钱'] } });
+    const policyEdit = await service.updatePolicy(contactId, { expectedVersion: contactVersion, idempotencyKey: 'policy-1', policy: { goal: '推进见面', restrictions: ['不提钱'], stylePreferences: ['简短', '口语化'] } });
     assert.equal(policyEdit.status, 'UPDATED');
     const plansAfterPolicy = (await service.getConversation(conversationId)).plans;
     assert.equal(plansAfterPolicy.at(-1)?.status, 'INVALIDATED');
@@ -96,6 +96,7 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     assert.equal(updatedContact.policyVersion, 2, 'the policy object carries its own monotonic version');
     assert.equal(policyEdit.resultVersion, contactVersion + 1, 'commands return the resource version they bumped');
     assert.deepEqual(updatedContact.restrictions, ['不提钱']);
+    assert.deepEqual(updatedContact.stylePreferences, ['简短', '口语化']);
     await assert.rejects(service.updatePolicy(contactId, { expectedVersion: contactVersion, idempotencyKey: 'policy-2', policy: { goal: '再来' } }), { message: 'CONFLICT_VERSION' });
 
     // Pause then resume: only the named reason is cleared and the contact returns to confirm mode.

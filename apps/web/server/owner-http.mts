@@ -42,7 +42,7 @@ export type PolicyPatch = {
   goal?: string; sendMode?: 'confirm' | 'auto'; agentEnabled?: boolean;
   activeContactEnabled?: boolean; activeConfessionEnabled?: boolean;
   allowedWindows?: { start: string; end: string }[]; timezone?: string;
-  factScopes?: string[]; restrictions?: string[];
+  factScopes?: string[]; restrictions?: string[]; stylePreferences?: string[];
 };
 export type PolicyCommand = { expectedVersion: number; idempotencyKey: string; policy: PolicyPatch };
 export type FactCommand = { expectedVersion: number; idempotencyKey: string; action: 'confirm' | 'correct' | 'delete'; content?: string; effectiveAt?: string };
@@ -101,7 +101,7 @@ function resolveSendCommand(value: unknown): ResolveSendCommand {
 function policyCommand(value: unknown): PolicyCommand {
   if (!isObject(value) || !isVersion(value.expectedVersion) || !isKey(value.idempotencyKey) || !isObject(value.policy)) throw new HttpError(400, 'VALIDATION_FAILED');
   const raw = value.policy;
-  const allowed = ['goal', 'sendMode', 'agentEnabled', 'activeContactEnabled', 'activeConfessionEnabled', 'allowedWindows', 'timezone', 'factScopes', 'restrictions'];
+  const allowed = ['goal', 'sendMode', 'agentEnabled', 'activeContactEnabled', 'activeConfessionEnabled', 'allowedWindows', 'timezone', 'factScopes', 'restrictions', 'stylePreferences'];
   if (Object.keys(raw).length === 0 || Object.keys(raw).some(key => !allowed.includes(key))) throw new HttpError(400, 'VALIDATION_FAILED');
   const policy: PolicyPatch = {};
   if (raw.goal !== undefined) { if (!isShortText(raw.goal, 200)) throw new HttpError(400, 'VALIDATION_FAILED'); policy.goal = raw.goal; }
@@ -112,6 +112,7 @@ function policyCommand(value: unknown): PolicyCommand {
   if (raw.timezone !== undefined) { if (!isShortText(raw.timezone, 64)) throw new HttpError(400, 'VALIDATION_FAILED'); policy.timezone = raw.timezone; }
   if (raw.factScopes !== undefined) { if (!stringList(raw.factScopes)) throw new HttpError(400, 'VALIDATION_FAILED'); policy.factScopes = raw.factScopes; }
   if (raw.restrictions !== undefined) { if (!stringList(raw.restrictions)) throw new HttpError(400, 'VALIDATION_FAILED'); policy.restrictions = raw.restrictions; }
+  if (raw.stylePreferences !== undefined) { if (!stringList(raw.stylePreferences)) throw new HttpError(400, 'VALIDATION_FAILED'); policy.stylePreferences = raw.stylePreferences; }
   if (raw.allowedWindows !== undefined) {
     const windows = raw.allowedWindows;
     if (!Array.isArray(windows) || windows.length > 12 || !windows.every(w => isObject(w) && /^\d\d:\d\d$/.test(String(w.start)) && /^\d\d:\d\d$/.test(String(w.end)))) throw new HttpError(400, 'VALIDATION_FAILED');

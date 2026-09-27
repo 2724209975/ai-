@@ -528,7 +528,8 @@ export class PgConfirmedService {
           allowedActions: row.pause_reasons.length ? ['resumeContact', 'updatePolicy'] : ['pauseContact', 'updatePolicy'],
           name: contact.display_name, platform: this.#platform.platform, agentEnabled: row.policy.agentEnabled, sendMode: row.policy.sendMode, goal: row.policy.goal,
           activeContactEnabled: row.policy.activeContactEnabled, activeConfessionEnabled: row.policy.activeConfessionEnabled,
-          allowedWindows: row.policy.allowedWindows.map(w => `${w.start}-${w.end}`), restrictions: row.policy.restrictions, pauseReasons: row.pause_reasons, policyVersion: Number(row.policy_version) });
+          allowedWindows: row.policy.allowedWindows.map(w => `${w.start}-${w.end}`), restrictions: row.policy.restrictions,
+          stylePreferences: row.policy.stylePreferences ?? [], pauseReasons: row.pause_reasons, policyVersion: Number(row.policy_version) });
       }
       return { items };
     });
@@ -743,7 +744,8 @@ export class PgConfirmedService {
       if (!row) fail('NOT_FOUND');
       if (Number(row.version) !== input.expectedVersion) fail('CONFLICT_VERSION');
       const next = { ...row.policy, ...input.policy, contactId: row.contact_id, version: Number(row.policy_version) + 1 } as Policy;
-      if (!['confirm', 'auto'].includes(next.sendMode) || !next.timezone?.trim() || !next.goal?.trim() || Array.isArray(next.factScopes) === false || Array.isArray(next.restrictions) === false) fail('VALIDATION_FAILED');
+      if (!['confirm', 'auto'].includes(next.sendMode) || !next.timezone?.trim() || !next.goal?.trim() ||
+        !Array.isArray(next.factScopes) || !Array.isArray(next.restrictions) || !Array.isArray(next.stylePreferences ?? [])) fail('VALIDATION_FAILED');
       await this.#invalidate(tx, row.conversation_id, 'POLICY_CHANGED');
       const control = (await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1 FOR UPDATE', [row.conversation_id])).rows[0];
       const generation = Number(control?.generation);

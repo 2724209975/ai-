@@ -129,6 +129,44 @@ function RowActions({ row, prefix, run, actions }: { row: Operable; prefix: stri
   return <div className="actions">{actions.filter(action => can(row, action.name)).map(action => <button key={action.name} onClick={() => void run(`${prefix}/${encodeURIComponent(row.id)}/${action.name}`, { expectedVersion: row.version, idempotencyKey: key(), ...action.extra })}>{action.title}</button>)}</div>;
 }
 
+function ContactPolicyEditor({ row, run }: { row: Contact; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
+  const [goal, setGoal] = useState(row.goal);
+  const [style, setStyle] = useState((row.stylePreferences ?? []).join('\n'));
+  const [restrictions, setRestrictions] = useState((row.restrictions ?? []).join('\n'));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    setGoal(row.goal);
+    setStyle((row.stylePreferences ?? []).join('\n'));
+    setRestrictions((row.restrictions ?? []).join('\n'));
+    setError('');
+  }, [row.policyVersion]);
+  const lines = (value: string) => value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  async function save() {
+    if (busy) return;
+    const styles = lines(style), limits = lines(restrictions);
+    if (!goal.trim() || goal.length > 200 || styles.length > 24 || limits.length > 24 ||
+      [...styles, ...limits].some(line => line.length > 120)) {
+      setError('目标或条目过长，请缩短后再保存。'); return;
+    }
+    setBusy(true); setError('');
+    try {
+      await run(`/contacts/${encodeURIComponent(row.id)}/updatePolicy`, {
+        expectedVersion: row.version, idempotencyKey: key(),
+        policy: { goal: goal.trim(), stylePreferences: styles, restrictions: limits },
+      });
+    } catch { /* The shared command handler shows the backend error and refreshes stale versions. */ }
+    finally { setBusy(false); }
+  }
+  return <div className="editor">
+    <label>聊天目标<input value={goal} maxLength={200} disabled={busy} onChange={event => setGoal(event.target.value)} /></label>
+    <label>表达偏好（每行一条）<textarea rows={2} value={style} disabled={busy} placeholder="例如：简短、像日常聊天" onChange={event => setStyle(event.target.value)} /></label>
+    <label>避免内容（每行一条）<textarea rows={2} value={restrictions} disabled={busy} placeholder="例如：不提具体见面时间" onChange={event => setRestrictions(event.target.value)} /></label>
+    {error && <p className="error" role="alert">{error}</p>}
+    <button disabled={busy} onClick={() => void save()}>保存聊天设置</button>
+  </div>;
+}
+
 function App() {
   const initial = location.hash.slice(1) as Page;
   const [page, setPage] = useState<Page>(pages.some(item => item.id === initial) ? initial : 'overview');
@@ -259,10 +297,10 @@ function App() {
     </section>; })()}
     {showContent && page === 'tasks' && <section className="stack">{list<Task>().length ? list<Task>().map(task => <TaskCard key={task.taskId} task={task} run={run} />) : <p className="empty">暂无待办</p>}</section>}
     {showContent && page === 'contacts' && <section className="stack">{list<Contact>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.name}</h3><span className="badge">{label(row.status)}</span></div>
-      <p>{row.platform} · {row.agentEnabled ? '代理开启' : '代理关闭'} · {row.sendMode}</p><p>目标：{row.goal}</p><p>关系：{row.relationshipStatus ?? '未配置'} · 风格：{row.stylePreference ?? '未配置'}</p>
+      <p>{row.platform} · {row.agentEnabled ? '代理开启' : '代理关闭'} · {row.sendMode}</p><p>目标：{row.goal}</p><p>表达偏好：{row.stylePreferences?.join('、') || '未配置'}</p>
       <p>主动联系：{row.activeContactEnabled ? '开启' : '关闭'} · 主动表白：{row.activeConfessionEnabled ? '开启' : '关闭'}</p>
       <p>允许时段：{row.allowedWindows?.join('、') || '未配置'} · 限制：{row.restrictions?.join('、') || '无'}</p><p className="muted">策略版本 {row.policyVersion} · 暂停原因 {row.pauseReasons?.map(reason).join('、') || '无'}</p>
-      {can(row, 'updatePolicy') && <div className="editor"><label>聊天目标<input value={drafts[row.id] ?? row.goal} onChange={event => setDrafts(old => ({ ...old, [row.id]: event.target.value }))} /></label><button onClick={() => void run(`/contacts/${encodeURIComponent(row.id)}/updatePolicy`, { expectedVersion: row.version, policy: { goal: drafts[row.id] ?? row.goal }, idempotencyKey: key() }).catch(() => {})}>保存目标</button></div>}
+      {can(row, 'updatePolicy') && <ContactPolicyEditor row={row} run={run} />}
       <RowActions row={row} prefix="/contacts" run={(path, body) => run(path, body).catch(() => {})} actions={[{ name: 'pauseContact', title: '暂停联系人' }, { name: 'resumeContact', title: '恢复联系人', extra: { reason: row.pauseReasons?.[0] } }]} />
     </article>)}</section>}
     {showContent && page === 'conversations' && <section className="stack">{list<Conversation>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.contactName}</h3><span className="badge">{label(row.status)}</span></div><p className="muted">修订 {row.revision} · generation {row.generation} · 暂停 {row.pauseReasons.map(reason).join('、') || '无'}</p>

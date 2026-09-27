@@ -3,7 +3,8 @@ import test from 'node:test';
 import { MemoryDataContextStore } from '../../data/context/store.mts';
 import { defaultPolicy } from '../../orchestration/policy/evaluate.mts';
 import type { PersistentContext } from '../../orchestration/postgres/confirmed-service.mts';
-import { createPersistentFakeIntelligence } from '../index.mts';
+import { createPersistentFakeIntelligence, createTextModelIntelligence } from '../index.mts';
+import type { PolicyProjection } from '../types.mts';
 
 const now = '2026-09-23T12:00:00.000Z';
 
@@ -54,4 +55,23 @@ test('uninterpreted media yields media_uncertain without a reply plan', async ()
   assert.equal(draft.shouldReply, false);
   assert.deepEqual(draft.alternatives, []);
   assert.deepEqual(draft.risks, ['media_uncertain']);
+});
+
+test('saved expression preferences reach the text model with contact restrictions', async () => {
+  const { context, policy } = setup();
+  let projected: PolicyProjection | undefined;
+  const provider = {
+    providerId: 'stub', modelId: 'stub', modelVersion: '1', promptVersion: '1', dataRegion: 'test', retentionPolicy: 'test',
+    async invoke(input: { policy: PolicyProjection }) {
+      projected = input.policy;
+      return { alternatives: [{ clientAlternativeKey: 'a1', strategySummary: '简短回应',
+        parts: [{ clientPartKey: 'p1', sequence: 1, type: 'text', content: '你好呀' }] }] };
+    },
+  };
+  const draft = await createTextModelIntelligence(provider).propose(context, {
+    ...policy, stylePreferences: ['简短', '口语化'], restrictions: ['不提钱'],
+  });
+  assert.equal(draft.shouldReply, true);
+  assert.deepEqual(projected?.stylePreferences, ['简短', '口语化']);
+  assert.deepEqual(projected?.restrictions, ['不提钱']);
 });

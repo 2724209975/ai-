@@ -5,7 +5,10 @@ export type Policy = {
   contactId: string; agentEnabled: boolean; sendMode: SendMode; goal: string;
   activeContactEnabled: boolean; activeConfessionEnabled: boolean;
   allowedWindows: readonly { start: string; end: string }[]; timezone: string;
-  factScopes: readonly string[]; restrictions: readonly string[]; version: number;
+  factScopes: readonly string[]; restrictions: readonly string[];
+  /** Optional so policies saved before this field was introduced remain readable. */
+  stylePreferences?: readonly string[];
+  version: number;
 };
 export type Route = { kind: 'confirm' | 'auto' | 'block'; reasons: string[] };
 
@@ -30,5 +33,5 @@ export function defaultPolicy(contactId: string, timezone: string, goal: string)
   if (!contactId || !timezone || !goal) throw new Error('VALIDATION_FAILED');
   return { contactId, agentEnabled: true, sendMode: 'confirm', goal,
     activeContactEnabled: false, activeConfessionEnabled: false,
-    allowedWindows: [], timezone, factScopes: [], restrictions: [], version: 1 };
+    allowedWindows: [], timezone, factScopes: [], restrictions: [], stylePreferences: [], version: 1 };
 }

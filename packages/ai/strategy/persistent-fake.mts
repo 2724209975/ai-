@@ -13,7 +13,7 @@ function projectedPolicy(policy: Policy): PolicyProjection {
   return { contactId: policy.contactId, version: policy.version, goal: policy.goal,
     sendMode: policy.sendMode, agentEnabled: policy.agentEnabled,
     activeContactEnabled: policy.activeContactEnabled, activeConfessionEnabled: policy.activeConfessionEnabled,
-    restrictions: [...policy.restrictions], stylePreferences: [] };
+    restrictions: [...policy.restrictions], stylePreferences: [...(policy.stylePreferences ?? [])] };
 }
 
 const riskMap: Record<RiskCategory, Risk> = {

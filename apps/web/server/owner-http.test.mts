@@ -64,3 +64,29 @@ test('Owner HTTP preserves 409 and does not claim a send', async () => {
     assert.ok(body.correlationId);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test('Owner HTTP accepts bounded expression preferences in a contact policy edit', async () => {
+  let saved: unknown;
+  const port: OwnerPort = {
+    async overview() { return {}; }, async tasks() { return { items: [] }; }, async contacts() { return { items: [] }; },
+    async confirm() { throw new Error('UNUSED'); }, async pauseAll() { throw new Error('UNUSED'); },
+    async pauseContact() { throw new Error('UNUSED'); },
+    async updatePolicy(_ownerId, _contactId, command) { saved = command.policy; return { resultVersion: 2, correlationId: 'saved' }; },
+  };
+  const server = createServer(createOwnerHttpHandler({ ownerPort: port,
+    authenticate: async () => ({ ownerId: 'trusted-owner' }), verifyWrite: async () => true }));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const url = `http://127.0.0.1:${address.port}/api/v1/contacts/contact-1/updatePolicy`;
+  try {
+    const command = { expectedVersion: 1, idempotencyKey: 'abcdefgh',
+      policy: { goal: '自然聊天', stylePreferences: ['简短', '口语化'], restrictions: ['不提钱'] } };
+    const valid = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(command) });
+    assert.equal(valid.status, 200);
+    assert.deepEqual(saved, command.policy);
+    const invalid = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...command, policy: { stylePreferences: ['x'.repeat(121)] } }) });
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(saved, command.policy);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});

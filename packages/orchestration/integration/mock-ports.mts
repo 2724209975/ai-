@@ -10,7 +10,7 @@ function policyProjection(policy: Policy): PolicyProjection {
   return { contactId: policy.contactId, version: policy.version, goal: policy.goal,
     sendMode: policy.sendMode, agentEnabled: policy.agentEnabled,
     activeContactEnabled: policy.activeContactEnabled, activeConfessionEnabled: policy.activeConfessionEnabled,
-    restrictions: [...policy.restrictions], stylePreferences: [] };
+    restrictions: [...policy.restrictions], stylePreferences: [...(policy.stylePreferences ?? [])] };
 }
 function risk(category: RiskCategory): Risk {
   const map: Record<RiskCategory, Risk> = {
