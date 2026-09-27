@@ -30,6 +30,8 @@ npm run serve:owner                  # 管理 API + 静态页面，默认 127.0.
 
 待办默认显示需要处理的方案与尚未完成的发送；已拒绝、已失效和已完成的记录可切换到「历史记录」查看。任何带 `RESULT_UNKNOWN` 发送的记录仍留在待处理列表。每次最多加载 100 条，后端先选待处理记录，再按更新时间补入历史；页面数字只统计本次加载的记录。
 
+联系人页可直接「关闭代理 / 开启代理」。关闭会使旧候选失效、取消尚未提交的发送并清空待生成批次；后续来信继续保存，但不调用模型。重新开启只处理之后的新来信，不补发旧消息，也不清除已有暂停原因；全局或联系人恢复操作不会自行开启已关闭的代理。
+
 已接通的命令：`/tasks/{id}/confirm|reject`、`/control/pause-all|resume-all`、`/contacts/{id}/pauseContact|resumeContact|updatePolicy`、`/facts/{id}/confirmFact|correctFact|deleteFact`、`/analyses/{id}/correctAnalysis`、`/media/{id}/approveAsset|revokeAsset`。
 
 `/skills`、`/imports`、`/faults` 还没有持久 provider，返回 `501 NOT_IMPLEMENTED`，页面会显示明确错误而不是空列表。这些路由与字段仍以 [06 REST 提案](../../docs/reports/web-06-api-proposal-2026-09-23.md) 和 [contracts.md](../../docs/contracts.md) §3 为准；未列入契约的字段不得作为稳定接口使用。

@@ -121,6 +121,18 @@ test('real HTTP + PostgreSQL + mock send: edited confirmation and stale 409', { 
     await page.goto(base + '/#tasks');
     await page.getByRole('button', { name: '确认并发送' }).waitFor();
     assert.equal(platform.submissionCount, 2, 'requesting a candidate cannot submit a message');
+    await page.goto(base + '/#contacts');
+    await page.getByRole('button', { name: '关闭代理', exact: true }).click();
+    await page.getByRole('button', { name: '开启代理', exact: true }).waitFor();
+    assert.equal((await service.ownerContacts()).items[0]?.agentEnabled, false);
+    assert.equal(await service.ingestPlatformEvent(inbound('off-inbound', '关闭期间的来信')), undefined);
+    // Refresh the resource version after the incoming message before toggling again.
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await page.getByRole('button', { name: '开启代理', exact: true }).click();
+    await page.getByRole('button', { name: '关闭代理', exact: true }).waitFor();
+    assert.equal((await service.ownerContacts()).items[0]?.agentEnabled, true);
+    assert.ok(await service.ingestPlatformEvent(inbound('on-inbound', '开启后的新来信')));
+    assert.equal(platform.submissionCount, 2, 'enabling still requires confirmation before sending');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
   } finally {
     if (browser) await browser.close();

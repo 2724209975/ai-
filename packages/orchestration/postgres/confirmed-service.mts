@@ -52,7 +52,7 @@ function observedMessageOf(payload: Record<string, unknown>, row: Row, type: Mes
 }
 
 /** Removing one pause reason never clears the others: every remaining reason keeps the contact paused. */
-function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode']): string {
+function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode'], agentEnabled = true): string {
   const has = (name: string) => pauseReasons.includes(name);
   if (has('GLOBAL_PAUSE')) return 'PAUSED_GLOBAL';
   if (has('OWNER_ORIGIN') || has('OWNER_ORIGIN_UNMAPPED') || has('OWNER_PAUSE')) return 'PAUSED_OWNER';
@@ -62,7 +62,7 @@ function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode
   if (has('UNKNOWN_SEND')) return 'PAUSED_UNKNOWN_SEND';
   if (has('RECEIPT_CONFLICT') || has('SEND_FAILURE') || has('INTELLIGENCE_FAILURE') || has('PLATFORM_MUTATION_UNVERIFIED')) return 'PAUSED_FAILURE';
   if (has('AWAITING_MANUAL_RESUME') || has('CONFIRMATION_REJECTED')) return 'PAUSED_POLICY';
-  return sendMode === 'auto' ? 'READY_AUTO' : 'READY_CONFIRM';
+  return !agentEnabled ? 'DISABLED' : sendMode === 'auto' ? 'READY_AUTO' : 'READY_CONFIRM';
 }
 
 export class PgConfirmedService {
@@ -139,6 +139,13 @@ export class PgConfirmedService {
         const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
         const generation = Number(control.rows[0]?.generation);
         await this.#invalidate(tx, row.conversation_id, 'NEW_MESSAGE');
+        // Disabling the agent keeps reception durable without invoking the model or collecting work.
+        if (!row.policy.agentEnabled) {
+          await tx.query(`UPDATE orch_conversations SET generation=$2,revision=revision+1,last_inbound_message_id=$3,
+            collection_started_at=NULL,collection_due_at=NULL,collection_message_ids='{}'::uuid[],
+            version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation, saved.id]);
+          return { row, generation, messageIds: [] as string[], flush: false };
+        }
         // A paused contact keeps receiving messages but never collects a generation batch.
         if (row.pause_reasons.length) {
           await tx.query(`UPDATE orch_conversations SET generation=$2,revision=revision+1,last_inbound_message_id=$3,paused_inbound_unreviewed_count=paused_inbound_unreviewed_count+1,version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation, saved.id]);
@@ -696,7 +703,7 @@ export class PgConfirmedService {
       for (const row of conversations) {
         await this.#invalidate(tx, row.conversation_id, 'GLOBAL_RESUME_REBASE');
         const remaining = row.pause_reasons.filter(reason => reason !== 'GLOBAL_PAUSE');
-        const state = deriveState(remaining, row.policy.sendMode);
+        const state = deriveState(remaining, row.policy.sendMode, row.policy.agentEnabled);
         await tx.query(`UPDATE orch_conversations SET state=$3,pause_reasons=$2::text[],version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, remaining, state]);
         if (state !== 'PAUSED_GLOBAL') await changeContactPause(tx, row.conversation_id, state.startsWith('PAUSED_'));
       }
@@ -783,7 +790,7 @@ export class PgConfirmedService {
       if (control?.unresolved_send_key) fail('SEND_RESULT_UNKNOWN');
       const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
       const remaining = row.pause_reasons.filter(value => value !== reason);
-      const state = deriveState(global?.paused ? [...remaining, 'GLOBAL_PAUSE'] : remaining, row.policy.sendMode);
+      const state = deriveState(global?.paused ? [...remaining, 'GLOBAL_PAUSE'] : remaining, row.policy.sendMode, row.policy.agentEnabled);
       await this.#invalidate(tx, row.conversation_id, 'RESUME_REBASE');
       await changeContactPause(tx, row.conversation_id, state.startsWith('PAUSED_'));
       const control2 = (await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id])).rows[0];
@@ -812,9 +819,10 @@ export class PgConfirmedService {
       await this.#invalidate(tx, row.conversation_id, 'POLICY_CHANGED');
       const control = (await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1 FOR UPDATE', [row.conversation_id])).rows[0];
       const generation = Number(control?.generation);
-      const nextState = next.agentEnabled ? deriveState(row.pause_reasons, next.sendMode) : 'DISABLED';
+      const nextState = deriveState(row.pause_reasons, next.sendMode, next.agentEnabled);
       const changed = await tx.query<{ version: number | string }>(
-        `UPDATE orch_conversations SET policy=$3::jsonb,policy_version=$2,generation=$4,state=$5,version=version+1,updated_at=now()
+        `UPDATE orch_conversations SET policy=$3::jsonb,policy_version=$2,generation=$4,state=$5,
+         collection_started_at=NULL,collection_due_at=NULL,collection_message_ids='{}'::uuid[],version=version+1,updated_at=now()
          WHERE contact_id=$1 RETURNING version`, [contactId, next.version, JSON.stringify(next), generation, nextState]);
       await tx.query('UPDATE dispatch_control SET policy_version=$2,generation=$3,updated_at=now() WHERE conversation_id=$1', [row.conversation_id, next.version, generation]);
       const correlationId = newId(this.#now());

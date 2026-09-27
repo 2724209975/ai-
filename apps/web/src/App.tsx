@@ -9,6 +9,7 @@ const pages: { id: Page; label: string }[] = [
   { id: 'audit', label: '审计' }, { id: 'faults', label: '故障' },
 ];
 const labels: Record<string, string> = {
+  DISABLED: '代理已关闭', UPDATED: '设置已保存',
   GENERATION_REQUESTED: '已加入候选生成队列，请到待办查看', REVIEWED: '来信提醒已清除',
   CREATED: '尚未发送', PREFLIGHT: '发送前检查', LEASED: '待提交', SUBMITTING: '提交中',
   SUBMITTED: '平台已接收', DELIVERED: '已送达', FAILED_DEFINITE: '确定失败',
@@ -147,6 +148,21 @@ function TaskList({ tasks, run }: { tasks: Task[]; run: (path: string, body: Rec
 
 function RowActions({ row, prefix, run, actions }: { row: Operable; prefix: string; run: (path: string, body: Record<string, unknown>) => Promise<void>; actions: { name: string; title: string; extra?: Record<string, unknown> }[] }) {
   return <div className="actions">{actions.filter(action => can(row, action.name)).map(action => <button key={action.name} onClick={() => void run(`${prefix}/${encodeURIComponent(row.id)}/${action.name}`, { expectedVersion: row.version, idempotencyKey: key(), ...action.extra })}>{action.title}</button>)}</div>;
+}
+
+function ContactAgentControl({ row, run }: { row: Contact; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await run(`/contacts/${encodeURIComponent(row.id)}/updatePolicy`, {
+        expectedVersion: row.version, idempotencyKey: key(), policy: { agentEnabled: !row.agentEnabled },
+      });
+    } catch { /* The shared command handler displays errors and refreshes stale versions. */ }
+    finally { setBusy(false); }
+  }
+  return <button disabled={busy} onClick={() => void toggle()}>{row.agentEnabled ? '关闭代理' : '开启代理'}</button>;
 }
 
 function ContactPolicyEditor({ row, run }: { row: Contact; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
@@ -321,7 +337,7 @@ function App() {
       <p>主动联系：{row.activeContactEnabled ? '开启' : '关闭'} · 主动表白：{row.activeConfessionEnabled ? '开启' : '关闭'}</p>
       <p>允许时段：{row.allowedWindows?.join('、') || '未配置'} · 限制：{row.restrictions?.join('、') || '无'}</p><p className="muted">策略版本 {row.policyVersion} · 暂停原因 {row.pauseReasons?.map(reason).join('、') || '无'}</p>
       {!!row.unreviewedPausedInboundCount && <p role="alert" className="warning">暂停期间收到 {row.unreviewedPausedInboundCount} 条未核对来信。请到会话页查看；恢复不会自动生成回复。</p>}
-      {can(row, 'updatePolicy') && <ContactPolicyEditor row={row} run={run} />}
+      {can(row, 'updatePolicy') && <><ContactAgentControl row={row} run={run} /><ContactPolicyEditor row={row} run={run} /></>}
       <RowActions row={row} prefix="/contacts" run={(path, body) => run(path, body).catch(() => {})} actions={[{ name: 'pauseContact', title: '暂停联系人' }, { name: 'resumeContact', title: '恢复联系人', extra: { reason: row.pauseReasons?.[0] } }]} />
     </article>)}</section>}
     {showContent && page === 'conversations' && <section className="stack">{list<Conversation>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.contactName}</h3><span className="badge">{label(row.status)}</span></div><p className="muted">修订 {row.revision} · generation {row.generation} · 暂停 {row.pauseReasons.map(reason).join('、') || '无'}</p>

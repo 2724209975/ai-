@@ -47,8 +47,9 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
 
     const platform = new MockPlatformAdapter({ platform: 'qq', accountId, authority, clock });
     platform.setConnection('RECONCILING'); platform.setConnection('CONNECTED');
+    let modelCalls = 0;
     const intelligence = {
-      async propose() { return { shouldReply: true, risks: ['ordinary' as const], timing: 'now' as const, generatorVersion: 'fake', alternatives: [{ key: 'a', strategySummary: '普通回应', parts: [{ key: 'p1', sequence: 1, type: 'text' as const, content: '第一条' }] }] }; },
+      async propose() { modelCalls++; return { shouldReply: true, risks: ['ordinary' as const], timing: 'now' as const, generatorVersion: 'fake', alternatives: [{ key: 'a', strategySummary: '普通回应', parts: [{ key: 'p1', sequence: 1, type: 'text' as const, content: '第一条' }] }] }; },
       async checkEdited() { return { allowed: true, reasons: [] }; },
     };
     const service = new PgConfirmedService({ pool, data, intelligence, platform, authority, now: clock });
@@ -252,6 +253,40 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     assert.equal(queue.length, 100);
     assert.equal(queue[0]?.taskId, pending.taskId, 'pending work precedes newer history before the query limit');
     assert.ok(queue[0]?.allowedActions.includes('confirmPlan'));
+
+    // Turning the agent off invalidates candidates and receives without any model work.
+    const currentContact = () => service.ownerContacts().then(result => result.items.find(item => item.id === contactId)!);
+    await service.updatePolicy(contactId, { expectedVersion: (await currentContact()).version, idempotencyKey: 'agent-off', policy: { agentEnabled: false } });
+    assert.equal((await currentContact()).status, 'DISABLED');
+    assert.equal((await service.getConversation(conversationId)).plans.find(plan => plan.id === pending.planId)?.status, 'INVALIDATED');
+    const callsBeforeOffInbound = modelCalls;
+    assert.equal(await service.ingestPlatformEvent(inbound('agent-off-inbound', '关闭代理期间仍保存来信')), undefined);
+    assert.equal(modelCalls, callsBeforeOffInbound);
+    assert.ok((await service.ownerConversations()).items.find(item => item.contactId === contactId)?.messages.some(message => message.text === '关闭代理期间仍保存来信'));
+    await service.pauseAll({ expectedVersion: (await service.ownerOverview()).version, idempotencyKey: 'off-global-pause' });
+    await service.resumeAll({ expectedVersion: (await service.ownerOverview()).version, idempotencyKey: 'off-global-resume' });
+    assert.equal((await currentContact()).status, 'DISABLED', 'global resume never enables a disabled agent');
+    await service.pauseContact(contactId, { expectedVersion: (await currentContact()).version, idempotencyKey: 'off-contact-pause' });
+    await service.resumeContact(contactId, { expectedVersion: (await currentContact()).version, idempotencyKey: 'off-contact-resume' });
+    assert.equal((await currentContact()).status, 'DISABLED');
+    await service.updatePolicy(contactId, { expectedVersion: (await currentContact()).version, idempotencyKey: 'agent-on', policy: { agentEnabled: true } });
+    assert.equal((await currentContact()).status, 'READY_CONFIRM');
+    assert.equal(modelCalls, callsBeforeOffInbound, 'enabling does not replay old inbound');
+    assert.ok(await service.ingestPlatformEvent(inbound('agent-on-inbound', '重新开启后的新来信')));
+    assert.equal(modelCalls, callsBeforeOffInbound + 1);
+    assert.equal(platform.submissionCount, 0);
+
+    // Disabling during collection discards that pending batch even after re-enabling.
+    const collecting = new PgConfirmedService({ pool, data, intelligence, platform, authority, now: clock, aggregationWindowMs: 100 });
+    await collecting.ingestPlatformEvent(inbound('agent-collecting', '收集中关闭'));
+    assert.equal((await currentContact()).status, 'COLLECTING');
+    await service.updatePolicy(contactId, { expectedVersion: (await currentContact()).version, idempotencyKey: 'collect-agent-off', policy: { agentEnabled: false } });
+    await service.updatePolicy(contactId, { expectedVersion: (await currentContact()).version, idempotencyKey: 'collect-agent-on', policy: { agentEnabled: true } });
+    const collected = await pool.query('SELECT collection_message_ids,collection_due_at FROM orch_conversations WHERE contact_id=$1', [contactId]);
+    assert.deepEqual(collected.rows[0].collection_message_ids, []);
+    assert.equal(collected.rows[0].collection_due_at, null);
+    assert.equal(await collecting.flushDue(conversationId), undefined);
+    assert.equal(modelCalls, callsBeforeOffInbound + 1);
   } finally {
     if (pool) await pool.end();
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
