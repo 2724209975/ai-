@@ -10,7 +10,7 @@ const enabled = process.env.RUN_BROWSER_E2E === '1';
 const build = resolve(dirname(fileURLToPath(import.meta.url)), '../build');
 const evidence = resolve(dirname(fileURLToPath(import.meta.url)), '../evidence');
 
-async function fixture(mode: 'stale' | 'unknown' | 'ready') {
+async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
   let stale = false;
   let contact = { id: 'contact-1', version: 1, status: 'READY_CONFIRM', allowedActions: ['updatePolicy'],
     name: '测试联系人', platform: 'wechat', agentEnabled: true, sendMode: 'confirm', goal: '自然聊天',
@@ -46,7 +46,11 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready') {
       faults: [] });
     if (path === '/api/v1/tasks' && request.method === 'GET') return mode === 'unknown'
       ? json(503, { code: 'MODEL_UNAVAILABLE', message: '故障', retryable: true, correlationId: 'trace-503' })
-      : json(200, { items: [task()] });
+      : json(200, { items: mode === 'queue' ? [task(),
+        { ...task(), id: 'past', taskId: 'past', status: 'REJECTED', allowedActions: [], contactName: '已处理联系人' },
+        { ...task(), id: 'unresolved', taskId: 'unresolved', status: 'INVALIDATED', allowedActions: [], contactName: '需核对联系人',
+          sends: [{ sendTaskId: 'unknown-send', sequence: 1, status: 'RESULT_UNKNOWN' }] },
+      ] : [task()] });
     if (path === '/api/v1/tasks/task-1/confirm' && request.method === 'POST') {
       stale = true;
       return json(409, { code: 'STALE_PLAN', message: '候选已失效', retryable: false, correlationId: 'trace-409' });
@@ -105,6 +109,8 @@ test('320px: unprovided connection/fault status, auto fallback and stale 409', {
     await page.getByText(/自动模式暂未开放，本轮转人工确认/).waitFor();
     await page.getByRole('button', { name: '确认并发送' }).click();
     await page.getByText(/旧版本未发送/).waitFor();
+    await page.getByText('暂无待处理任务').waitFor();
+    await page.getByRole('button', { name: '历史记录（1）' }).click();
     await page.getByText(/已失效：NEW_MESSAGE/).waitFor();
     assert.equal(await page.getByRole('button', { name: '确认并发送' }).count(), 0);
     await page.getByRole('link', { name: '会话' }).click();
@@ -122,7 +128,7 @@ test('390px: 503 remains a failure and 501 pages are unavailable', { skip: !enab
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await page.goto(api.url + '/#tasks');
     await page.getByText(/服务或依赖暂不可用，当前状态不能视为正常/).waitFor();
-    assert.equal(await page.getByText('暂无待办').count(), 0);
+    assert.equal(await page.getByText('暂无待处理任务').count(), 0);
     for (const [name, path] of [['Skill', 'skills'], ['导入', 'imports'], ['故障', 'faults']]) {
       await Promise.all([
         page.waitForResponse(response => response.url().endsWith('/api/v1/' + path) && response.status() === 501),
@@ -135,6 +141,24 @@ test('390px: 503 remains a failure and 501 pages are unavailable', { skip: !enab
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
     await mkdir(evidence, { recursive: true });
     await page.screenshot({ path: resolve(evidence, 'g2-faults-501-390.png') });
+  } finally { await browser.close(); await api.close(); }
+});
+
+test('390px: current tasks keep unknown sends visible and history remains accessible', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
+  const { chromium } = await import('playwright');
+  const api = await fixture('queue'); const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await page.goto(api.url + '/#tasks');
+    await page.getByRole('button', { name: '待处理（2）' }).waitFor();
+    assert.equal(await page.getByRole('heading', { name: '需核对联系人' }).count(), 1);
+    assert.equal(await page.getByRole('heading', { name: '已处理联系人' }).count(), 0);
+    await page.getByRole('button', { name: '历史记录（1）' }).click();
+    await page.getByRole('heading', { name: '已处理联系人' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '确认并发送' }).count(), 0);
+    await page.getByRole('button', { name: '待处理（2）' }).click();
+    await page.getByRole('heading', { name: '需核对联系人' }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
   } finally { await browser.close(); await api.close(); }
 });
 

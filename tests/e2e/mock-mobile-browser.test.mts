@@ -92,6 +92,8 @@ test('mock mobile Chromium: stale confirmation reports no send and refreshes ver
     await page.getByText('合成联系人').waitFor();
     await page.getByRole('button', { name: '确认并发送' }).click();
     await page.getByText(/旧版本未发送/).first().waitFor();
+    await page.getByText('暂无待处理任务').waitFor();
+    await page.getByRole('button', { name: '历史记录（1）' }).click();
     await page.getByText(/已失效：NEW_MESSAGE/).waitFor();
     assert.equal(server.commands.length, 1);
     assert.equal(await page.getByRole('button', { name: '确认并发送' }).count(), 0);

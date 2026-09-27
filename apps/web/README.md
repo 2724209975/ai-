@@ -28,6 +28,8 @@ npm run serve:owner                  # 管理 API + 静态页面，默认 127.0.
 
 已接通的查询：`/overview`、`/tasks`、`/contacts`、`/conversations`、`/facts`、`/analyses`、`/media`、`/audit`。
 
+待办默认显示需要处理的方案与尚未完成的发送；已拒绝、已失效和已完成的记录可切换到「历史记录」查看。任何带 `RESULT_UNKNOWN` 发送的记录仍留在待处理列表。每次最多加载 100 条，后端先选待处理记录，再按更新时间补入历史；页面数字只统计本次加载的记录。
+
 已接通的命令：`/tasks/{id}/confirm|reject`、`/control/pause-all|resume-all`、`/contacts/{id}/pauseContact|resumeContact|updatePolicy`、`/facts/{id}/confirmFact|correctFact|deleteFact`、`/analyses/{id}/correctAnalysis`、`/media/{id}/approveAsset|revokeAsset`。
 
 `/skills`、`/imports`、`/faults` 还没有持久 provider，返回 `501 NOT_IMPLEMENTED`，页面会显示明确错误而不是空列表。这些路由与字段仍以 [06 REST 提案](../../docs/reports/web-06-api-proposal-2026-09-23.md) 和 [contracts.md](../../docs/contracts.md) §3 为准；未列入契约的字段不得作为稳定接口使用。

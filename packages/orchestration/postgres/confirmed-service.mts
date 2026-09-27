@@ -498,7 +498,9 @@ export class PgConfirmedService {
       const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
       const rows = await tx.query<TaskRow & { contact_id: string; conversation_id: string; plan_version: number | string; plan_status: string; context_snapshot_id: string; policy_version: number | string; alternatives: PlanRow['alternatives']; trigger_message_ids: string[]; generation: number | string; current_generation: number | string; dependency_epoch: number | string; current_dependency_epoch: number | string; skill_epoch: number | string; current_skill_epoch: number | string; paused: boolean; unresolved_send_key: string | null; pause_reasons: string[] }>(`SELECT t.*,p.contact_id,p.conversation_id,p.version AS plan_version,p.status AS plan_status,p.context_snapshot_id,p.policy_version,p.alternatives,p.trigger_message_ids,p.generation,dc.generation AS current_generation,p.dependency_epoch,dc.dependency_epoch AS current_dependency_epoch,p.skill_epoch,dc.skill_epoch AS current_skill_epoch,dc.paused,dc.unresolved_send_key,o.pause_reasons
         FROM orch_confirmation_tasks t JOIN orch_plans p ON p.id=t.plan_id JOIN orch_conversations o ON o.conversation_id=p.conversation_id JOIN dispatch_control dc ON dc.conversation_id=p.conversation_id
-        ORDER BY t.updated_at DESC,t.id DESC LIMIT 100`);
+        ORDER BY (t.status='PENDING' OR p.status IN ('APPROVED','PARTIALLY_SENT','RESULT_UNKNOWN')
+          OR EXISTS (SELECT 1 FROM orch_send_tasks s WHERE s.plan_id=p.id AND s.status IN ('CREATED','RESULT_UNKNOWN'))) DESC,
+          t.updated_at DESC,t.id DESC LIMIT 100`);
       const items = [];
       for (const t of rows.rows) {
         await setContactScope(tx, t.contact_id);

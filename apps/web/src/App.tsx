@@ -32,6 +32,9 @@ const reasonLabels: Record<string, string> = {
 };
 const reason = (code: string) => reasonLabels[code] ? `${reasonLabels[code]}（${code}）` : code;
 const can = (row: Operable, action: string) => row.allowedActions.includes(action);
+const needsAttention = (task: Task) => task.allowedActions.length > 0
+  || ['AWAITING_CONFIRMATION', 'APPROVED', 'PARTIALLY_SENT', 'RESULT_UNKNOWN'].includes(task.status)
+  || task.sends.some(send => ['CREATED', 'RESULT_UNKNOWN'].includes(send.status));
 const key = () => crypto.randomUUID();
 const formatError = (error: unknown) => {
   if (!(error instanceof ApiError)) return '读取失败，请稍后重试。';
@@ -124,6 +127,22 @@ function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<
     </div>
     <h4>逐条发送状态</h4><SendState sends={task.sends} run={run} />
   </article>;
+}
+
+function TaskList({ tasks, run }: { tasks: Task[]; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
+  const [history, setHistory] = useState(false);
+  const current = tasks.filter(needsAttention);
+  const past = tasks.filter(task => !needsAttention(task));
+  const visible = history ? past : current;
+  return <section className="stack">
+    <div className="actions" aria-label="待办范围">
+      <button aria-pressed={!history} className={!history ? 'primary' : ''} onClick={() => setHistory(false)}>待处理（{current.length}）</button>
+      <button aria-pressed={history} className={history ? 'primary' : ''} onClick={() => setHistory(true)}>历史记录（{past.length}）</button>
+    </div>
+    {visible.length ? visible.map(task => <TaskCard key={task.taskId} task={task} run={run} />)
+      : <p className="empty">{history ? '暂无历史记录' : '暂无待处理任务'}</p>}
+    <p className="muted">最多加载 100 条记录，待处理任务优先。</p>
+  </section>;
 }
 
 function RowActions({ row, prefix, run, actions }: { row: Operable; prefix: string; run: (path: string, body: Record<string, unknown>) => Promise<void>; actions: { name: string; title: string; extra?: Record<string, unknown> }[] }) {
@@ -296,7 +315,7 @@ function App() {
       <article className="card"><h3>故障</h3>{row.faults.length ? row.faults.map(fault => <p key={fault.id}>{fault.summary} · {label(fault.status)}</p>) : <p className="warning">{row.faultQueryStatus === 'ready' ? '当前查询范围内没有故障记录。' : '故障汇总查询尚未接入；不能判断系统无故障。'}</p>}</article>
       <p className="muted">本页轮询或手动刷新不构成可靠后台通知。</p>
     </section>; })()}
-    {showContent && page === 'tasks' && <section className="stack">{list<Task>().length ? list<Task>().map(task => <TaskCard key={task.taskId} task={task} run={run} />) : <p className="empty">暂无待办</p>}</section>}
+    {showContent && page === 'tasks' && <TaskList tasks={list<Task>()} run={run} />}
     {showContent && page === 'contacts' && <section className="stack">{list<Contact>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.name}</h3><span className="badge">{label(row.status)}</span></div>
       <p>{row.platform} · {row.agentEnabled ? '代理开启' : '代理关闭'} · {row.sendMode}</p><p>目标：{row.goal}</p><p>表达偏好：{row.stylePreferences?.join('、') || '未配置'}</p>
       <p>主动联系：{row.activeContactEnabled ? '开启' : '关闭'} · 主动表白：{row.activeConfessionEnabled ? '开启' : '关闭'}</p>

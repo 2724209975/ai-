@@ -239,6 +239,19 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
 
     // Audit stays an honest empty projection until decision writers exist.
     assert.deepEqual(await owner.listAudit(), { items: [] });
+
+    // An older actionable task must survive a page filled with newer rejected history.
+    const pending = await service.ingestPlatformEvent(inbound('priority-pending', '等待确认的来信'));
+    assert.ok(pending);
+    for (let i = 0; i < 101; i++) {
+      const historical = await service.ingestPlatformEvent(inbound(`history-${i}`, '已处理来信', otherConversationId, 'other'));
+      assert.ok(historical);
+      await service.rejectTask(historical.taskId, { expectedVersion: 1, idempotencyKey: `reject-history-${i}` });
+    }
+    const queue = (await service.ownerTasks()).items;
+    assert.equal(queue.length, 100);
+    assert.equal(queue[0]?.taskId, pending.taskId, 'pending work precedes newer history before the query limit');
+    assert.ok(queue[0]?.allowedActions.includes('confirmPlan'));
   } finally {
     if (pool) await pool.end();
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
