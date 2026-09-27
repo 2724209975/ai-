@@ -11,7 +11,7 @@ import { defaultPolicy, routeReply, type Policy } from '../policy/evaluate.mts';
 import { newId, sha256 } from './ids.mts';
 
 type Row = { conversation_id: string; contact_id: string; account_id: string; external_contact_ref: string; policy: Policy; policy_version: number | string; generation: number | string; revision: number | string; version: number | string; state: string; pause_reasons: string[]; last_inbound_message_id: string | null; paused_inbound_unreviewed_count: number | string; collection_started_at?: Date | string | null; collection_due_at?: Date | string | null; collection_message_ids?: string[] | null };
-type PlanRow = { id: string; conversation_id: string; contact_id: string; context_snapshot_id: string; generation: number | string; policy_version: number | string; dependency_epoch: number | string; skill_epoch: number | string; alternatives: { alternativeId: string; strategySummary: string; parts: { replyPartId: string; sequence: number; type: 'text'; content: string }[] }[]; risks: string[]; status: string; version: number | string; final_content_hash: string | null; approved_alternative_id: string | null; invalidation_reasons?: string[] };
+type PlanRow = { id: string; conversation_id: string; contact_id: string; context_snapshot_id: string; generation: number | string; policy_version: number | string; dependency_epoch: number | string; skill_epoch: number | string; trigger_message_ids: string[]; alternatives: { alternativeId: string; strategySummary: string; parts: { replyPartId: string; sequence: number; type: 'text'; content: string }[] }[]; risks: string[]; status: string; version: number | string; final_content_hash: string | null; approved_alternative_id: string | null; invalidation_reasons?: string[] };
 type TaskRow = { id: string; plan_id: string; status: string; version: number | string; reason_codes: string[]; confirmed_content_hash: string | null; confirmed_plan_version: number | string | null };
 type SendRow = { id: string; plan_id: string; reply_part_id: string; sequence: number; send_key: string; content: string; content_sha256: string; status: string; version: number | string; correlation_id: string; receipt: { status: string; platformMessageId: string | null } | null; approval_source?: string };
 export type PersistentContext = Awaited<ReturnType<PgDataProvider['buildContext']>>;
@@ -511,12 +511,12 @@ export class PgConfirmedService {
       const items = [];
       for (const t of rows.rows) {
         await setContactScope(tx, t.contact_id);
-        const detail = (await tx.query<{ display_name: string; snapshot_status: string }>(`SELECT c.display_name,s.status AS snapshot_status FROM data_contacts c JOIN data_context_snapshots s ON s.contact_id=c.id WHERE c.id=$1 AND s.id=$2`, [t.contact_id, t.context_snapshot_id])).rows[0];
+        const detail = (await tx.query<{ display_name: string; snapshot_status: string; send_mode: string }>(`SELECT c.display_name,s.status AS snapshot_status,o.policy->>'sendMode' AS send_mode FROM data_contacts c JOIN data_context_snapshots s ON s.contact_id=c.id JOIN orch_conversations o ON o.contact_id=c.id WHERE c.id=$1 AND s.id=$2`, [t.contact_id, t.context_snapshot_id])).rows[0];
         if (!detail) fail('STALE_PLAN');
         const messages = await tx.query<{ id: string; type: string; content_ref: string | null; sent_at: Date | string }>('SELECT id,type,content_ref,sent_at FROM data_messages WHERE id=ANY($1::uuid[]) AND contact_id=$2', [t.trigger_message_ids, t.contact_id]);
         const sends = await tx.query<SendRow>('SELECT * FROM orch_send_tasks WHERE plan_id=$1 ORDER BY sequence', [t.plan_id]);
         const active = !global?.paused && !t.paused && !t.unresolved_send_key && t.status === 'PENDING' && t.plan_status === 'AWAITING_CONFIRMATION' && detail.snapshot_status === 'valid' && Number(t.generation) === Number(t.current_generation) && Number(t.dependency_epoch) === Number(t.current_dependency_epoch) && Number(t.skill_epoch) === Number(t.current_skill_epoch) && !t.pause_reasons.length;
-        items.push({ id: t.id, taskId: t.id, version: Number(t.version), taskVersion: Number(t.version), status: t.plan_status, allowedActions: active ? ['confirmPlan', 'rejectPlan'] : [], reasonCodes: t.reason_codes,
+        items.push({ id: t.id, taskId: t.id, version: Number(t.version), taskVersion: Number(t.version), status: t.plan_status, allowedActions: active ? ['confirmPlan', 'rejectPlan', ...(detail.send_mode === 'confirm' ? ['regeneratePlan'] : [])] : [], reasonCodes: t.reason_codes,
           planId: t.plan_id, planVersion: Number(t.plan_version), contactId: t.contact_id, contactName: detail.display_name, conversationId: t.conversation_id,
           triggerMessages: t.trigger_message_ids.map(id => { const m = messages.rows.find(x => x.id === id); return { id, type: m?.type ?? 'text', text: m?.content_ref ?? undefined, at: m?.sent_at instanceof Date ? m.sent_at.toISOString() : String(m?.sent_at ?? '') }; }),
           alternatives: t.alternatives, sends: sends.rows.map(s => ({ sendTaskId: s.id, version: Number(s.version), sequence: s.sequence, status: s.status, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })), contextSnapshotId: t.context_snapshot_id, policyVersion: Number(t.policy_version) });
@@ -571,6 +571,42 @@ export class PgConfirmedService {
       await tx.query(`UPDATE orch_conversations SET state='READY_CONFIRM',version=version+1 WHERE conversation_id=$1 AND state='AWAITING_CONFIRMATION'`, [row.conversation_id]);
       await tx.query('INSERT INTO orch_owner_commands(contact_id,idempotency_key,command_hash,plan_id,result_version) VALUES($1,$2,$3,$4,$5)', [target.contact_id, input.idempotencyKey, hash, plan.id, version]);
       return { resultVersion: version, correlationId: newId(this.#now()), status: 'REJECTED' };
+    });
+  }
+
+  /** Replace an unconfirmed plan with a durable generation request; never schedules a send. */
+  async regenerateTask(taskId: string, input: { expectedVersion: number; idempotencyKey: string }) {
+    requireText(input.idempotencyKey);
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const scope = `regenerate:${taskId}`;
+      const hash = sha256(JSON.stringify({ taskId, expectedVersion: input.expectedVersion }));
+      const previous = (await tx.query<{ command_hash: string; result_version: number | string; correlation_id: string }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [scope, input.idempotencyKey])).rows[0];
+      if (previous) { if (previous.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: 'GENERATION_REQUESTED' }; }
+      const target = (await tx.query<{ plan_id: string; conversation_id: string }>('SELECT t.plan_id,p.conversation_id FROM orch_confirmation_tasks t JOIN orch_plans p ON p.id=t.plan_id WHERE t.id=$1', [taskId])).rows[0];
+      if (!target) fail('NOT_FOUND');
+      const row = await this.#conversation(tx, target.conversation_id, true);
+      const plan = await this.#plan(tx, target.plan_id, true);
+      const task = await this.#task(tx, target.plan_id, true);
+      if (!row || !plan || !task || task.status !== 'PENDING' || plan.status !== 'AWAITING_CONFIRMATION'
+        || Number(task.version) !== input.expectedVersion || Number(plan.generation) !== Number(row.generation)
+        || Number(plan.policy_version) !== Number(row.policy_version) || !row.last_inbound_message_id
+        || !plan.trigger_message_ids.includes(row.last_inbound_message_id)) fail('STALE_PLAN');
+      const control = (await tx.query<{ paused: boolean; unresolved_send_key: string | null; skill_epoch: number | string }>('SELECT paused,unresolved_send_key,skill_epoch FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id])).rows[0];
+      const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
+      if (!control || !global || control.paused || control.unresolved_send_key || global.paused || row.pause_reasons.length
+        || !row.policy.agentEnabled || row.policy.sendMode !== 'confirm') fail('POLICY_BLOCKED');
+      if (Number(control.skill_epoch) !== Number(plan.skill_epoch)) fail('STALE_PLAN');
+      await this.#readProjection(tx, row, plan);
+      if ((await tx.query('SELECT id FROM orch_send_tasks WHERE plan_id=$1 LIMIT 1', [plan.id])).rows.length) fail('STALE_PLAN');
+      await this.#invalidate(tx, row.conversation_id, 'OWNER_REGENERATE');
+      const at = new Date(this.#now()).toISOString();
+      const changed = await tx.query<{ version: number | string }>(`UPDATE orch_conversations SET state='COLLECTING',
+        collection_started_at=$2::timestamptz,collection_due_at=$2::timestamptz,collection_message_ids=$3::uuid[],
+        version=version+1,updated_at=now() WHERE conversation_id=$1 RETURNING version`, [row.conversation_id, at, plan.trigger_message_ids]);
+      const version = Number(changed.rows[0]!.version), correlationId = newId(this.#now());
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', [scope, input.idempotencyKey, hash, version, correlationId]);
+      return { resultVersion: version, correlationId, status: 'GENERATION_REQUESTED' };
     });
   }
 

@@ -54,7 +54,7 @@ test('real PostgreSQL: PG-persistent 04 bridge turns an inbound text into a pend
     const tasks = await service.ownerTasks();
     assert.equal(tasks.items.length, 1);
     assert.equal(tasks.items[0]?.id, created.taskId);
-    assert.deepEqual(tasks.items[0]?.allowedActions, ['confirmPlan', 'rejectPlan']);
+    assert.deepEqual(tasks.items[0]?.allowedActions, ['confirmPlan', 'rejectPlan', 'regeneratePlan']);
     assert.equal(tasks.items[0]?.triggerMessages[0]?.text, '你好');
     const alternatives = tasks.items[0]?.alternatives ?? [];
     assert.ok(alternatives.length >= 1 && alternatives.length <= 3, 'candidate count must stay within 1..3');

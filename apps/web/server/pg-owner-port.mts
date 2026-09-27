@@ -21,6 +21,7 @@ export function createPgOwnerPort(service: PgConfirmedService, data: PgOwnerData
     async audit(ownerId) { owner(ownerId); return data.listAudit(); },
     async confirm(ownerId, taskId, command) { owner(ownerId); return service.confirmTask(taskId, command); },
     async reject(ownerId, taskId, command) { owner(ownerId); return service.rejectTask(taskId, command); },
+    async regenerate(ownerId, taskId, command) { owner(ownerId); return service.regenerateTask(taskId, command); },
     async pauseAll(ownerId, command) { owner(ownerId); return service.pauseAll(command); },
     async resumeAll(ownerId, command) { owner(ownerId); return service.resumeAll(command); },
     async pauseContact(ownerId, contactId, command) { owner(ownerId); return service.pauseContact(contactId, command); },

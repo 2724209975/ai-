@@ -13,6 +13,7 @@ import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
 import { PgOwnerDataPort } from '../../packages/data/postgres/owner-data-port.mts';
 import { PgConfirmedService } from '../../packages/orchestration/postgres/confirmed-service.mts';
 import { newId } from '../../packages/orchestration/postgres/ids.mts';
+import { contentHash } from '../../packages/orchestration/conversations/engine.mts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -274,9 +275,39 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     assert.equal(modelCalls, callsBeforeOffInbound, 'enabling does not replay old inbound');
     assert.ok(await service.ingestPlatformEvent(inbound('agent-on-inbound', '重新开启后的新来信')));
     assert.equal(modelCalls, callsBeforeOffInbound + 1);
+    // Regeneration invalidates the old confirmation and survives process replacement.
+    const original = await service.ingestPlatformEvent(inbound('regenerate-inbound', '换一组候选'));
+    assert.ok(original);
+    const originalTask = (await service.ownerTasks()).items.find(task => task.taskId === original.taskId)!;
+    const regenerateCommand = { expectedVersion: originalTask.taskVersion, idempotencyKey: 'regenerate-once' };
+    const callsBeforeRegenerate = modelCalls;
+    const regenerated = await service.regenerateTask(original.taskId, regenerateCommand);
+    assert.equal(regenerated.status, 'GENERATION_REQUESTED');
+    assert.deepEqual(await service.regenerateTask(original.taskId, regenerateCommand), regenerated);
+    await assert.rejects(service.regenerateTask(original.taskId, { ...regenerateCommand, idempotencyKey: 'second-click' }), { message: 'STALE_PLAN' });
+    await assert.rejects(service.rejectTask(original.taskId, { expectedVersion: originalTask.taskVersion, idempotencyKey: 'reject-old-regeneration' }), { message: 'STALE_PLAN' });
+    const oldParts = originalTask.alternatives[0]!.parts.map(part => ({ type: 'text' as const, content: part.content }));
+    await assert.rejects(service.confirmTask(original.taskId, { taskVersion: originalTask.taskVersion, planVersion: originalTask.planVersion,
+      alternativeId: originalTask.alternatives[0]!.alternativeId, editedParts: oldParts, contentHash: contentHash(oldParts), idempotencyKey: 'confirm-old-regeneration' }), { message: 'STALE_PLAN' });
+    assert.equal((await service.getConversation(conversationId)).plans.find(plan => plan.id === original.planId)?.status, 'INVALIDATED');
+    assert.equal(modelCalls, callsBeforeRegenerate, 'requesting only queues work');
+    const regeneratedService = new PgConfirmedService({ pool, data, intelligence, platform, authority, now: clock });
+    await regeneratedService.recover();
+    const newTask = (await regeneratedService.ownerTasks()).items.find(task => task.contactId === contactId && task.allowedActions.includes('confirmPlan'))!;
+    assert.ok(newTask);
+    assert.notEqual(newTask.planId, original.planId);
+    assert.deepEqual(newTask.triggerMessages.map(message => message.id), originalTask.triggerMessages.map(message => message.id));
+    assert.deepEqual(newTask.sends, []);
+    assert.equal(modelCalls, callsBeforeRegenerate + 1);
+    await regeneratedService.recover();
+    assert.equal(modelCalls, callsBeforeRegenerate + 1, 'recovery does not generate twice');
+    assert.equal(platform.submissionCount, 0);
+    await service.ingestPlatformEvent(inbound('regenerate-newer-inbound', '新来信使旧候选失效'));
+    await assert.rejects(service.regenerateTask(newTask.taskId, { expectedVersion: newTask.taskVersion, idempotencyKey: 'regenerate-stale' }), { message: 'STALE_PLAN' });
     assert.equal(platform.submissionCount, 0);
 
     // Disabling during collection discards that pending batch even after re-enabling.
+    const callsBeforeCollection = modelCalls;
     const collecting = new PgConfirmedService({ pool, data, intelligence, platform, authority, now: clock, aggregationWindowMs: 100 });
     await collecting.ingestPlatformEvent(inbound('agent-collecting', '收集中关闭'));
     assert.equal((await currentContact()).status, 'COLLECTING');
@@ -286,7 +317,7 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     assert.deepEqual(collected.rows[0].collection_message_ids, []);
     assert.equal(collected.rows[0].collection_due_at, null);
     assert.equal(await collecting.flushDue(conversationId), undefined);
-    assert.equal(modelCalls, callsBeforeOffInbound + 1);
+    assert.equal(modelCalls, callsBeforeCollection);
   } finally {
     if (pool) await pool.end();
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);

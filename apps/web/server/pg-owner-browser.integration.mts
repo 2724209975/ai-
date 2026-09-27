@@ -133,6 +133,13 @@ test('real HTTP + PostgreSQL + mock send: edited confirmation and stale 409', { 
     assert.equal((await service.ownerContacts()).items[0]?.agentEnabled, true);
     assert.ok(await service.ingestPlatformEvent(inbound('on-inbound', '开启后的新来信')));
     assert.equal(platform.submissionCount, 2, 'enabling still requires confirmation before sending');
+    await page.goto(base + '/#tasks');
+    await page.getByRole('button', { name: '重新生成候选', exact: true }).click();
+    await page.getByText(/已加入候选生成队列/).waitFor();
+    assert.ok(await service.flushDue(conversationId));
+    await page.getByRole('button', { name: '刷新', exact: true }).click();
+    await page.getByRole('button', { name: '确认并发送', exact: true }).waitFor();
+    assert.equal(platform.submissionCount, 2, 'regeneration never submits a message');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
   } finally {
     if (browser) await browser.close();

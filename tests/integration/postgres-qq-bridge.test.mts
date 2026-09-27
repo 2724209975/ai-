@@ -131,7 +131,7 @@ test('real PostgreSQL + fake OneBot: push in, confirm, authorized send out', { s
     assert.equal(tasks.items.length, 1, 'the enrolled contact produced one confirmation task');
     const task = tasks.items[0]!;
     assert.equal(task.triggerMessages[0]?.text, '你好');
-    assert.deepEqual(task.allowedActions, ['confirmPlan', 'rejectPlan']);
+    assert.deepEqual(task.allowedActions, ['confirmPlan', 'rejectPlan', 'regeneratePlan']);
     assert.equal((await fixture.bridge.service.ownerOverview()).pendingCount, 1);
 
     // 4. Duplicate delivery is deduplicated before any business effect.

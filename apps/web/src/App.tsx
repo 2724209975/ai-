@@ -102,6 +102,13 @@ function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<
     } catch (cause) { setError(formatError(cause)); }
     finally { setBusy(false); }
   }
+  async function regenerate() {
+    if (busy || !can(task, 'regeneratePlan')) return;
+    setBusy(true); setError('');
+    try { await run(`/tasks/${encodeURIComponent(task.taskId)}/regenerate`, { expectedVersion: task.taskVersion, idempotencyKey: key() }); }
+    catch (cause) { setError(formatError(cause)); }
+    finally { setBusy(false); }
+  }
   return <article className="card">
     <div className="card-head"><div><h3>{task.contactName}</h3><p className="muted">待办 {task.taskId} · 方案版本 {task.planVersion}</p></div><span className="badge">{label(task.status)}</span></div>
     <p>触发原因：{task.reasonCodes.map(reason).join('、') || '未提供'}</p>
@@ -124,6 +131,7 @@ function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<
     {error && <p className="error" role="alert">{error}</p>}
     <div className="actions">
       {can(task, 'confirmPlan') && <button className="primary" disabled={busy} onClick={() => void submit()}>确认并发送</button>}
+      {can(task, 'regeneratePlan') && <button disabled={busy} onClick={() => void regenerate()}>重新生成候选</button>}
       {can(task, 'rejectPlan') && <button disabled={busy} onClick={() => void run(`/tasks/${encodeURIComponent(task.taskId)}/reject`, { expectedVersion: task.taskVersion, idempotencyKey: key() })}>拒绝候选</button>}
     </div>
     <h4>逐条发送状态</h4><SendState sends={task.sends} run={run} />

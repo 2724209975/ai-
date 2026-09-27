@@ -18,6 +18,7 @@ export type OwnerPort = {
   audit(ownerId: string): Promise<{ items: unknown[] }>;
   confirm(ownerId: string, taskId: string, command: ConfirmCommand): Promise<CommandResult>;
   reject(ownerId: string, taskId: string, command: VersionCommand): Promise<CommandResult>;
+  regenerate(ownerId: string, taskId: string, command: VersionCommand): Promise<CommandResult>;
   pauseAll(ownerId: string, command: VersionCommand): Promise<CommandResult>;
   resumeAll(ownerId: string, command: VersionCommand): Promise<CommandResult>;
   pauseContact(ownerId: string, contactId: string, command: VersionCommand): Promise<CommandResult>;
@@ -205,10 +206,11 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
       if (path === '/api/v1/control/pause-all') return send(response, 200, await deps.ownerPort.pauseAll(ownerId, controlCommand(await readJson(request))));
       if (path === '/api/v1/control/resume-all') return send(response, 200, await deps.ownerPort.resumeAll(ownerId, controlCommand(await readJson(request))));
 
-      let match = /^\/api\/v1\/tasks\/([^/]+)\/(confirm|reject)$/.exec(path);
+      let match = /^\/api\/v1\/tasks\/([^/]+)\/(confirm|reject|regenerate)$/.exec(path);
       if (match) {
         const taskId = resourceId(match[1]);
         const body = await readJson(request);
+        if (match[2] === 'regenerate') return send(response, 200, await deps.ownerPort.regenerate(ownerId, taskId, versionCommand(body)));
         return send(response, 200, match[2] === 'confirm'
           ? await deps.ownerPort.confirm(ownerId, taskId, confirmCommand(body))
           : await deps.ownerPort.reject(ownerId, taskId, versionCommand(body)));

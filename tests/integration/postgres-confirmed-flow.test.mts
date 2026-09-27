@@ -55,7 +55,7 @@ test('real PostgreSQL: text confirmation and two parts survive worker restart', 
     const task = plan.task!;
     const ownerTasks = await service.ownerTasks();
     assert.equal(ownerTasks.items[0]?.id, task.id);
-    assert.deepEqual(ownerTasks.items[0]?.allowedActions, ['confirmPlan', 'rejectPlan']);
+    assert.deepEqual(ownerTasks.items[0]?.allowedActions, ['confirmPlan', 'rejectPlan', 'regeneratePlan']);
     assert.equal(ownerTasks.items[0]?.triggerMessages[0]?.text, '你好');
     assert.equal((await service.ownerOverview()).pendingCount, 1);
     assert.deepEqual((await service.ownerContacts()).items[0]?.allowedActions, ['pauseContact', 'updatePolicy']);
