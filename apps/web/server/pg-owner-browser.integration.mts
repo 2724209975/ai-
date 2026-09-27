@@ -104,6 +104,23 @@ test('real HTTP + PostgreSQL + mock send: edited confirmation and stale 409', { 
     await page.getByRole('button', { name: '确认并发送' }).click();
     await page.getByText(/旧版本未发送/).waitFor();
     assert.equal(platform.submissionCount, 2);
+    // Paused inbound can be drafted explicitly through the real browser/API, without sending.
+    const contact = (await service.ownerContacts()).items[0]!;
+    await service.pauseContact(contactId, { expectedVersion: contact.version, idempotencyKey: 'browser-pause' });
+    await service.ingestPlatformEvent(inbound('message-paused', '暂停时收到的文字'));
+    await page.goto(base + '/#conversations');
+    await page.getByText('暂停时收到的文字', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '为最新来信生成候选' }).count(), 0);
+    await page.goto(base + '/#contacts');
+    await page.getByRole('button', { name: '恢复联系人', exact: true }).click();
+    await page.getByRole('button', { name: '暂停联系人', exact: true }).waitFor();
+    await page.goto(base + '/#conversations');
+    await page.getByRole('button', { name: '为最新来信生成候选' }).click();
+    await page.getByText(/已加入候选生成队列/).waitFor();
+    assert.ok(await service.flushDue(conversationId));
+    await page.goto(base + '/#tasks');
+    await page.getByRole('button', { name: '确认并发送' }).waitFor();
+    assert.equal(platform.submissionCount, 2, 'requesting a candidate cannot submit a message');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
   } finally {
     if (browser) await browser.close();

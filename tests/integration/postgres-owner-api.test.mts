@@ -113,6 +113,7 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     const pausedWithMessages = (await service.ownerConversations()).items.find(item => item.contactId === contactId)!;
     assert.equal(pausedWithMessages.unreviewedPausedInboundCount, 2);
     assert.deepEqual(pausedWithMessages.allowedActions, ['resumeContact', 'acknowledgePausedInbound']);
+    await assert.rejects(service.requestPausedReply(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'draft-while-paused' }), { message: 'POLICY_BLOCKED' });
     assert.equal((await service.getConversation(conversationId)).plans.length, plansBeforePausedInbound, 'paused inbound creates no plan');
     const resumed = await service.resumeContact(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'resume-contact-1' });
     assert.equal(resumed.status, 'RESUMED');
@@ -123,9 +124,31 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     assert.equal((await service.getConversation(conversationId)).plans.length, plansBeforePausedInbound, 'resume does not generate a reply');
     assert.equal((await service.ownerContacts()).items.find(item => item.id === otherContactId)?.unreviewedPausedInboundCount, 0);
     await assert.rejects(service.acknowledgePausedInbound(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'review-stale' }), { message: 'CONFLICT_VERSION' });
-    const reviewed = await service.acknowledgePausedInbound(contactId, { expectedVersion: resumedRow.version, idempotencyKey: 'review-1' });
+    assert.ok(resumedRow.allowedActions.includes('requestPausedReply'));
+    await assert.rejects(service.requestPausedReply(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'draft-stale' }), { message: 'CONFLICT_VERSION' });
+    const request = { expectedVersion: resumedRow.version, idempotencyKey: 'paused-draft-1' };
+    const queued = await service.requestPausedReply(contactId, request);
+    assert.equal(queued.status, 'GENERATION_REQUESTED');
+    assert.deepEqual(await service.requestPausedReply(contactId, request), queued);
+    await assert.rejects(service.requestPausedReply(contactId, { ...request, idempotencyKey: 'paused-draft-2' }), { message: 'CONFLICT_VERSION' });
+    assert.equal((await service.ownerConversations()).items.find(item => item.contactId === contactId)?.status, 'COLLECTING');
+    // A new service instance can finish the persisted request, with no send created.
+    const restarted = new PgConfirmedService({ pool, data, intelligence, platform, authority, now: clock });
+    await restarted.recover();
+    const afterDraft = await restarted.getConversation(conversationId);
+    assert.equal(afterDraft.plans.length, plansBeforePausedInbound + 1);
+    assert.equal(afterDraft.plans.at(-1)?.status, 'AWAITING_CONFIRMATION');
+    assert.equal(afterDraft.plans.at(-1)?.sends.length, 0);
+    assert.equal(platform.submissionCount, 0);
+    const draftTask = (await service.ownerTasks()).items.find(item => item.contactId === contactId && item.allowedActions.includes('confirmPlan'))!;
+    assert.deepEqual(draftTask.triggerMessages.map(message => message.text), ['另一条来信']);
+    await service.rejectTask(draftTask.taskId, { expectedVersion: draftTask.taskVersion, idempotencyKey: 'reject-paused-draft' });
+    const afterRejection = (await service.ownerConversations()).items.find(item => item.contactId === contactId)!;
+    assert.equal(afterRejection.allowedActions.includes('requestPausedReply'), false, 'a previously planned message cannot be requested again');
+    await assert.rejects(service.requestPausedReply(contactId, { expectedVersion: afterRejection.version, idempotencyKey: 'draft-after-reject' }), { message: 'POLICY_BLOCKED' });
+    const reviewed = await service.acknowledgePausedInbound(contactId, { expectedVersion: afterRejection.version, idempotencyKey: 'review-1' });
     assert.equal(reviewed.status, 'REVIEWED');
-    assert.equal((await service.acknowledgePausedInbound(contactId, { expectedVersion: resumedRow.version, idempotencyKey: 'review-1' })).resultVersion, reviewed.resultVersion);
+    assert.equal((await service.acknowledgePausedInbound(contactId, { expectedVersion: afterRejection.version, idempotencyKey: 'review-1' })).resultVersion, reviewed.resultVersion);
     assert.equal((await service.ownerContacts()).items.find(item => item.id === contactId)?.unreviewedPausedInboundCount, 0);
     assert.equal((await service.ownerConversations()).items.find(item => item.contactId === contactId)?.messages.filter(message => message.text?.includes('来信')).length, 2, 'clearing the reminder keeps messages');
 
@@ -135,6 +158,9 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     assert.equal((await service.ownerOverview()).globalPaused, true);
     assert.equal(await service.ingestPlatformEvent(inbound('global-paused-message', '全局暂停时的来信', otherConversationId, 'other')), undefined);
     assert.equal((await service.ownerContacts()).items.find(item => item.id === otherContactId)?.unreviewedPausedInboundCount, 1);
+    const globallyPaused = (await service.ownerConversations()).items.find(item => item.contactId === otherContactId)!;
+    assert.equal(globallyPaused.allowedActions.includes('requestPausedReply'), false);
+    await assert.rejects(service.requestPausedReply(otherContactId, { expectedVersion: globallyPaused.version, idempotencyKey: 'draft-global-paused' }), { message: 'POLICY_BLOCKED' });
     const resumedAll = await service.resumeAll({ expectedVersion: globalVersion + 1, idempotencyKey: 'resume-all-1' });
     assert.equal(resumedAll.status, 'ACTIVE');
     assert.equal((await service.ownerOverview()).globalPaused, false);

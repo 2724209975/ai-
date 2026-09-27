@@ -23,6 +23,7 @@ export type OwnerPort = {
   pauseContact(ownerId: string, contactId: string, command: VersionCommand): Promise<CommandResult>;
   resumeContact(ownerId: string, contactId: string, command: VersionCommand): Promise<CommandResult>;
   acknowledgePausedInbound(ownerId: string, contactId: string, command: VersionCommand): Promise<CommandResult>;
+  requestPausedReply(ownerId: string, contactId: string, command: VersionCommand): Promise<CommandResult>;
   updatePolicy(ownerId: string, contactId: string, command: PolicyCommand): Promise<CommandResult>;
   changeFact(ownerId: string, factId: string, command: FactCommand): Promise<CommandResult>;
   correctAnalysis(ownerId: string, analysisId: string, command: AnalysisCommand): Promise<CommandResult>;
@@ -217,13 +218,14 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
         const sendTaskId = resourceId(match[1]);
         return send(response, 200, await deps.ownerPort.resolveSend(ownerId, sendTaskId, resolveSendCommand(await readJson(request))));
       }
-      match = /^\/api\/v1\/contacts\/([^/]+)\/(pauseContact|resumeContact|acknowledgePausedInbound|updatePolicy)$/.exec(path);
+      match = /^\/api\/v1\/contacts\/([^/]+)\/(pauseContact|resumeContact|acknowledgePausedInbound|requestPausedReply|updatePolicy)$/.exec(path);
       if (match) {
         const contactId = resourceId(match[1]);
         const body = await readJson(request);
         if (match[2] === 'pauseContact') return send(response, 200, await deps.ownerPort.pauseContact(ownerId, contactId, versionCommand(body)));
         if (match[2] === 'resumeContact') return send(response, 200, await deps.ownerPort.resumeContact(ownerId, contactId, versionCommand(body)));
         if (match[2] === 'acknowledgePausedInbound') return send(response, 200, await deps.ownerPort.acknowledgePausedInbound(ownerId, contactId, versionCommand(body)));
+        if (match[2] === 'requestPausedReply') return send(response, 200, await deps.ownerPort.requestPausedReply(ownerId, contactId, versionCommand(body)));
         return send(response, 200, await deps.ownerPort.updatePolicy(ownerId, contactId, policyCommand(body)));
       }
       match = /^\/api\/v1\/facts\/([^/]+)\/(confirmFact|correctFact|deleteFact)$/.exec(path);

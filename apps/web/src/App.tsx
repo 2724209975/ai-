@@ -9,6 +9,7 @@ const pages: { id: Page; label: string }[] = [
   { id: 'audit', label: '审计' }, { id: 'faults', label: '故障' },
 ];
 const labels: Record<string, string> = {
+  GENERATION_REQUESTED: '已加入候选生成队列，请到待办查看', REVIEWED: '来信提醒已清除',
   CREATED: '尚未发送', PREFLIGHT: '发送前检查', LEASED: '待提交', SUBMITTING: '提交中',
   SUBMITTED: '平台已接收', DELIVERED: '已送达', FAILED_DEFINITE: '确定失败',
   REJECTED_PREFLIGHT: '发送前拒绝', CANCELLED_PRE_SUBMIT: '提交前取消',
@@ -305,7 +306,8 @@ function App() {
       <RowActions row={row} prefix="/contacts" run={(path, body) => run(path, body).catch(() => {})} actions={[{ name: 'pauseContact', title: '暂停联系人' }, { name: 'resumeContact', title: '恢复联系人', extra: { reason: row.pauseReasons?.[0] } }]} />
     </article>)}</section>}
     {showContent && page === 'conversations' && <section className="stack">{list<Conversation>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.contactName}</h3><span className="badge">{label(row.status)}</span></div><p className="muted">修订 {row.revision} · generation {row.generation} · 暂停 {row.pauseReasons.map(reason).join('、') || '无'}</p>
-      {!!row.unreviewedPausedInboundCount && <p role="alert" className="warning">暂停期间收到 {row.unreviewedPausedInboundCount} 条未核对来信。下方显示最近 20 条消息；如有更早来信，请在原客户端核对。恢复不会自动回复。</p>}
+      {!!row.unreviewedPausedInboundCount && <p role="alert" className="warning">暂停期间收到 {row.unreviewedPausedInboundCount} 条未核对来信。下方显示最近 20 条消息；如有更早来信，请在原客户端核对。恢复后可为最新未处理文字生成候选，再到待办确认。</p>}
+      {can(row, 'requestPausedReply') && <button className="primary" onClick={() => void run(`/contacts/${encodeURIComponent(row.contactId)}/requestPausedReply`, { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>为最新来信生成候选</button>}
       {(row.pauseReasons.includes('OWNER_ORIGIN') || row.messages.some(message => message.actor === 'unknown')) && <p role="alert" className="warning">存在来源未明的自身账号消息。此状态不能自动判为本人发言或系统回显；请人工核对，恢复须以后端允许动作为准。</p>}
       {row.sends.some(send => send.status === 'RESULT_UNKNOWN') && <p role="alert" className="warning">发送结果未知。核对前不要重复发送；核对后用下方按钮记录结果。</p>}
       {row.messages.map(message => <blockquote key={message.id}><small>{message.at} · {message.actor === 'unknown' ? '来源未明' : message.actor} · {message.type}</small><p>{message.text ?? '媒体内容请到媒体页面查看'}</p>

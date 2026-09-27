@@ -661,7 +661,7 @@ export class PgConfirmedService {
         const paused = Boolean(global?.paused) || row.pause_reasons.length > 0;
         items.push({
           id: row.conversation_id, version: Number(row.version), status: row.state,
-          allowedActions: [...(paused ? ['resumeContact'] : ['pauseContact']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : [])],
+          allowedActions: [...(paused ? ['resumeContact'] : ['pauseContact']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : []), ...(await this.#canRequestPausedReply(tx, row) ? ['requestPausedReply'] : [])],
           contactId: row.contact_id, contactName: contact?.display_name ?? '未命名联系人',
           revision: Number(row.revision), generation: Number(row.generation),
           pauseReasons: row.pause_reasons, globalPaused: Boolean(global?.paused), unreviewedPausedInboundCount: Number(row.paused_inbound_unreviewed_count),
@@ -703,6 +703,46 @@ export class PgConfirmedService {
       await appendOutbox(tx, { eventId: newId(this.#now()), eventType: 'GlobalPauseChanged', eventVersion: 1, occurredAt: new Date(this.#now()).toISOString(), correlationId, causationId: correlationId, aggregateId: 'global', aggregateVersion: version, payload: { paused: false, resumeAll: true } });
       return { resultVersion: version, correlationId, status: 'ACTIVE' };
     });
+  }
+
+  /** Persist an explicit request as a normal collection batch; the worker generates the draft.
+   * A request never confirms a plan, and only unplanned paused text in confirm mode is eligible. */
+  async requestPausedReply(contactId: string, input: { expectedVersion: number; idempotencyKey: string }) {
+    requireText(input.idempotencyKey);
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const hash = sha256(JSON.stringify({ action: 'requestPausedReply', contactId, expectedVersion: input.expectedVersion }));
+      const previous = (await tx.query<{ command_hash: string; result_version: number | string; correlation_id: string }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [contactId, input.idempotencyKey])).rows[0];
+      if (previous) { if (previous.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: 'GENERATION_REQUESTED' }; }
+      const row = (await tx.query<Row>('SELECT * FROM orch_conversations WHERE contact_id=$1 FOR UPDATE', [contactId])).rows[0];
+      if (!row) fail('NOT_FOUND');
+      if (Number(row.version) !== input.expectedVersion) fail('CONFLICT_VERSION');
+      await setContactScope(tx, contactId);
+      if (!await this.#canRequestPausedReply(tx, row)) fail('POLICY_BLOCKED');
+      const at = new Date(this.#now()).toISOString();
+      const changed = await tx.query<{ version: number | string }>(`UPDATE orch_conversations SET state='COLLECTING',
+        generation=(SELECT generation FROM dispatch_control WHERE conversation_id=$1),
+        collection_started_at=$2::timestamptz,collection_due_at=$2::timestamptz,collection_message_ids=ARRAY[last_inbound_message_id],
+        version=version+1,updated_at=now() WHERE conversation_id=$1 RETURNING version`, [row.conversation_id, at]);
+      const version = Number(changed.rows[0]!.version);
+      const correlationId = newId(this.#now());
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', [contactId, input.idempotencyKey, hash, version, correlationId]);
+      return { resultVersion: version, correlationId, status: 'GENERATION_REQUESTED' };
+    });
+  }
+
+  async #canRequestPausedReply(tx: PgClient, row: Row): Promise<boolean> {
+    if (row.state !== 'READY_CONFIRM' || row.pause_reasons.length || row.policy.agentEnabled !== true
+      || row.policy.sendMode !== 'confirm' || !Number(row.paused_inbound_unreviewed_count) || !row.last_inbound_message_id) return false;
+    const eligible = await tx.query(`SELECT m.id FROM data_messages m
+      JOIN dispatch_control dc ON dc.conversation_id=$3
+      JOIN dispatch_global_control gc ON gc.singleton=true
+      WHERE m.id=$1 AND m.contact_id=$2 AND m.conversation_id=$3::uuid
+        AND m.actor='contact' AND m.mode='live' AND m.type='text' AND m.deletion_status='active'
+        AND dc.paused=false AND dc.unresolved_send_key IS NULL AND gc.paused=false
+        AND NOT EXISTS (SELECT 1 FROM orch_plans p WHERE p.conversation_id=$3 AND m.id=ANY(p.trigger_message_ids))`,
+      [row.last_inbound_message_id, row.contact_id, row.conversation_id]);
+    return eligible.rows.length === 1;
   }
 
   /** Clears only the reminder; it never creates a plan or touches the pause state. */
