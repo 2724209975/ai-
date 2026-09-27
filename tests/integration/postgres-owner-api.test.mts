@@ -105,20 +105,41 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     const pausedRow = (await service.ownerConversations()).items.find(item => item.contactId === contactId)!;
     assert.deepEqual(pausedRow.pauseReasons, ['OWNER_PAUSE']);
     assert.deepEqual(pausedRow.allowedActions, ['resumeContact']);
-    const resumed = await service.resumeContact(contactId, { expectedVersion: pausedRow.version, idempotencyKey: 'resume-contact-1' });
+    const plansBeforePausedInbound = (await service.getConversation(conversationId)).plans.length;
+    const pausedInbound = inbound('paused-message-1', '暂停期间的来信');
+    assert.equal(await service.ingestPlatformEvent(pausedInbound), undefined);
+    assert.equal(await service.ingestPlatformEvent(pausedInbound), undefined, 'duplicate delivery stays idempotent');
+    assert.equal(await service.ingestPlatformEvent(inbound('paused-message-2', '另一条来信')), undefined);
+    const pausedWithMessages = (await service.ownerConversations()).items.find(item => item.contactId === contactId)!;
+    assert.equal(pausedWithMessages.unreviewedPausedInboundCount, 2);
+    assert.deepEqual(pausedWithMessages.allowedActions, ['resumeContact', 'acknowledgePausedInbound']);
+    assert.equal((await service.getConversation(conversationId)).plans.length, plansBeforePausedInbound, 'paused inbound creates no plan');
+    const resumed = await service.resumeContact(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'resume-contact-1' });
     assert.equal(resumed.status, 'RESUMED');
     const resumedRow = (await service.ownerConversations()).items.find(item => item.contactId === contactId)!;
     assert.deepEqual(resumedRow.pauseReasons, []);
     assert.equal(resumedRow.status, 'READY_CONFIRM');
+    assert.equal(resumedRow.unreviewedPausedInboundCount, 2, 'resume preserves the review reminder');
+    assert.equal((await service.getConversation(conversationId)).plans.length, plansBeforePausedInbound, 'resume does not generate a reply');
+    assert.equal((await service.ownerContacts()).items.find(item => item.id === otherContactId)?.unreviewedPausedInboundCount, 0);
+    await assert.rejects(service.acknowledgePausedInbound(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'review-stale' }), { message: 'CONFLICT_VERSION' });
+    const reviewed = await service.acknowledgePausedInbound(contactId, { expectedVersion: resumedRow.version, idempotencyKey: 'review-1' });
+    assert.equal(reviewed.status, 'REVIEWED');
+    assert.equal((await service.acknowledgePausedInbound(contactId, { expectedVersion: resumedRow.version, idempotencyKey: 'review-1' })).resultVersion, reviewed.resultVersion);
+    assert.equal((await service.ownerContacts()).items.find(item => item.id === contactId)?.unreviewedPausedInboundCount, 0);
+    assert.equal((await service.ownerConversations()).items.find(item => item.contactId === contactId)?.messages.filter(message => message.text?.includes('来信')).length, 2, 'clearing the reminder keeps messages');
 
     // Global pause then resume covers every conversation.
     const globalVersion = (await service.ownerOverview()).version;
     await service.pauseAll({ expectedVersion: globalVersion, idempotencyKey: 'pause-all-2' });
     assert.equal((await service.ownerOverview()).globalPaused, true);
+    assert.equal(await service.ingestPlatformEvent(inbound('global-paused-message', '全局暂停时的来信', otherConversationId, 'other')), undefined);
+    assert.equal((await service.ownerContacts()).items.find(item => item.id === otherContactId)?.unreviewedPausedInboundCount, 1);
     const resumedAll = await service.resumeAll({ expectedVersion: globalVersion + 1, idempotencyKey: 'resume-all-1' });
     assert.equal(resumedAll.status, 'ACTIVE');
     assert.equal((await service.ownerOverview()).globalPaused, false);
     assert.deepEqual((await service.ownerConversations()).items.map(item => item.status), ['READY_CONFIRM', 'READY_CONFIRM']);
+    assert.equal((await service.ownerContacts()).items.find(item => item.id === otherContactId)?.unreviewedPausedInboundCount, 1, 'global resume preserves the reminder');
 
     // Facts: confirmed owner fact, a model inference candidate, correction, deletion and isolation.
     const epochBefore = await withTransaction(pool, tx => getDependencyEpoch(tx, conversationId));

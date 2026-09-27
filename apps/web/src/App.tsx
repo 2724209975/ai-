@@ -300,15 +300,17 @@ function App() {
       <p>{row.platform} · {row.agentEnabled ? '代理开启' : '代理关闭'} · {row.sendMode}</p><p>目标：{row.goal}</p><p>表达偏好：{row.stylePreferences?.join('、') || '未配置'}</p>
       <p>主动联系：{row.activeContactEnabled ? '开启' : '关闭'} · 主动表白：{row.activeConfessionEnabled ? '开启' : '关闭'}</p>
       <p>允许时段：{row.allowedWindows?.join('、') || '未配置'} · 限制：{row.restrictions?.join('、') || '无'}</p><p className="muted">策略版本 {row.policyVersion} · 暂停原因 {row.pauseReasons?.map(reason).join('、') || '无'}</p>
+      {!!row.unreviewedPausedInboundCount && <p role="alert" className="warning">暂停期间收到 {row.unreviewedPausedInboundCount} 条未核对来信。请到会话页查看；恢复不会自动生成回复。</p>}
       {can(row, 'updatePolicy') && <ContactPolicyEditor row={row} run={run} />}
       <RowActions row={row} prefix="/contacts" run={(path, body) => run(path, body).catch(() => {})} actions={[{ name: 'pauseContact', title: '暂停联系人' }, { name: 'resumeContact', title: '恢复联系人', extra: { reason: row.pauseReasons?.[0] } }]} />
     </article>)}</section>}
     {showContent && page === 'conversations' && <section className="stack">{list<Conversation>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.contactName}</h3><span className="badge">{label(row.status)}</span></div><p className="muted">修订 {row.revision} · generation {row.generation} · 暂停 {row.pauseReasons.map(reason).join('、') || '无'}</p>
+      {!!row.unreviewedPausedInboundCount && <p role="alert" className="warning">暂停期间收到 {row.unreviewedPausedInboundCount} 条未核对来信。下方显示最近 20 条消息；如有更早来信，请在原客户端核对。恢复不会自动回复。</p>}
       {(row.pauseReasons.includes('OWNER_ORIGIN') || row.messages.some(message => message.actor === 'unknown')) && <p role="alert" className="warning">存在来源未明的自身账号消息。此状态不能自动判为本人发言或系统回显；请人工核对，恢复须以后端允许动作为准。</p>}
       {row.sends.some(send => send.status === 'RESULT_UNKNOWN') && <p role="alert" className="warning">发送结果未知。核对前不要重复发送；核对后用下方按钮记录结果。</p>}
       {row.messages.map(message => <blockquote key={message.id}><small>{message.at} · {message.actor === 'unknown' ? '来源未明' : message.actor} · {message.type}</small><p>{message.text ?? '媒体内容请到媒体页面查看'}</p>
         {message.actor === 'unknown' && message.originEvidenceRefs?.length ? <small>核对证据引用：{message.originEvidenceRefs.join('、')}</small> : null}
-      </blockquote>)}<h4>发送记录</h4><SendState sends={row.sends} run={(path, body) => run(path, body).catch(() => {})} /></article>)}</section>}
+      </blockquote>)}{can(row, 'acknowledgePausedInbound') && <button onClick={() => void run(`/contacts/${encodeURIComponent(row.contactId)}/acknowledgePausedInbound`, { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>已核对，清除来信提醒</button>}<h4>发送记录</h4><SendState sends={row.sends} run={(path, body) => run(path, body).catch(() => {})} /></article>)}</section>}
     {showContent && page === 'facts' && <section className="stack">{list<Fact>().map(row => <article className="card" key={row.id}><h3>{row.content}</h3><p>范围 {row.scope} · 来源 {row.sourceKind} · {row.confirmed ? '已确认' : '未确认'}</p><p>更新 {row.updatedAt} · 有效期 {row.expiresAt ?? '未设置'}</p><p>证据 {row.evidenceRefs?.join('、') || '无'}</p>
       {can(row, 'correctFact') && <label>纠正内容<input value={drafts[row.id] ?? row.content} onChange={event => setDrafts(old => ({ ...old, [row.id]: event.target.value }))} /></label>}
       <div className="actions">{can(row, 'correctFact') && <button onClick={() => void run(`/facts/${encodeURIComponent(row.id)}/correctFact`, { expectedVersion: row.version, content: drafts[row.id] ?? row.content, idempotencyKey: key() }).catch(() => {})}>保存纠正</button>}</div>

@@ -10,7 +10,7 @@ import { contentHash, type Draft, type ProposedAlternative } from '../conversati
 import { defaultPolicy, routeReply, type Policy } from '../policy/evaluate.mts';
 import { newId, sha256 } from './ids.mts';
 
-type Row = { conversation_id: string; contact_id: string; account_id: string; external_contact_ref: string; policy: Policy; policy_version: number | string; generation: number | string; revision: number | string; version: number | string; state: string; pause_reasons: string[]; last_inbound_message_id: string | null; collection_started_at?: Date | string | null; collection_due_at?: Date | string | null; collection_message_ids?: string[] | null };
+type Row = { conversation_id: string; contact_id: string; account_id: string; external_contact_ref: string; policy: Policy; policy_version: number | string; generation: number | string; revision: number | string; version: number | string; state: string; pause_reasons: string[]; last_inbound_message_id: string | null; paused_inbound_unreviewed_count: number | string; collection_started_at?: Date | string | null; collection_due_at?: Date | string | null; collection_message_ids?: string[] | null };
 type PlanRow = { id: string; conversation_id: string; contact_id: string; context_snapshot_id: string; generation: number | string; policy_version: number | string; dependency_epoch: number | string; skill_epoch: number | string; alternatives: { alternativeId: string; strategySummary: string; parts: { replyPartId: string; sequence: number; type: 'text'; content: string }[] }[]; risks: string[]; status: string; version: number | string; final_content_hash: string | null; approved_alternative_id: string | null; invalidation_reasons?: string[] };
 type TaskRow = { id: string; plan_id: string; status: string; version: number | string; reason_codes: string[]; confirmed_content_hash: string | null; confirmed_plan_version: number | string | null };
 type SendRow = { id: string; plan_id: string; reply_part_id: string; sequence: number; send_key: string; content: string; content_sha256: string; status: string; version: number | string; correlation_id: string; receipt: { status: string; platformMessageId: string | null } | null; approval_source?: string };
@@ -141,7 +141,7 @@ export class PgConfirmedService {
         await this.#invalidate(tx, row.conversation_id, 'NEW_MESSAGE');
         // A paused contact keeps receiving messages but never collects a generation batch.
         if (row.pause_reasons.length) {
-          await tx.query(`UPDATE orch_conversations SET generation=$2,revision=revision+1,last_inbound_message_id=$3,version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation, saved.id]);
+          await tx.query(`UPDATE orch_conversations SET generation=$2,revision=revision+1,last_inbound_message_id=$3,paused_inbound_unreviewed_count=paused_inbound_unreviewed_count+1,version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation, saved.id]);
           return { row, generation, messageIds: [] as string[], flush: false };
         }
         if (this.#aggregationWindowMs === 0) {
@@ -525,11 +525,12 @@ export class PgConfirmedService {
         const contact = (await tx.query<{ display_name: string }>('SELECT display_name FROM data_contacts WHERE id=$1', [row.contact_id])).rows[0];
         if (!contact) fail('FORBIDDEN');
         items.push({ id: row.contact_id, version: Number(row.version), status: row.state,
-          allowedActions: row.pause_reasons.length ? ['resumeContact', 'updatePolicy'] : ['pauseContact', 'updatePolicy'],
+          allowedActions: [...(row.pause_reasons.length ? ['resumeContact', 'updatePolicy'] : ['pauseContact', 'updatePolicy']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : [])],
           name: contact.display_name, platform: this.#platform.platform, agentEnabled: row.policy.agentEnabled, sendMode: row.policy.sendMode, goal: row.policy.goal,
           activeContactEnabled: row.policy.activeContactEnabled, activeConfessionEnabled: row.policy.activeConfessionEnabled,
           allowedWindows: row.policy.allowedWindows.map(w => `${w.start}-${w.end}`), restrictions: row.policy.restrictions,
-          stylePreferences: row.policy.stylePreferences ?? [], pauseReasons: row.pause_reasons, policyVersion: Number(row.policy_version) });
+          stylePreferences: row.policy.stylePreferences ?? [], pauseReasons: row.pause_reasons, policyVersion: Number(row.policy_version),
+          unreviewedPausedInboundCount: Number(row.paused_inbound_unreviewed_count) });
       }
       return { items };
     });
@@ -660,10 +661,10 @@ export class PgConfirmedService {
         const paused = Boolean(global?.paused) || row.pause_reasons.length > 0;
         items.push({
           id: row.conversation_id, version: Number(row.version), status: row.state,
-          allowedActions: paused ? ['resumeContact'] : ['pauseContact'],
+          allowedActions: [...(paused ? ['resumeContact'] : ['pauseContact']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : [])],
           contactId: row.contact_id, contactName: contact?.display_name ?? '未命名联系人',
           revision: Number(row.revision), generation: Number(row.generation),
-          pauseReasons: row.pause_reasons, globalPaused: Boolean(global?.paused),
+          pauseReasons: row.pause_reasons, globalPaused: Boolean(global?.paused), unreviewedPausedInboundCount: Number(row.paused_inbound_unreviewed_count),
           messages: messages.rows.reverse().map(m => ({ id: m.id, actor: m.actor, type: m.type, text: m.content_ref ?? undefined, mediaId: m.media_id ?? undefined, at: m.sent_at instanceof Date ? m.sent_at.toISOString() : String(m.sent_at) })),
           sends: sends.rows.map(s => ({ sendTaskId: s.id, version: Number(s.version), sequence: s.sequence, status: s.status, approvalSource: s.approval_source, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })),
         });
@@ -701,6 +702,26 @@ export class PgConfirmedService {
       await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', ['global', input.idempotencyKey, hash, version, correlationId]);
       await appendOutbox(tx, { eventId: newId(this.#now()), eventType: 'GlobalPauseChanged', eventVersion: 1, occurredAt: new Date(this.#now()).toISOString(), correlationId, causationId: correlationId, aggregateId: 'global', aggregateVersion: version, payload: { paused: false, resumeAll: true } });
       return { resultVersion: version, correlationId, status: 'ACTIVE' };
+    });
+  }
+
+  /** Clears only the reminder; it never creates a plan or touches the pause state. */
+  async acknowledgePausedInbound(contactId: string, input: { expectedVersion: number; idempotencyKey: string }) {
+    requireText(input.idempotencyKey);
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const hash = sha256(JSON.stringify({ action: 'acknowledgePausedInbound', contactId, expectedVersion: input.expectedVersion }));
+      const previous = (await tx.query<{ command_hash: string; result_version: number | string; correlation_id: string }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [contactId, input.idempotencyKey])).rows[0];
+      if (previous) { if (previous.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: 'REVIEWED' }; }
+      const row = (await tx.query<Row>('SELECT * FROM orch_conversations WHERE contact_id=$1 FOR UPDATE', [contactId])).rows[0];
+      if (!row) fail('NOT_FOUND');
+      if (Number(row.version) !== input.expectedVersion) fail('CONFLICT_VERSION');
+      if (!Number(row.paused_inbound_unreviewed_count)) fail('VALIDATION_FAILED');
+      const changed = await tx.query<{ version: number | string }>(`UPDATE orch_conversations SET paused_inbound_unreviewed_count=0,version=version+1,updated_at=now() WHERE conversation_id=$1 RETURNING version`, [row.conversation_id]);
+      const version = Number(changed.rows[0]!.version);
+      const correlationId = newId(this.#now());
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', [contactId, input.idempotencyKey, hash, version, correlationId]);
+      return { resultVersion: version, correlationId, status: 'REVIEWED' };
     });
   }
 
