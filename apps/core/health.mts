@@ -12,6 +12,9 @@ export type ReadinessCheck = { name: string; status: 'ok' | 'failed' };
 export type ReadinessReport = { status: 'ready' | 'not_ready'; checks: ReadinessCheck[] };
 export type HealthHandler = (request: IncomingMessage, response: ServerResponse) => Promise<boolean>;
 
+/** Both startup and readiness require the latest conversation migration. */
+export const conversationSchemaProbe = 'SELECT collection_due_at,paused_inbound_unreviewed_count FROM orch_conversations LIMIT 0';
+
 export type ReadinessProbeOptions = {
   pool: PgPool;
   /** Set once the caller has finished replaying ambiguous sends and due batches. */
@@ -22,7 +25,7 @@ export function createReadinessProbe(options: ReadinessProbeOptions): () => Prom
   if (!options?.pool) throw new Error('READINESS_CONFIG_INVALID');
   const checks: { name: string; run(): Promise<unknown> }[] = [
     { name: 'database', run: async () => { const client = await options.pool.connect(); try { await client.query('SELECT 1'); } finally { client.release?.(); } } },
-    { name: 'schema', run: async () => { const client = await options.pool.connect(); try { await client.query('SELECT 1 FROM orch_conversations LIMIT 0'); } finally { client.release?.(); } } },
+    { name: 'schema', run: async () => { const client = await options.pool.connect(); try { await client.query(conversationSchemaProbe); } finally { client.release?.(); } } },
     { name: 'control', run: async () => {
       const client = await options.pool.connect();
       try {

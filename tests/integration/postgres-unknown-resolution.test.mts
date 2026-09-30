@@ -113,3 +113,45 @@ test('real PostgreSQL: an unknown send is resolved with evidence, and only then 
     await fixture.admin.end();
   }
 });
+
+test('resolve and resume is atomic and idempotent, preserves other pauses, and never retries',
+  { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to isolated PostgreSQL' }, async t => {
+  for (const extraPause of ['none', 'owner', 'global', 'disabled']) await t.test(extraPause, async () => {
+    const fixture = await setup();
+    try {
+      const { pool, service, contactId, conversationId } = fixture;
+      if (extraPause === 'owner') {
+        const contact = (await service.ownerContacts()).items[0]!;
+        await service.pauseContact(contactId, { expectedVersion: contact.version, idempotencyKey: randomUUID() });
+      }
+      if (extraPause === 'global') await withTransaction(pool, tx => changeGlobalPause(tx, true));
+      if (extraPause === 'disabled') {
+        const contact = (await service.ownerContacts()).items[0]!;
+        await service.updatePolicy(contactId, { expectedVersion: contact.version, idempotencyKey: randomUUID(), policy: { agentEnabled: false } });
+      }
+      const send = (await pool.query('SELECT id,version::int AS version FROM orch_send_tasks WHERE status=$1', ['RESULT_UNKNOWN'])).rows[0]!;
+      const input = { status: 'DELIVERED' as const, evidenceRef: 'fixture:friend-received', expectedVersion: send.version,
+        idempotencyKey: randomUUID(), resume: true };
+      const result = await service.resolveUnknownSend(send.id, input);
+      assert.equal(result.clearedReason, 'UNKNOWN_SEND');
+      const state = async () => (await pool.query('SELECT state,version,pause_reasons,policy FROM orch_conversations WHERE conversation_id=$1', [conversationId])).rows[0]!;
+      const after = await state();
+      assert.ok(!after.pause_reasons.includes('UNKNOWN_SEND'));
+      if (extraPause === 'none') assert.equal(after.state, 'READY_CONFIRM');
+      if (extraPause === 'owner') { assert.equal(after.state, 'PAUSED_OWNER'); assert.ok(after.pause_reasons.includes('OWNER_PAUSE')); }
+      if (extraPause === 'global') assert.equal(after.state, 'PAUSED_GLOBAL');
+      if (extraPause === 'disabled') assert.equal(after.policy.agentEnabled, false);
+      assert.deepEqual(await service.resolveUnknownSend(send.id, input), result);
+      assert.deepEqual(await state(), after, 'replay does not invalidate or advance the contact again');
+      await assert.rejects(service.resolveUnknownSend(send.id, { ...input, resume: false }), /CONFLICT_VERSION/);
+      assert.equal(await service.dispatchNext(conversationId), undefined);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM dispatch_attempts')).rows[0]!.n, 1);
+      assert.equal((await pool.query('SELECT count(*)::int AS n FROM orch_send_tasks')).rows[0]!.n, 2);
+      assert.equal((await pool.query('SELECT unresolved_send_key FROM dispatch_control WHERE conversation_id=$1', [conversationId])).rows[0]!.unresolved_send_key, null);
+    } finally {
+      await fixture.pool.end();
+      await fixture.admin.query(`DROP SCHEMA IF EXISTS ${fixture.schema} CASCADE`);
+      await fixture.admin.end();
+    }
+  });
+});

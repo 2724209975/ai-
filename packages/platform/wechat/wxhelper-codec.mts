@@ -9,7 +9,7 @@ export class WxWireError extends Error {
 
 type ObjectValue = Record<string, unknown>;
 export type WxObservation = {
-  kind: 'incoming' | 'unmapped_self' | 'out_of_scope';
+  kind: 'incoming' | 'self' | 'unmapped_self' | 'out_of_scope';
   accountRef: string; peerRef?: string; platformMessageId: string; sentAt: string;
   dedupeKey: string; rawEventRef: string; type: MessageType; contentRef?: string;
   requiresReview: boolean; typeCode: number; msgSequence?: number;
@@ -69,6 +69,8 @@ function ref(value: unknown): string {
   if (typeof value !== 'string' || !value || value.length > 256 || /[\u0000-\u001f\u007f\s]/.test(value)) throw new WxWireError();
   return value;
 }
+/** Chat message types. A self event of another type is not a message and keeps account quarantine. */
+const chatTypeCodes = new Set([1, 3, 34, 42, 43, 47, 48, 49]);
 function integer(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new WxWireError();
   return value as number;
@@ -98,7 +100,10 @@ export function decodeWxhelperPush(bytes: Uint8Array, options: { expectedSelfRef
     && (/^\s*<msg>\s*<op\s+id=['"](?:2|5)['"]>\s*<username>[^<]*<\/username>\s*<name>[^<]*<\/name>\s*<arg>[^<]*<\/arg>\s*<\/op>\s*<\/msg>\s*$/.test(body.content)
       || /^\s*<msg>\s*<op\s+id=['"](?:4|11)['"]>[\s\S]*<\/op>\s*<\/msg>\s*$/.test(body.content));
   const outOfScope = statusNotify || peerRef.endsWith('@chatroom') || peerRef === 'filehelper';
-  const kind = outOfScope ? 'out_of_scope' : direction;
+  // Own-account chat to a direct peer names that peer in toUser (verified with a phone-sent sample).
+  // Direction identifies the peer, not the sender's client. Without paired send evidence the
+  // origin stays unknown and 02 pauses only that contact.
+  const kind = outOfScope ? 'out_of_scope' : direction === 'unmapped_self' && chatTypeCodes.has(typeCode) ? 'self' : direction;
   const contentRef = typeCode === 1 && typeof body.content === 'string' && body.content.trim() ? body.content : undefined;
   const type: MessageType = typeCode === 1 && contentRef ? 'text' : typeCode === 3 ? 'image' : typeCode === 34 ? 'voice' : 'unsupported';
   const dedupeKey = JSON.stringify(['wechat', self, peerRef, platformMessageId, 'message']);
@@ -108,10 +113,12 @@ export function decodeWxhelperPush(bytes: Uint8Array, options: { expectedSelfRef
     type, contentRef, requiresReview: type !== 'text', typeCode, msgSequence };
 }
 
-export function normalizeWxObservation(observation: WxObservation, context: {
+type NormalizeContext = {
   accountId: string; conversationId: string; eventId: string; correlationId: string;
   receivedAt: string; adapterVersion: string;
-}): EventEnvelope<'PlatformInboundObserved'> {
+};
+
+export function normalizeWxObservation(observation: WxObservation, context: NormalizeContext): EventEnvelope<'PlatformInboundObserved'> {
   if (observation.kind !== 'incoming' || !observation.peerRef) throw new WxWireError();
   const { accountId, conversationId, eventId, correlationId, receivedAt, adapterVersion } = context;
   const payload = { adapter: 'wechat-wxhelper', platform: 'wechat' as const, accountId,
@@ -124,6 +131,23 @@ export function normalizeWxObservation(observation: WxObservation, context: {
       msgSequence: observation.msgSequence,
       mediaCompleteness: observation.type === 'image' || observation.type === 'voice' ? 'unknown' : undefined } };
   return { eventId, eventType: 'PlatformInboundObserved', eventVersion: 1, occurredAt: receivedAt,
+    correlationId, causationId: observation.dedupeKey, aggregateId: conversationId,
+    aggregateVersion: 1, payload };
+}
+
+/** An own-account message to an enrolled peer. Never a contact inbound or a style fact (contracts.md A08). */
+export function normalizeWxSelfObservation(observation: WxObservation, context: NormalizeContext): EventEnvelope<'PlatformSelfMessageUnattributed'> {
+  if (observation.kind !== 'self' || !observation.peerRef) throw new WxWireError();
+  const { accountId, conversationId, eventId, correlationId, receivedAt, adapterVersion } = context;
+  const payload = { platform: 'wechat' as const, accountId,
+    conversationRef: { accountId, conversationId, externalContactRef: observation.peerRef },
+    platformEventId: observation.dedupeKey, platformMessageId: observation.platformMessageId,
+    sentAt: observation.sentAt, receivedAt, type: observation.type, contentRef: observation.contentRef,
+    rawEventRef: observation.rawEventRef, actor: 'unknown' as const, originStatus: 'unknown' as const,
+    isAgentGenerated: false as const, mode: 'live' as const,
+    provenance: { source: 'wxhelper_loopback', rawEventRef: observation.rawEventRef, adapterVersion,
+      evidence: 'self_to_enrolled_peer' } };
+  return { eventId, eventType: 'PlatformSelfMessageUnattributed', eventVersion: 1, occurredAt: receivedAt,
     correlationId, causationId: observation.dedupeKey, aggregateId: conversationId,
     aggregateVersion: 1, payload };
 }

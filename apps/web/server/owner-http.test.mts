@@ -44,6 +44,32 @@ test('Owner HTTP denies missing session and CSRF before reaching 02', async () =
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 
+test('Owner HTTP requires a boolean resume and forwards only an explicit request to clear UNKNOWN_SEND', async () => {
+  const saved: unknown[] = [];
+  const port: OwnerPort = {
+    async overview() { return {}; }, async tasks() { return { items: [] }; }, async contacts() { return { items: [] }; },
+    async confirm() { throw new Error('UNUSED'); }, async pauseAll() { throw new Error('UNUSED'); },
+    async pauseContact() { throw new Error('UNUSED'); },
+    async resolveSend(_ownerId, _sendId, command) { saved.push(command); return { resultVersion: 2, correlationId: 'resolved' }; },
+  };
+  const server = createServer(createOwnerHttpHandler({ ownerPort: port,
+    authenticate: async () => ({ ownerId: 'trusted-owner' }), verifyWrite: async () => true }));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const command = { expectedVersion: 1, idempotencyKey: 'abcdefgh', status: 'DELIVERED', evidenceRef: 'fixture:friend-confirmed' };
+  const request = (body: unknown) => fetch(`http://127.0.0.1:${address.port}/api/v1/sends/send-1/resolve`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  try {
+    for (const resume of ['true', 1, null, {}]) assert.equal((await request({ ...command, resume })).status, 400);
+    assert.equal(saved.length, 0);
+    assert.equal((await request({ ...command, resume: true })).status, 200);
+    assert.deepEqual(saved[0], { ...command, resume: true });
+    assert.equal((await request({ ...command, resume: false })).status, 200);
+    assert.deepEqual(saved[1], command);
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
 test('Owner HTTP preserves 409 and does not claim a send', async () => {
   const port: OwnerPort = {
     async overview() { return {}; }, async tasks() { return { items: [] }; }, async contacts() { return { items: [] }; },

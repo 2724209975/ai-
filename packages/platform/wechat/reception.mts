@@ -4,12 +4,12 @@ import { appendOutbox } from '../../infrastructure/postgres/event-store.mts';
 import type { RawEventStore } from '../../infrastructure/postgres/reception.mts';
 import { withTransaction, type PgClient, type PgPool } from '../../infrastructure/postgres/transaction.mts';
 import { newId } from '../../orchestration/postgres/ids.mts';
-import { normalizeWxObservation, type WxObservation, WxWireError } from './wxhelper-codec.mts';
+import { normalizeWxObservation, normalizeWxSelfObservation, type WxObservation, WxWireError } from './wxhelper-codec.mts';
 
 export function createWxReceptionPort(options: {
   pool: PgPool; store: RawEventStore; accountId: string; adapterVersion: string;
   resolveConversation(peerRef: string): Promise<string | undefined>;
-  onEvent(event: ReturnType<typeof normalizeWxObservation>): Promise<void>;
+  onEvent(event: ReturnType<typeof normalizeWxObservation> | ReturnType<typeof normalizeWxSelfObservation>): Promise<void>;
   onUnmappedSelf(tx: PgClient, input: { accountId: string; rawEventRef: string; correlationId: string }): Promise<void>;
   now?: () => number;
 }) {
@@ -17,16 +17,17 @@ export function createWxReceptionPort(options: {
   return {
     async commitReceived(rawBytes: Uint8Array, observation: WxObservation): Promise<'inserted' | 'duplicate'> {
       if (!rawBytes.length || !observation.dedupeKey) throw new WxWireError();
-      const peer = observation.kind === 'incoming' ? observation.peerRef : undefined;
+      const peer = observation.kind === 'incoming' || observation.kind === 'self' ? observation.peerRef : undefined;
       const conversationId = peer ? await options.resolveConversation(peer) : undefined;
       const scope = conversationId ?? (observation.kind === 'unmapped_self' ? 'unmapped:self' :
         observation.kind === 'out_of_scope' ? 'unmapped:scope' : `unmapped:${peer}`);
       const receivedAt = new Date(now()).toISOString();
       const sha256 = createHash('sha256').update(rawBytes).digest('hex');
-      const event = conversationId && observation.kind === 'incoming'
-        ? normalizeWxObservation(observation, { accountId: options.accountId, conversationId,
-          eventId: newId(now()), correlationId: newId(now()), receivedAt, adapterVersion: options.adapterVersion })
-        : undefined;
+      const context = conversationId ? { accountId: options.accountId, conversationId,
+        eventId: newId(now()), correlationId: newId(now()), receivedAt, adapterVersion: options.adapterVersion } : undefined;
+      const event = !context ? undefined
+        : observation.kind === 'incoming' ? normalizeWxObservation(observation, context)
+          : observation.kind === 'self' ? normalizeWxSelfObservation(observation, context) : undefined;
       const inserted = await withTransaction(options.pool, async tx => {
         await tx.query('SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))',
           [`wechat:${options.accountId}:${scope}`, observation.dedupeKey]);

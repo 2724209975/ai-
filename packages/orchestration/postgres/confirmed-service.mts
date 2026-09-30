@@ -654,24 +654,27 @@ export class PgConfirmedService {
   /** Owner management projection across contacts: each contact is read under its own scope. */
   /** Owner decision for a send whose platform result could not be established (RESULT_UNKNOWN).
    * Only evidence-backed outcomes are accepted, the transition must be one the dispatch journal
-   * allows out of RESULT_UNKNOWN, and nothing here retries: the owner resumes the contact as a
-   * separate explicit action after reviewing. */
-  async resolveUnknownSend(sendTaskId: string, input: { status: 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE'; evidenceRef: string; expectedVersion: number; idempotencyKey: string; platformMessageId?: string }) {
+   * allows out of RESULT_UNKNOWN, and nothing here retries. With `resume` the owner also clears the
+   * UNKNOWN_SEND pause in the same transaction; any other pause reason still keeps the contact paused. */
+  async resolveUnknownSend(sendTaskId: string, input: { status: 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE'; evidenceRef: string; expectedVersion: number; idempotencyKey: string; platformMessageId?: string; resume?: boolean }) {
     requireText(input.idempotencyKey);
     requireText(input.evidenceRef);
     if (!['SUBMITTED', 'DELIVERED', 'FAILED_DEFINITE'].includes(input.status)) fail('VALIDATION_FAILED');
+    if (input.resume !== undefined && typeof input.resume !== 'boolean') fail('VALIDATION_FAILED');
+    const resume = input.resume === true;
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) fail('VALIDATION_FAILED');
     if (input.platformMessageId !== undefined) requireText(input.platformMessageId);
     return withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
       const scope = `send:${sendTaskId}`;
       const hash = sha256(JSON.stringify({ action: 'resolveUnknownSend', sendTaskId, status: input.status,
-        evidenceRef: input.evidenceRef, platformMessageId: input.platformMessageId ?? null, expectedVersion: input.expectedVersion }));
+        evidenceRef: input.evidenceRef, platformMessageId: input.platformMessageId ?? null, expectedVersion: input.expectedVersion,
+        ...(resume ? { resume } : {}) }));
       const previous = (await tx.query<{ command_hash: string; result_version: number | string; correlation_id: string }>(
         'SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [scope, input.idempotencyKey])).rows[0];
       if (previous) {
         if (previous.command_hash !== hash) fail('CONFLICT_VERSION');
-        return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: input.status };
+        return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: input.status, ...(resume ? { clearedReason: 'UNKNOWN_SEND' } : {}) };
       }
       const found = await tx.query<SendRow>('SELECT * FROM orch_send_tasks WHERE id=$1 FOR UPDATE', [sendTaskId]);
       const send = found.rows[0]; if (!send) fail('NOT_FOUND');
@@ -681,9 +684,14 @@ export class PgConfirmedService {
       await this.#recordSendResult(tx, send.id, input.status, input.platformMessageId ?? null);
       const version = Number(send.version) + 1;
       const correlationId = newId(this.#now());
+      if (resume) {
+        const row = (await tx.query<Row>('SELECT c.* FROM orch_conversations c JOIN orch_plans p ON p.conversation_id=c.conversation_id WHERE p.id=$1 FOR UPDATE OF c', [send.plan_id])).rows[0];
+        if (!row) fail('NOT_FOUND');
+        await this.#clearPauseReason(tx, row, 'UNKNOWN_SEND', correlationId);
+      }
       await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)',
         [scope, input.idempotencyKey, hash, version, correlationId]);
-      return { resultVersion: version, correlationId, status: input.status };
+      return { resultVersion: version, correlationId, status: input.status, ...(resume ? { clearedReason: 'UNKNOWN_SEND' } : {}) };
     });
   }
 
@@ -822,23 +830,29 @@ export class PgConfirmedService {
       const row = (await tx.query<Row>('SELECT * FROM orch_conversations WHERE contact_id=$1 FOR UPDATE', [contactId])).rows[0];
       if (!row) fail('NOT_FOUND');
       if (Number(row.version) !== input.expectedVersion) fail('CONFLICT_VERSION');
-      const control = (await tx.query<{ unresolved_send_key: string | null }>('SELECT unresolved_send_key FROM dispatch_control WHERE conversation_id=$1 FOR UPDATE', [row.conversation_id])).rows[0];
-      if (control?.unresolved_send_key) fail('SEND_RESULT_UNKNOWN');
-      const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
-      const remaining = row.pause_reasons.filter(value => value !== reason);
-      const state = deriveState(global?.paused ? [...remaining, 'GLOBAL_PAUSE'] : remaining, row.policy.sendMode, row.policy.agentEnabled);
-      await this.#invalidate(tx, row.conversation_id, 'RESUME_REBASE');
-      await changeContactPause(tx, row.conversation_id, state.startsWith('PAUSED_'));
-      const control2 = (await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id])).rows[0];
-      const changed = await tx.query<{ version: number | string }>(
-        `UPDATE orch_conversations SET state=$3,pause_reasons=$2::text[],generation=$4,version=version+1,updated_at=now() WHERE conversation_id=$1 RETURNING version`,
-        [row.conversation_id, remaining, state, Number(control2?.generation)]);
-      const version = Number(changed.rows[0]!.version);
       const correlationId = newId(this.#now());
+      const version = await this.#clearPauseReason(tx, row, reason, correlationId);
       await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', [contactId, input.idempotencyKey, hash, version, correlationId]);
-      await appendOutbox(tx, { eventId: newId(this.#now()), eventType: 'ContactControlChanged', eventVersion: 1, occurredAt: new Date(this.#now()).toISOString(), correlationId, causationId: correlationId, aggregateId: row.conversation_id, aggregateVersion: version, payload: { paused: state.startsWith('PAUSED_'), state, clearedReason: reason } });
       return { resultVersion: version, correlationId, status: 'RESUMED' };
     });
+  }
+
+  /** Clears one pause reason; the others keep the contact paused. Refuses while a send is unresolved. */
+  async #clearPauseReason(tx: PgClient, row: Row, reason: string, correlationId: string): Promise<number> {
+    const control = (await tx.query<{ unresolved_send_key: string | null }>('SELECT unresolved_send_key FROM dispatch_control WHERE conversation_id=$1 FOR UPDATE', [row.conversation_id])).rows[0];
+    if (control?.unresolved_send_key) fail('SEND_RESULT_UNKNOWN');
+    const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
+    const remaining = row.pause_reasons.filter(value => value !== reason);
+    const state = deriveState(global?.paused ? [...remaining, 'GLOBAL_PAUSE'] : remaining, row.policy.sendMode, row.policy.agentEnabled);
+    await this.#invalidate(tx, row.conversation_id, 'RESUME_REBASE');
+    await changeContactPause(tx, row.conversation_id, state.startsWith('PAUSED_'));
+    const control2 = (await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id])).rows[0];
+    const changed = await tx.query<{ version: number | string }>(
+      `UPDATE orch_conversations SET state=$3,pause_reasons=$2::text[],generation=$4,version=version+1,updated_at=now() WHERE conversation_id=$1 RETURNING version`,
+      [row.conversation_id, remaining, state, Number(control2?.generation)]);
+    const version = Number(changed.rows[0]!.version);
+    await appendOutbox(tx, { eventId: newId(this.#now()), eventType: 'ContactControlChanged', eventVersion: 1, occurredAt: new Date(this.#now()).toISOString(), correlationId, causationId: correlationId, aggregateId: row.conversation_id, aggregateVersion: version, payload: { paused: state.startsWith('PAUSED_'), state, clearedReason: reason } });
+    return version;
   }
 
   /** Owner policy edit. Any change invalidates pending plans and raises policy_version + generation. */

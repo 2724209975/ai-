@@ -19,6 +19,8 @@ import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-h
 import { newId } from '../../packages/orchestration/postgres/ids.mts';
 import { contentHash } from '../../packages/orchestration/conversations/engine.mts';
 import { createWxBridge } from '../../apps/bridge/wechat-bridge.mts';
+import { createTextModelIntelligence } from '../../packages/ai/index.mts';
+import { createDeepSeekTextProvider } from '../../packages/ai/generation/deepseek-provider.mts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const root = resolve('db/migrations');
@@ -40,6 +42,7 @@ test('the WeChat bridge dispatches a confirmed part only with a transport, and k
     let bridge: ReturnType<typeof createWxBridge> | undefined;
     let receiveOnly: ReturnType<typeof createWxBridge> | undefined;
     const submitted: unknown[] = [];
+    const modelRequests: string[] = [];
     try {
       await withTransaction(pool, async tx => {
         await setContactScope(tx, contactId);
@@ -49,15 +52,17 @@ test('the WeChat bridge dispatches a confirmed part only with a transport, and k
       });
       bridge = createWxBridge({ pool, accountId, selfRef: self, ingressToken: token,
         rawStore: createFileRawEventStore(rawRoot, Date.now, 'wechat'), outboxIntervalMs: 600_000, onError: () => {},
-        // A deterministic two-part proposal: this test is about dispatch, not about generation.
-        intelligence: {
-          async propose() { return { shouldReply: true, risks: ['ordinary' as const], timing: 'now' as const,
-            generatorVersion: 'fixture', alternatives: [{ key: 'a', strategySummary: '普通回应', parts: [
-              { key: 'p1', sequence: 1, type: 'text' as const, content: '第一条' },
-              { key: 'p2', sequence: 2, type: 'text' as const, content: '第二条' },
-            ] }] }; },
-          async checkEdited() { return { allowed: true, reasons: [] }; },
-        },
+        // Real provider and validation pipeline, synthetic model endpoint. No billable API call.
+        intelligence: createTextModelIntelligence(createDeepSeekTextProvider({
+          apiKey: 'fixture-key', modelId: 'fixture-model', promptVersion: 'fixture-v1', dataRegion: 'test', retentionPolicy: 'test',
+          fetchImpl: async (_url, init) => {
+            modelRequests.push(String(init?.body));
+            return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+              alternatives: [{ summary: '普通回应', parts: ['第一条', '第二条'] }],
+            }) } }], usage: { prompt_tokens: 100, completion_tokens: 20 } }),
+              { status: 200, headers: { 'content-type': 'application/json' } });
+          },
+        })),
         // The fake endpoint answers with a success code on purpose: wxhelper's own patched wrapper
         // cannot report acceptance, so even code 0 must stay RESULT_UNKNOWN.
         dispatch: { workerIntervalMs: 600_000, workerEnabled: false,
@@ -84,6 +89,8 @@ test('the WeChat bridge dispatches a confirmed part only with a transport, and k
         conversationRef: { accountId, conversationId, externalContactRef: peer }, sentAt: new Date().toISOString(),
         type: 'text', contentRef: '你好', direction: 'incoming', rawEventRef: 'wx-dispatch-raw', mode: 'live' });
       await bridge.service.ingestPlatformEvent(inbound);
+      assert.equal(modelRequests.length, 1);
+      assert.match(modelRequests[0]!, /你好/);
       const plan = (await bridge.service.getConversation(conversationId)).plans[0]!;
       const alternative = plan.alternatives[0]!;
       const parts = alternative.parts.map(part => ({ type: 'text' as const, content: part.content }));
@@ -106,6 +113,16 @@ test('the WeChat bridge dispatches a confirmed part only with a transport, and k
       const second = await bridge.worker!.tick();
       assert.deepEqual(second, { collected: 0, dispatched: 0, failures: 0 });
       assert.equal(submitted.length, 1, 'a paused contact must not be retried');
+
+      const send = (await pool.query(`SELECT id,version::int AS version FROM orch_send_tasks WHERE status='RESULT_UNKNOWN'`)).rows[0]!;
+      const resolution = { status: 'DELIVERED' as const, evidenceRef: 'fixture:recipient-confirmed',
+        expectedVersion: send.version, idempotencyKey: 'wx-dispatch-resolve', resume: true };
+      const result = await bridge.service.resolveUnknownSend(send.id, resolution);
+      assert.equal(result.clearedReason, 'UNKNOWN_SEND');
+      assert.deepEqual(await bridge.service.resolveUnknownSend(send.id, resolution), result);
+      assert.equal((await pool.query('SELECT state FROM orch_conversations WHERE conversation_id=$1', [conversationId])).rows[0]!.state, 'READY_CONFIRM');
+      await bridge.worker!.tick();
+      assert.equal(submitted.length, 1, 'resuming never sends the cancelled remainder or retries the resolved message');
 
       // Without a transport the same construction has no worker and no send path at all.
       receiveOnly = createWxBridge({ pool, accountId, selfRef: self, ingressToken: token,

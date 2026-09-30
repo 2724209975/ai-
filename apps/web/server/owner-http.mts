@@ -40,6 +40,8 @@ export type VersionCommand = { expectedVersion: number; idempotencyKey: string; 
 export type ResolveSendCommand = {
   status: 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE';
   evidenceRef: string; expectedVersion: number; idempotencyKey: string; platformMessageId?: string;
+  /** Also clear the UNKNOWN_SEND pause in the same transaction; other pause reasons remain. */
+  resume?: boolean;
 };
 export type PolicyPatch = {
   goal?: string; sendMode?: 'confirm' | 'auto'; agentEnabled?: boolean;
@@ -97,9 +99,11 @@ function resolveSendCommand(value: unknown): ResolveSendCommand {
     || !['SUBMITTED', 'DELIVERED', 'FAILED_DEFINITE'].includes(String(value.status))
     || !isShortText(value.evidenceRef, 200)) throw new HttpError(400, 'VALIDATION_FAILED');
   if (value.platformMessageId !== undefined && !isShortText(value.platformMessageId, 128)) throw new HttpError(400, 'VALIDATION_FAILED');
+  if (value.resume !== undefined && typeof value.resume !== 'boolean') throw new HttpError(400, 'VALIDATION_FAILED');
   return { status: value.status as ResolveSendCommand['status'], evidenceRef: value.evidenceRef as string,
     expectedVersion: value.expectedVersion, idempotencyKey: value.idempotencyKey,
-    ...(value.platformMessageId === undefined ? {} : { platformMessageId: value.platformMessageId as string }) };
+    ...(value.platformMessageId === undefined ? {} : { platformMessageId: value.platformMessageId as string }),
+    ...(value.resume === true ? { resume: true } : {}) };
 }
 function policyCommand(value: unknown): PolicyCommand {
   if (!isObject(value) || !isVersion(value.expectedVersion) || !isKey(value.idempotencyKey) || !isObject(value.policy)) throw new HttpError(400, 'VALIDATION_FAILED');

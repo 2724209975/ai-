@@ -8,6 +8,7 @@
 import { createJsonLogger } from '../../packages/infrastructure/observability/logger.mts';
 import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv } from '../../packages/ai/index.mts';
 import { readCoreConfig } from './config.mts';
+import { conversationSchemaProbe } from './health.mts';
 import { createCoreRuntime, type CoreRuntime } from './runtime.mts';
 
 let config: ReturnType<typeof readCoreConfig>;
@@ -30,7 +31,7 @@ const { Pool } = await import('pg');
 const pool = new Pool({ connectionString: config.databaseUrl, max: config.pgPoolMax });
 try {
   // Fail fast with an actionable line instead of a raw SQL error deep inside the first tick.
-  await pool.query('SELECT collection_due_at FROM orch_conversations LIMIT 0');
+  await pool.query(conversationSchemaProbe);
 } catch {
   logger.error('schema_not_ready', { hint: 'run npm run migrate against DATABASE_URL first' });
   await pool.end();

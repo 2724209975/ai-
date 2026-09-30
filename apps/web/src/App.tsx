@@ -47,23 +47,26 @@ const formatError = (error: unknown) => {
 const safeMediaUrl = (url?: string) => url?.startsWith('/api/v1/media/') && !url.includes('..') ? url : undefined;
 
 /** The platform never proves delivery, so an unknown part stays blocked until the owner states what
- * they checked. Recording the result and resuming the contact stay separate actions. */
+ * they checked. "已送达并恢复" also clears the UNKNOWN_SEND pause in the same backend transaction;
+ * any other pause reason still keeps the contact paused. */
 function UnknownSendActions({ send, run }: { send: SendTask; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
   const [evidence, setEvidence] = useState('本人核对');
   const [busy, setBusy] = useState(false);
   const missingVersion = !send.version;
-  const record = (status: 'DELIVERED' | 'FAILED_DEFINITE') => {
+  const record = (status: 'DELIVERED' | 'FAILED_DEFINITE', resume = false) => {
     if (busy || missingVersion) return;
     setBusy(true);
     void run(`/sends/${encodeURIComponent(send.sendTaskId)}/resolve`, {
       status, evidenceRef: evidence.trim() || '本人核对', expectedVersion: send.version, idempotencyKey: key(),
+      ...(resume ? { resume: true } : {}),
     }).catch(() => {}).finally(() => setBusy(false));
   };
   return <div className="editor">
     <label>核对证据<input type="text" value={evidence} maxLength={120} disabled={busy}
       onChange={event => setEvidence(event.target.value)} placeholder="例如：手机已收到" /></label>
     <div className="actions">
-      <button disabled={busy || missingVersion} onClick={() => record('DELIVERED')}>记已送达</button>
+      <button className="primary" disabled={busy || missingVersion} onClick={() => record('DELIVERED', true)}>已送达并恢复</button>
+      <button disabled={busy || missingVersion} onClick={() => record('DELIVERED')}>只记已送达</button>
       <button disabled={busy || missingVersion} onClick={() => record('FAILED_DEFINITE')}>记明确失败</button>
     </div>
     {missingVersion && <p className="muted">缺少版本信息，无法核对。</p>}

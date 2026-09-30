@@ -17,6 +17,7 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
     activeContactEnabled: false, activeConfessionEnabled: false, allowedWindows: [],
     restrictions: [] as string[], stylePreferences: [] as string[], pauseReasons: [] as string[], policyVersion: 1 };
   let savedPolicy: Record<string, unknown> | undefined;
+  const resolutions: Record<string, unknown>[] = [];
   const task = () => ({ id: 'task-1', taskId: 'task-1', taskVersion: stale ? 2 : 1, version: stale ? 2 : 1,
     planId: 'plan-1', planVersion: stale ? 2 : 1, contactId: 'contact-1', contactName: '测试联系人',
     conversationId: 'conversation-1', status: stale ? 'INVALIDATED' : 'AWAITING_CONFIRMATION',
@@ -49,11 +50,17 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
       : json(200, { items: mode === 'queue' ? [task(),
         { ...task(), id: 'past', taskId: 'past', status: 'REJECTED', allowedActions: [], contactName: '已处理联系人' },
         { ...task(), id: 'unresolved', taskId: 'unresolved', status: 'INVALIDATED', allowedActions: [], contactName: '需核对联系人',
-          sends: [{ sendTaskId: 'unknown-send', sequence: 1, status: 'RESULT_UNKNOWN' }] },
+          sends: [{ sendTaskId: 'unknown-send', version: 2, sequence: 1, status: 'RESULT_UNKNOWN' }] },
       ] : [task()] });
     if (path === '/api/v1/tasks/task-1/confirm' && request.method === 'POST') {
       stale = true;
       return json(409, { code: 'STALE_PLAN', message: '候选已失效', retryable: false, correlationId: 'trace-409' });
+    }
+    if (path === '/api/v1/sends/unknown-send/resolve' && request.method === 'POST') {
+      let body = '';
+      for await (const chunk of request) body += chunk;
+      resolutions.push(JSON.parse(body));
+      return json(200, { resultVersion: 3, correlationId: 'resolved', clearedReason: 'UNKNOWN_SEND' });
     }
     if (path === '/api/v1/conversations') return json(200, { items: [{
       id: 'conversation-1', version: 2, status: 'PAUSED_OWNER', allowedActions: [],
@@ -74,7 +81,7 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
   });
   await new Promise<void>(resolveListening => server.listen(0, '127.0.0.1', resolveListening));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
-  return { url: `http://127.0.0.1:${address.port}`, savedPolicy: () => savedPolicy,
+  return { url: `http://127.0.0.1:${address.port}`, savedPolicy: () => savedPolicy, resolutions,
     close: () => new Promise<void>(resolveClose => server.close(() => resolveClose())) };
 }
 
@@ -90,6 +97,27 @@ test('390px: contact expression preferences and restrictions save together', { s
     await page.getByText('表达偏好：简短、口语化').waitFor();
     assert.deepEqual(api.savedPolicy(), { goal: '自然聊天', stylePreferences: ['简短', '口语化'], restrictions: ['不提钱'] });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+  } finally { await browser.close(); await api.close(); }
+});
+
+test('390px: delivery and resume is one explicit command; record-only keeps resume absent', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
+  const { chromium } = await import('playwright');
+  const api = await fixture('queue'); const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await page.goto(api.url + '/#tasks');
+    await page.getByLabel('核对证据').fill('测试好友确认收到');
+    await page.getByRole('button', { name: '已送达并恢复', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('button.primary:disabled'));
+    assert.equal(api.resolutions.length, 1);
+    assert.equal(api.resolutions[0]?.resume, true);
+    assert.equal(api.resolutions[0]?.status, 'DELIVERED');
+    assert.equal(api.resolutions[0]?.expectedVersion, 2);
+    assert.equal(api.resolutions[0]?.evidenceRef, '测试好友确认收到');
+    await page.getByRole('button', { name: '只记已送达', exact: true }).click();
+    await page.waitForFunction(() => !document.querySelector('button.primary:disabled'));
+    assert.equal(api.resolutions.length, 2);
+    assert.equal(api.resolutions[1]?.resume, undefined);
   } finally { await browser.close(); await api.close(); }
 });
 

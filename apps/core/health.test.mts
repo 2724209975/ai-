@@ -76,7 +76,7 @@ test('the readiness probe reports fixed check names and never echoes a driver er
   assert.deepEqual(report, { status: 'ready', checks: [
     { name: 'database', status: 'ok' }, { name: 'schema', status: 'ok' }, { name: 'control', status: 'ok' }, { name: 'recovery', status: 'ok' },
   ] });
-  assert.deepEqual(statements, ['SELECT 1', 'SELECT 1 FROM orch_conversations LIMIT 0', 'SELECT paused FROM dispatch_global_control WHERE singleton=true']);
+  assert.deepEqual(statements, ['SELECT 1', 'SELECT collection_due_at,paused_inbound_unreviewed_count FROM orch_conversations LIMIT 0', 'SELECT paused FROM dispatch_global_control WHERE singleton=true']);
 
   const brokenPool: PgPool = {
     async connect(): Promise<PgClient> {
@@ -99,4 +99,12 @@ test('readiness fails when the control row or an injected recovery flag is missi
   assert.deepEqual(report.checks.map(check => check.name), ['database', 'schema', 'control', 'recovery']);
   assert.equal(report.checks.find(check => check.name === 'control')?.status, 'failed');
   assert.equal(report.checks.at(-1)?.status, 'failed');
+});
+
+test('an older schema is not ready even when the database and control row are healthy', async () => {
+  const report = await createReadinessProbe({ pool: poolThatRuns(sql => {
+    if (sql.includes('paused_inbound_unreviewed_count')) throw new Error('column missing');
+  }), recovered: () => true })();
+  assert.equal(report.status, 'not_ready');
+  assert.deepEqual(report.checks.map(check => check.status), ['ok', 'failed', 'ok', 'ok']);
 });
