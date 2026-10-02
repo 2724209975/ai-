@@ -14,6 +14,8 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { decodeWxDatImage } from './media-dat.mts';
+import { IMAGE_MAX_BYTES, validateImageBytes } from '../../data/media/image-validation.mts';
+import { readBoundedImageFile } from '../../data/media/bounded-image-file.mts';
 import type { WxhelperMediaTransport } from './wxhelper-media-transport.mts';
 import type { WxObservation } from './wxhelper-codec.mts';
 
@@ -77,11 +79,6 @@ async function defaultStatSize(path: string): Promise<number> {
   const { stat } = await import('node:fs/promises');
   return (await stat(path)).size;
 }
-async function defaultReadBytes(path: string): Promise<Uint8Array> {
-  const { readFile } = await import('node:fs/promises');
-  return new Uint8Array(await readFile(path));
-}
-
 /** Injected implementations may ignore cancellation; late results still cannot escape. */
 async function bounded<T>(operation: () => Promise<T>, signal: AbortSignal, deadline: number): Promise<T> {
   if (signal.aborted || Date.now() >= deadline) throw new Error('MEDIA_ACQUISITION_CANCELLED');
@@ -108,12 +105,13 @@ export async function acquireWxMedia(options: WxMediaAcquisitionOptions): Promis
   const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
   const pollTimeoutMs = options.pollTimeoutMs ?? DEFAULT_POLL_TIMEOUT_MS;
   if (![maxBytes, pollMs, pollTimeoutMs].every(value => Number.isSafeInteger(value) && value > 0)) return unavailable('PATH_INVALID');
+  if (maxBytes > IMAGE_MAX_BYTES || pollTimeoutMs > 120_000) return unavailable('PATH_INVALID');
   const path = buildDatPath(dataPath, observation.platformMessageId);
   if (!path) return unavailable('PATH_INVALID');
   const statSize = options.statSize ?? defaultStatSize;
-  const readBytes = options.readBytes ?? defaultReadBytes;
   if (options.signal?.aborted) return unavailable('TRANSPORT_FAILED');
   const controller = new AbortController();
+  const readBytes = options.readBytes ?? (target => readBoundedImageFile(target, maxBytes, controller.signal));
   const wait = options.sleep ?? (ms => sleep(ms, undefined, { signal: controller.signal }));
   const deadline = Date.now() + pollTimeoutMs;
   const timer = setTimeout(() => controller.abort(), pollTimeoutMs);
@@ -126,26 +124,43 @@ export async function acquireWxMedia(options: WxMediaAcquisitionOptions): Promis
     catch { return unavailable('TRANSPORT_FAILED'); }
     if (!accepted?.ok) return unavailable('HELPER_REJECTED');
     failure = 'FILE_NOT_WRITTEN';
-    let size: number | undefined;
+    let rejectedHash: string | undefined;
     for (;;) {
       try {
         const candidate = await bounded(() => statSize(path), controller.signal, deadline);
-        if (candidate > 0) { size = candidate; break; }
-      } catch { /* not written yet, or never will be */ }
-      if (controller.signal.aborted || Date.now() >= deadline) return unavailable('FILE_NOT_WRITTEN');
+        if (!Number.isSafeInteger(candidate) || candidate < 0) return unavailable('FILE_NOT_WRITTEN');
+        if (candidate > maxBytes) return unavailable('FILE_TOO_LARGE');
+        if (candidate > 0) {
+          const raw = await bounded(() => readBytes(path), controller.signal, deadline);
+          if (raw.length > maxBytes) return unavailable('FILE_TOO_LARGE');
+          if (raw.length) {
+            failure = 'DECODE_FAILED';
+            const digest = createHash('sha256').update(raw).digest('hex');
+            // A downloader may still be writing. Retry reads within the deadline, not helper requests.
+            if (digest !== rejectedHash) {
+              const decoded = decodeWxDatImage(raw);
+              const checked = decoded ? await validateImageBytes(decoded.bytes, decoded.mimeType,
+                { signal: controller.signal, timeoutMs: Math.max(1, Math.min(5_000, deadline - Date.now())) }) : { ok: false };
+              if (decoded && checked.ok) {
+                // Detect replacement or continued writes during the decoder's work.
+                const recheck = await bounded(() => readBytes(path), controller.signal, deadline);
+                if (recheck.length > maxBytes) return unavailable('FILE_TOO_LARGE');
+                if (createHash('sha256').update(recheck).digest('hex') === digest) {
+                  return { fetchStatus: 'fetched', mediaType: 'image', mimeType: decoded.mimeType, bytes: decoded.bytes,
+                    sha256: createHash('sha256').update(decoded.bytes).digest('hex'), completeness: 'complete',
+                    platformMetadata: { msgId: observation.platformMessageId, dataFileBytes: raw.length } };
+                }
+              } else rejectedHash = digest;
+            }
+          }
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message === 'MEDIA_FILE_TOO_LARGE') return unavailable('FILE_TOO_LARGE');
+        // Missing or changing files can settle before the same total deadline.
+      }
+      if (controller.signal.aborted || Date.now() >= deadline) return unavailable(failure);
       await bounded(() => wait(Math.min(pollMs, deadline - Date.now())), controller.signal, deadline);
     }
-    if (size! > maxBytes) return unavailable('FILE_TOO_LARGE');
-    let raw: Uint8Array;
-    try { raw = await bounded(() => readBytes(path), controller.signal, deadline); }
-    catch { return unavailable('FILE_NOT_WRITTEN'); }
-    if (!raw.length || raw.length > maxBytes) return unavailable('FILE_TOO_LARGE');
-    const decoded = decodeWxDatImage(raw);
-    if (!decoded) return unavailable('DECODE_FAILED');
-    if (controller.signal.aborted || Date.now() >= deadline) return unavailable('FILE_NOT_WRITTEN');
-    return { fetchStatus: 'fetched', mediaType: 'image', mimeType: decoded.mimeType, bytes: decoded.bytes,
-      sha256: createHash('sha256').update(decoded.bytes).digest('hex'), completeness: 'complete',
-      platformMetadata: { msgId: observation.platformMessageId, dataFileBytes: raw.length } };
   } catch { return unavailable(failure); }
   finally {
     clearTimeout(timer);

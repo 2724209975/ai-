@@ -58,6 +58,7 @@ provider 只收到单个媒体的字节和 codec，不收到联系人身份、�
 `understanding/vision-provider.mts` 是真实图片 adapter，`understanding/voice-provider.mts` 是通用语音转写 adapter，`understanding/media-env.mts` 负责显式开关与装配，`understanding/media-budget.mts` 是媒体专用失控闸。三者都实现现有 `BinaryMediaProvider`，都只接收单个已校验媒体，都看不到联系人、消息 ID、路径或策略。
 
 - 图片：OpenAI 兼容 chat completions + base64 `data:` URL，图片只出现在 `user` 消息里（供应商文档的硬限制）。**格式按文件字节判定**（PNG/JPEG/GIF/WebP），声明与内容不符直接拒绝，不转发、不改标；内联上限默认 24 MiB、单图 10 MiB、请求体 40 MiB，`detail` 只允许 `low/high/original/auto`，默认 `original`（`low` 会缩放，不足以支撑 `full_image` 覆盖声明）。
+- P4-4b 在图片请求前补了共享完整解码验证：容器边界、全部像素、单帧、字节/像素/时间限制均通过才调用 endpoint，BMP/APNG/动画和截断图片全部转人工。输入先复制为固定字节快照，检查与上传使用相同内容，不受调用方在解码期间修改内存影响。解码依赖 sharp 0.35.5 的独立子进程；解码失败、资源繁忙或取消均不发模型请求。具体边界见 [03 图片验证说明](../data/README.md)。
 - 语音：OpenAI 兼容 multipart `/audio/transcriptions`，容器白名单见 `SUPPORTED_AUDIO_FORMATS`；**本仓库没有任何供应商被声明支持语音**，未配置端点即语音支持列表为空，语音继续转人工。不臆造语音能力。
 - 解释一律结构化：非空正文、`completeness`、图片 `visualCoverage=full_image` / 语音 `transcriptCoverage=complete`、不确定性、`criticalUnclear`。模型没给 `uncertainty` 时记为「模型未声明不确定性」，不当作确定。`criticalUnclear` 为真仍走转人工。`evidenceRefs` 由适配器给一个结构占位，`interpretContextMedia` 会丢弃它并换成由可信消息绑定与文件哈希构造的证据——**模型自报引用永远不会成为证据**。
 - 失败分类：HTTP 非 2xx 抛 `DEEPSEEK_HTTP_<status>`（含供应商错误码，不含正文）、结构无效/空文本/超长抛 `MODEL_UNAVAILABLE`、字节与格式不符抛 `MEDIA_UNCERTAIN`、未支持的媒体或容器抛 `UNSUPPORTED_CAPABILITY`，最终都由 04 gateway 与 02 转成暂停转人工。错误文本不含密钥、字节或正文。

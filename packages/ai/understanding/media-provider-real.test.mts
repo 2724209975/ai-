@@ -16,10 +16,42 @@ import { interpretContextMedia } from './media-provider.mts';
 import type { BinaryMediaProvider } from './media-provider.mts';
 import type { MediaInterpretationDraft, PolicyProjection, ScopedContext } from '../types.mts';
 
-const png = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aP2cAAAAASUVORK5CYII=', 'base64'));
-const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00]);
-const gif = Uint8Array.from(Buffer.from('GIF89a' + '\u0000'.repeat(10), 'binary'));
-const webp = Uint8Array.from([...Buffer.from('RIFF'), 0x20, 0, 0, 0, ...Buffer.from('WEBP'), 0x56, 0x50, 0x38, 0x20]);
+import { png, jpeg, gif, webp, animatedGif, animatedWebp, apng } from '../../../tests/fixtures/media-images.mts';
+
+test('incomplete image containers never reach the vision endpoint', async () => {
+  let calls = 0;
+  const provider = createVisionMediaProvider({ ...visionOptions, fetchImpl: async () => {
+    calls++; return completion(JSON.stringify({ description: 'must not be requested' }));
+  } });
+  for (const [mimeType, bytes] of [['image/png', png.subarray(0, 16)], ['image/jpeg', jpeg.subarray(0, 8)],
+    ['image/gif', gif.subarray(0, 10)], ['image/webp', webp.subarray(0, 12)]] as const)
+    await assert.rejects(provider.invoke({ mediaType: 'image', mimeType, bytes, signal: new AbortController().signal }), /MEDIA_UNCERTAIN/);
+  assert.equal(calls, 0);
+});
+
+test('animated and aborted images produce no paid request', async () => {
+  let calls = 0;
+  const provider = createVisionMediaProvider({ ...visionOptions, fetchImpl: async () => {
+    calls++; return completion(JSON.stringify({ description: 'must not be requested' }));
+  } });
+  for (const [mimeType, bytes] of [['image/png', apng], ['image/gif', animatedGif], ['image/webp', animatedWebp]] as const)
+    await assert.rejects(provider.invoke({ mediaType: 'image', mimeType, bytes, signal: new AbortController().signal }), /MEDIA_UNCERTAIN/);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(provider.invoke({ mediaType: 'image', mimeType: 'image/png', bytes: png, signal: controller.signal }), /MEDIA_UNCERTAIN/);
+  assert.equal(calls, 0);
+});
+
+test('vision uploads the validated snapshot even if caller memory changes during decode', async () => {
+  const input = Buffer.from(png);
+  let body = '';
+  const provider = createVisionMediaProvider({ ...visionOptions, fetchImpl: async (_url, init) => {
+    body = String(init?.body); return completion(JSON.stringify({ description: '合成图' }));
+  } });
+  const pending = provider.invoke({ mediaType: 'image', mimeType: 'image/png', bytes: input, signal: new AbortController().signal });
+  input.fill(0);
+  await pending;
+  assert.equal(body.includes(png.toString('base64')), true);
+});
 function wav() {
   const b = Buffer.alloc(48);
   b.write('RIFF'); b.writeUInt32LE(40, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16);

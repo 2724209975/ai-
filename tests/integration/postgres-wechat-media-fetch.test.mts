@@ -28,8 +28,7 @@ import { WxhelperLoopbackMediaTransport } from '../../packages/platform/wechat/w
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const settings = { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to isolated PostgreSQL' };
 const self = 'wxid_media_self', peer = 'wxid_media_friend';
-/** A tiny valid PNG signature block; the bridge never decodes pixels, it only checks the container. */
-const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+import { png } from '../fixtures/media-images.mts';
 const obfuscated = (key: number) => Uint8Array.from(png, byte => byte ^ key);
 /** A 15-digit id: the transport refuses anything a JSON number parser would round (see below). */
 const imageMessageId = '700000000000123';
@@ -96,7 +95,7 @@ async function fixture(media: 'enabled' | 'disabled', helper: Awaited<ReturnType
     bridge = createWxBridge({ pool, accountId, selfRef: self, ingressToken: 'test-loopback-secret',
       rawStore: createFileRawEventStore(rawRoot, Date.now, 'wechat'), outboxIntervalMs: 600_000, onError: () => {},
       ...(media === 'enabled' && helper ? { media: { transport: new WxhelperLoopbackMediaTransport({ baseUrl: helper.baseUrl }),
-        dataPath: dataRoot, mediaRoot, pollMs: 20, pollTimeoutMs: 2_000, ...limits } } : {}) });
+        dataPath: dataRoot, mediaRoot, pollMs: 20, pollTimeoutMs: 3_000, ...limits } } : {}) });
     await bridge.start();
     await bridge.service.enrollContact({ contactId, conversationId, accountId, externalContactRef: peer,
       timezone: 'Asia/Shanghai', goal: '原文件获取验证' });
@@ -220,6 +219,7 @@ test('a helper that never writes the file, writes a non-image or writes too much
   const cases = [
     ['FILE_NOT_WRITTEN', undefined, undefined],
     ['DECODE_FAILED', undefined, Uint8Array.from(Buffer.from('definitely not an image', 'utf8'))],
+    ['DECODE_FAILED', undefined, obfuscated(0x42).subarray(0, 16)],
     ['FILE_TOO_LARGE', 8, obfuscated(0x42)],
   ] as const;
   try {
@@ -239,6 +239,28 @@ test('a helper that never writes the file, writes a non-image or writes too much
       } finally { await helper.close(); }
     }
   } finally { await rm(probe, { recursive: true, force: true }); }
+});
+
+test('the database receives a segmented image only after all original bytes decode', settings, async () => {
+  const probe = await mkdtemp(join(tmpdir(), 'wx-media-probe-'));
+  let completed: Promise<void> = Promise.resolve();
+  const helper = await fakeHelper({ dir: join(probe, 'wxhelper', 'image'), write: async (dir, msgId) => {
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, `${msgId}.dat`), bytes = obfuscated(0x65);
+    await writeFile(path, bytes.subarray(0, 16));
+    completed = sleep(80).then(() => writeFile(path, bytes));
+  } });
+  const f = await fixture('enabled', helper, { dataRoot: probe });
+  try {
+    assert.equal((await f.send(3)).status, 200);
+    const assets = (await f.assets()).rows;
+    assert.equal(assets.length, 1); assert.equal(assets[0]?.sha256, createHash('sha256').update(png).digest('hex'));
+    assert.equal(assets[0]?.completeness, 'complete'); assert.equal(helper.calls.length, 1);
+    assert.deepEqual(await readFile(join(f.mediaRoot, `${assets[0]!.id}.bin`)), png);
+  } finally {
+    await completed; await f.cleanup(); await helper.close();
+    assert.ok(resolve(probe).startsWith(resolve(join(tmpdir(), 'wx-media-probe-')))); await rm(probe, { recursive: true, force: true });
+  }
 });
 
 test('with media disabled nothing is fetched and images keep going to a human', settings, async () => {

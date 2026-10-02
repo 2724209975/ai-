@@ -15,6 +15,7 @@
 import { createHash } from 'node:crypto';
 import type { BinaryMediaProvider } from './media-provider.mts';
 import { detectImageFormat, SUPPORTED_IMAGE_FORMATS } from './image-format.mts';
+import { validateImageBytes } from '../../data/media/image-validation.mts';
 import { DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DeepSeekHttpError, providerErrorCode } from '../generation/deepseek-provider.mts';
 
 /** One prompt version per media kind, mirroring `generation/prompt-versions.mts`. Bump on any edit. */
@@ -131,10 +132,14 @@ export function createVisionMediaProvider(options: VisionProviderOptions): Binar
     async invoke({ mediaType, mimeType, bytes, signal }) {
       if (mediaType !== 'image') throw new Error('UNSUPPORTED_CAPABILITY');
       if (!(bytes instanceof Uint8Array) || bytes.length < 1 || bytes.length > MAX_MEDIA_BYTES) throw new Error('MEDIA_UNCERTAIN');
+      // Validate and upload the same immutable byte snapshot, not caller-owned memory after await.
+      bytes = Buffer.from(bytes);
       // The provider decides the format from content, so a wrong declaration is caught here.
       const detectedFormat = detectImageFormat(bytes);
       if (!detectedFormat || detectedFormat !== mimeType) throw new Error('MEDIA_UNCERTAIN');
       if (bytes.length > maxInlineBytes) throw new Error('VALIDATION_FAILED');
+      const checked = await validateImageBytes(bytes, mimeType, { signal });
+      if (!checked.ok || signal?.aborted) throw new Error('MEDIA_UNCERTAIN');
       const request = {
         model: modelId,
         messages: [{ role: 'user', content: [

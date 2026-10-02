@@ -13,7 +13,7 @@ import { join, resolve, sep } from 'node:path';
 import { acquireWxMedia, buildDatPath } from './media-acquisition.mts';
 import type { WxhelperMediaTransport } from './wxhelper-media-transport.mts';
 
-const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+import { png, jpeg } from '../../../tests/fixtures/media-images.mts';
 const obfuscated = (key: number) => Uint8Array.from(png, byte => byte ^ key);
 
 function transport(behaviour: { ok?: boolean; throw?: boolean; write?: (dir: string) => Promise<void>; dir: string }) {
@@ -36,6 +36,13 @@ async function dataPath() {
   return { root, dir };
 }
 const observation = { kind: 'incoming' as const, type: 'image' as const, platformMessageId: '700000000000123' };
+
+test('a file containing only a PNG header cannot be marked complete', async () => {
+  const result = await acquireWxMedia({ observation, dataPath: tmpdir(), pollMs: 5, pollTimeoutMs: 60,
+    transport: { async downloadAttach() { return { ok: true }; } }, statSize: async () => 8,
+    readBytes: async () => Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]) });
+  assert.equal(result.fetchStatus, 'unavailable');
+});
 
 test('a helper-written .dat is read, de-obfuscated and hashed exactly once', async () => {
   const { root, dir } = await dataPath();
@@ -169,4 +176,51 @@ test('abort during reading discards late bytes instead of marking them complete'
     transport: { async downloadAttach() { return { ok: true }; } }, statSize: async () => png.length,
     readBytes: async () => { controller.abort(); return png; } });
   assert.equal(result.fetchStatus, 'unavailable');
+});
+
+test('segmented writes are polled until the whole image exists with one helper request', async () => {
+  const { root, dir } = await dataPath();
+  const target = join(dir, `${observation.platformMessageId}.dat`), raw = obfuscated(0x37);
+  let finishWrite!: () => void;
+  const finished = new Promise<void>(done => { finishWrite = done; });
+  const helper = transport({ dir, write: async () => {
+    await writeFile(target, raw.subarray(0, 16));
+    // Unlike the earlier fixture, the helper returns before the complete file is written.
+    setTimeout(() => { void writeFile(target, raw).finally(finishWrite); }, 60);
+  } });
+  try {
+    const result = await acquireWxMedia({ observation, dataPath: root, transport: helper.value, pollMs: 10, pollTimeoutMs: 3000 });
+    assert.equal(result.fetchStatus, 'fetched');
+    if (result.fetchStatus === 'fetched') assert.deepEqual(Buffer.from(result.bytes), png);
+    assert.equal(helper.calls.length, 1);
+  } finally {
+    await finished; assert.ok(resolve(root).startsWith(resolve(join(tmpdir(), 'chat-agent-wxmedia-'))));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a file that becomes oversized after the outer stat is rejected by the descriptor reader', async () => {
+  const { root, dir } = await dataPath(), target = join(dir, `${observation.platformMessageId}.dat`);
+  const helper = transport({ dir, write: async () => { await writeFile(target, Buffer.alloc(129)); } });
+  try {
+    const result = await acquireWxMedia({ observation, dataPath: root, transport: helper.value,
+      maxBytes: 128, statSize: async () => 8, pollTimeoutMs: 500 });
+    assert.deepEqual(result, { fetchStatus: 'unavailable', reason: 'FILE_TOO_LARGE', retryable: false });
+  } finally {
+    assert.ok(resolve(root).startsWith(resolve(join(tmpdir(), 'chat-agent-wxmedia-'))));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a different file appearing during decode is read and validated again', async () => {
+  let reads = 0, calls = 0;
+  const result = await acquireWxMedia({ observation, dataPath: tmpdir(), pollMs: 5, pollTimeoutMs: 3000,
+    transport: { async downloadAttach() { calls++; return { ok: true }; } }, statSize: async () => jpeg.length,
+    readBytes: async () => ++reads === 1 ? png : jpeg });
+  assert.equal(result.fetchStatus, 'fetched');
+  if (result.fetchStatus === 'fetched') {
+    assert.equal(result.mimeType, 'image/jpeg'); assert.deepEqual(Buffer.from(result.bytes), jpeg);
+    assert.equal(result.sha256, createHash('sha256').update(jpeg).digest('hex'));
+  }
+  assert.ok(reads >= 4); assert.equal(calls, 1);
 });

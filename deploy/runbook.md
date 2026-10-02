@@ -46,7 +46,8 @@
 默认不取原文件：图片和语音照旧转人工。开启后桥接在收信时把**图片**取回并私有落盘；**语音取不到**——本固定 helper 构建的 `GetVoiceByDB` 是空壳（`return 0`），所以语音一次请求都不发，继续转人工。
 
 - `WECHAT_MEDIA_FETCH=1` 才开启，且必须同时给两个**绝对**路径：`WECHAT_DATA_PATH`（微信数据目录）与 `WECHAT_MEDIA_DIR`（私有媒体目录，不能放在网页静态目录里）。缺任一项进程**启动即失败**。
-- P4-4a 修复：桥接媒体查询与归属回查在联系人 scope 的事务中进行，运行角色仍须 NOBYPASSRLS；消息先提交、媒体后补绑定，第二段事务同步抬高 epoch 并使旧快照失效。默认 8 秒总时限覆盖 helper 请求、文件轮询与读取；预先中止不调用 helper，迟到结果直接丢弃。测试只用假 helper。现有文件头检查不能证明下载完整，媒体模型接线前须验证完整性。
+- P4-4a 修复：桥接媒体查询与归属回查在联系人 scope 的事务中进行，运行角色仍须 NOBYPASSRLS；消息先提交、媒体后补绑定，第二段事务同步抬高 epoch 并使旧快照失效。预先中止不调用 helper，迟到结果直接丢弃。测试只用假 helper。
+- P4-4b 完整性：`npm ci` 安装精确锁定的 sharp 0.35.5 与平台对应原生包；不要省略 optional dependencies，也不要把 Windows 的 `node_modules` 复制到其它宿主。解码以隐藏子进程完整读取像素，最多 2 并发/父进程、16,777,216 像素、10 MiB 文件，缺失解码器或不能启动时转人工。默认 8 秒总时限覆盖 helper、分段文件轮询、限量读取与解码；只取已经完整且验证后未变化的字节。APNG/动画/BMP 暂不支持。其它宿主的原生兼容性仍需在部署卡实测。
 - 可选：`WECHAT_WXHELPER_BASE_URL`（默认 `http://127.0.0.1:19088/`，只接受 http + 回环 + 无凭据/查询）、`WECHAT_MEDIA_MAX_BYTES`（默认 10 MiB）、`WECHAT_MEDIA_POLL_MS`（默认 250）、`WECHAT_MEDIA_POLL_TIMEOUT_MS`（默认 8000）。
 - `GET /healthz` 的 `mediaFetch` 只报计数与固定原因码：`{enabled,image,voice:'unsupported-by-helper',disabled,attempted,fetched,unavailable,duplicate,lastReason}`。不含路径、消息 ID 或联系人。
 - 失败一律降级为转人工且**不重试**：`TRANSPORT_FAILED`、`HELPER_REJECTED`、`FILE_NOT_WRITTEN`、`FILE_TOO_LARGE`、`DECODE_FAILED`、`PATH_INVALID`、`VOICE_UNSUPPORTED_BY_HELPER`。
