@@ -6,6 +6,7 @@ import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-h
 import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv, DEEPSEEK_DEFAULT_MODEL } from '../../packages/ai/index.mts';
 import { createWxBridge } from './wechat-bridge.mts';
 import { resolveWxBridgeRunMode } from './run-mode.mts';
+import { preflightWxBinaryFiles, type WxBinaryFingerprint } from '../../packages/platform/wechat/binary-preflight.mts';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -23,6 +24,13 @@ if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(acco
   || selfRef.length > 256 || /[\s\u0000-\u001f\u007f]/.test(selfRef)
   || !/^[a-f0-9]{64}$/.test(ingressToken)) throw new Error('WX_BRIDGE_CONFIG_INVALID');
 const runMode = resolveWxBridgeRunMode(process.env);
+// Before any model, database, reception, transport or worker is assembled, including receive-only.
+let binaryFingerprint: WxBinaryFingerprint;
+try { binaryFingerprint = await preflightWxBinaryFiles(process.env); }
+catch (error) {
+  process.stderr.write(`wechat binary preflight rejected: ${error instanceof Error ? error.message : 'WX_BINARY_PREFLIGHT_FAILED'}\n`);
+  process.exit(1);
+}
 const wxhelperBaseUrl = runMode.outboundEnabled ? required('WECHAT_WXHELPER_BASE_URL') : undefined;
 // Candidates come from whichever provider the operator names; anything else is refused outright.
 const intelligenceProvider = (process.env.WECHAT_INTELLIGENCE?.trim() || 'persistent-fake').toLowerCase();
@@ -37,7 +45,7 @@ const intelligence = intelligenceProvider === 'deepseek'
   : undefined;
 const { Pool } = await import('pg');
 const pool = new Pool({ connectionString: required('DATABASE_URL'), max: 8 });
-const bridge = createWxBridge({ pool, accountId,
+const bridge = createWxBridge({ pool, accountId, binaryFingerprint,
   selfRef, ingressToken,
   ...(intelligence ? { intelligence } : {}),
   rawStore: createFileRawEventStore(resolve(process.env.RAW_EVENT_DIR?.trim() || '.local-wechat-raw'), Date.now, 'wechat'),

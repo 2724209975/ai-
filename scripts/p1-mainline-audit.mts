@@ -92,7 +92,7 @@ export async function readMainlineAudit(client: QueryClient, window: Window, log
     const calls = modelCalls(logs, window);
     await client.query('COMMIT');
     return { window: { start: window.start, end: window.end },
-      globalPaused: control.rows[0]?.paused === true, modelLink: 'time-window-only',
+      globalPaused: typeof control.rows[0]?.paused === 'boolean' ? control.rows[0].paused : null, modelLink: 'time-window-only',
       isolatedSingleRunShape: plans.length === 1 && contacts.size === 1 && calls.length === 1 && calls[0]?.outcome === 'ok',
       modelCalls: calls, plans,
       limitation: 'No model-to-plan identifier in current logs; operator must verify isolated run and real delivery. This report does not pass P1.' };

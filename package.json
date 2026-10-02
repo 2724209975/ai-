@@ -6,7 +6,8 @@
   "scripts": {
     "migrate": "node scripts/migrate.mts",
     "test:unit": "node --test \"packages/**/*.test.mts\"",
-    "test:app": "node --test apps/core/*.test.mts apps/web/server/owner-http.test.mts",
+    "test:app": "node --test apps/core/*.test.mts apps/bridge/*.test.mts apps/web/server/owner-http.test.mts",
+    "test:tools": "node --test scripts/*.test.mts",
     "test:contracts": "node --test tests/contracts/*.test.mts",
     "test:integration": "node --test tests/integration/*.test.mts",
     "test:e2e": "node --test tests/e2e/*.test.mts",
@@ -23,7 +24,7 @@
     "spike:shape": "node scripts/qq-raw-shape.mts",
     "spike:summary": "node scripts/qq-spike-summary.mts summary",
     "spike:manifest": "node scripts/qq-spike-manifest.mts",
-    "verify": "npm run test:unit && npm run test:app && npm run test:contracts && npm run test:integration && npm run build:web && npm run test:e2e"
+    "verify": "npm run test:unit && npm run test:app && npm run test:tools && npm run test:contracts && npm run test:integration && npm run build:web && npm run test:e2e"
   },
   "dependencies": { "pg": "^8.16.3" },
   "devDependencies": { "playwright": "^1.63.0" }

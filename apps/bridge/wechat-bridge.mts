@@ -16,6 +16,7 @@ import { createWxReceptionPort } from '../../packages/platform/wechat/reception.
 import { decodeWxhelperPush, rawRef, WxWireError } from '../../packages/platform/wechat/wxhelper-codec.mts';
 import { createWxhelperSendCandidate, type WxhelperSendTransport } from '../../packages/platform/wechat/wxhelper-send-port.mts';
 import { createPlatformOutboxPump } from './outbox-pump.mts';
+import type { WxBinaryFingerprint } from '../../packages/platform/wechat/binary-preflight.mts';
 
 export const WX_BRIDGE_ADAPTER_VERSION = 'wechat-wxhelper-0.2.0';
 
@@ -28,6 +29,8 @@ function sameSecret(actual: string | null, expected: string): boolean {
 export function createWxBridge(options: {
   pool: PgPool; accountId: string; selfRef: string; ingressToken: string; rawStore: RawEventStore;
   maxBodyBytes?: number; outboxIntervalMs?: number; onError?(phase: string): void;
+  /** Production startup supplies this only after hashing the pinned files; fixtures may omit it. */
+  binaryFingerprint?: WxBinaryFingerprint;
   /** 04's provider. Defaults to the persistent fake; a real model is supplied here, not fetched. */
   intelligence?: PersistentIntelligence;
   /** Presence is the entire outbound switch: no transport means no worker and no send path. */
@@ -86,7 +89,12 @@ export function createWxBridge(options: {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ status: 'ok',
           mode: options.dispatch ? 'receive-and-dispatch' : 'receive-only',
-          worker: workerEnabled ? 'enabled' : 'disabled' }));
+          worker: workerEnabled ? 'enabled' : 'disabled',
+          ...(options.binaryFingerprint ? { binaryFingerprint: {
+            offsetBuild: options.binaryFingerprint.offsetBuild,
+            clientPrefix: options.binaryFingerprint.clientPrefix,
+            helperPrefix: options.binaryFingerprint.helperPrefix,
+          } } : {}) }));
         return;
       }
       if (request.method !== 'POST' || url.pathname !== '/wxhelper/event') { response.writeHead(404); response.end(); return; }
