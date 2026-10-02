@@ -4,7 +4,7 @@ import ts from '../../../apps/web/node_modules/typescript/lib/typescript.js';
 
 const root = resolve('packages/ai');
 const entry = resolve(root, 'index.mts');
-const program = ts.createProgram([entry], {
+const program = ts.createProgram([entry, resolve(root, 'eval/trial-report.mts'), resolve(root, 'eval/trial-report-postgres.mts')], {
   noEmit: true, strict: true, skipLibCheck: true, allowImportingTsExtensions: true,
   module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
   target: ts.ScriptTarget.ES2023,
