@@ -1,8 +1,8 @@
 # 微信与 QQ 真实接入验证计划
 
-状态：2026-09-22 仅完成公开资料初查，两个平台对“本人现有个人账号的一对一好友会话”的能力均未实测、未确认。任何 mock、机器人或客服 API 的成功都不能替代目标账号场景的真实验证。
+当前实测状态只见 [开发计划 §0](development-plan.md#0-当前状态每完成一个任务由总控更新本节)。本页的公开资料查证与候选对照是 2026-09-22/24 的历史输入，不代表当前能力；平台实测以报告为证，mock、机器人或客服 API 不能替代目标账号场景。
 
-## 1. 当前查证结论
+## 1. 历史公开资料查证（2026-09-22/24）
 
 QQ 官方机器人文档说明：用户可与“机器人”单独对话，提供单聊收发、文本/富媒体、主动与被动消息、重复事件处理等规则；被动单聊消息有时限/次数约束，用户也可关闭机器人主动消息。官方 BotGo 示例同样要求创建 QQ 机器人及沙箱成员。这证明“机器人账号场景”有官方服务端接口，不证明它能读取或代发本人普通 QQ 账号与既有好友的聊天。[QQ 启动接入](https://bot.q.qq.com/wiki/develop/api-v2/)、[QQ 消息收发概述](https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/overview.html)、[BotGo 官方仓库](https://github.com/tencent-connect/botgo)。
 
@@ -28,7 +28,7 @@ QQ 路线的候选版本、许可与入口缺口已整理为 [QQ spike 计划](p
 | 变更 | 撤回、编辑、删除、改名、引用缺失能否收到？ | 映射 D09；缺失时标能力限制 |
 | 安全 | webhook 验签、token 轮换、IP 白名单、最小权限、凭据存放？ | 伪造/重放被拒绝，凭据不入日志/仓库 |
 
-## 3. 候选路线记录
+## 3. 历史候选路线记录
 
 | 路线 | 当前证据 | 是否匹配既有个人聊天 | 状态 |
 | --- | --- | --- | --- |
@@ -45,11 +45,11 @@ QQ 路线的候选版本、许可与入口缺口已整理为 [QQ spike 计划](p
 
 ## 4. Spike 执行与报告
 
-每平台独立限时实验，先沙箱/测试账号，不在主账号直接试高风险方案。步骤：锁定账号形态和官方条款 → 建最小 adapter → 执行能力矩阵 → 制造重复、乱序、断网、超时、进程崩溃 → 关本人电脑持续测试 → 恢复并 reconcile → 产出 go/conditional/no-go。
+每平台独立限时实验，先沙箱/测试账号，不在主账号直接试高风险方案。步骤：锁定账号形态和官方条款 → 建最小 adapter → 执行能力矩阵 → 制造重复、乱序、断网、超时、进程崩溃 → 按 P5 做关机持续运行测试 → 恢复并 reconcile → 产出 go/conditional/no-go。
 
 测试至少包括：双向文字；各媒体类型；多条消息；主动消息；本人从手机/桌面发言；系统回显；同一事件重复；发送前断线、提交中断线、接受后丢响应；adapter/核心/数据库分别重启；二维码/token 过期；平台限频；24h 本人电脑关机。正式 AC23 的持续时长与可用性目标由 D06 确认，24h 只是 spike 下限建议，不是 PRD 新承诺。
 
-报告写入 `docs/reports/platform-<platform>-YYYY-MM-DD.md`，并同时交付同日的 `platform-<platform>-capability-snapshot-<date>.json`（格式与填写规则见 [QQ 只接收步骤](qq-receive-only-runbook.md) 与 contracts.md §2；总体状态由逐项证据推导，`tested` 不得只引用厂商文档）。报告包含：路线/版本、环境、能力快照、逐项证据、风险、成本、人工维护频率、未验证项、结论、对 contracts 的变更提案。结论为 `GO_CONFIRM_ONLY`、`GO_AUTO`、`CONDITIONAL` 或 `NO_GO`；只有满足本人发言识别、未知回执处理和关机持续运行后才能 `GO_AUTO`。
+报告写入 `docs/reports/platform-<platform>-YYYY-MM-DD.md`，并同时交付同日的 `platform-<platform>-capability-snapshot-<date>.json`（格式与填写规则见 [QQ 只接收步骤](platforms/qq-receive-only-runbook.md) 与 contracts.md §2；总体状态由逐项证据推导，`tested` 不得只引用厂商文档）。报告包含：路线/版本、环境、能力快照、逐项证据、风险、成本、人工维护频率、未验证项、结论、对 contracts 的变更提案。结论为 `GO_CONFIRM_ONLY`、`GO_AUTO`、`CONDITIONAL` 或 `NO_GO`；只有满足本人发言识别、未知回执处理和关机持续运行后才能 `GO_AUTO`。
 
 ## 5. 开发期间的模拟 adapter
 

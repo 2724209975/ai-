@@ -1,5 +1,7 @@
 # 微信路线候选事实与决策包
 
+> 本页保留原查证日期的历史调研、提案或阶段快照，不表示当前能力与进度；最新状态只见 [开发计划 §0](../development-plan.md#0-当前状态每完成一个任务由总控更新本节)，执行范围和顺序以当前任务卡为准。真实操作由本人执行，旧授权不用于新增发送；部署位置到 P5 再决定。
+
 日期：2026-09-24。方式：GitHub API 与许可文件的**只读**核查（本页当日为决策输入）；后续进展与实测结论见 [platform-wechat-wxhelper-2026-09-24.md](../reports/platform-wechat-wxhelper-2026-09-24.md) 与 [platform-wechat-capability-snapshot-2026-09-24.json](../reports/platform-wechat-capability-snapshot-2026-09-24.json)。**当日结论更新**：本人选定 wxhelper 路线，上游偏移表与本机二进制不匹配（同版本号不同构建），经离线偏移移植后**只接收实测通过**——只捕获到文字/图片/语音与一条『拍一拍』，表情（贴纸）未出现；发送、回执、媒体完整获取仍 `unknown`。
 
 ## 结论先行

@@ -1,6 +1,6 @@
 # 架构与工程边界
 
-基线：PRD v1.3；契约版本 0.3.0（`packages/contracts` 已提供首批机器类型与 JSON Schema）。产品待定项只在 [decisions.md](decisions.md) 定稿。当前状态见 [requirements.md](requirements.md)。
+基线：PRD v1.3；契约版本 0.3.0（`packages/contracts` 已提供首批机器类型与 JSON Schema）。产品待定项只在 [decisions.md](decisions.md) 定稿。当前状态只见 [开发计划 §0](development-plan.md#0-当前状态每完成一个任务由总控更新本节)。
 
 ## 1. 技术建议
 
@@ -16,8 +16,8 @@
 | 数据和队列 | PostgreSQL 17 最新受支持补丁，pg、SQL migrations | 单库事务维护 inbox/outbox、版本和任务租约；17 仍受支持 [S3]；SKIP LOCKED 适合任务领取但不能代替业务锁 [S4] |
 | 媒体 | 私有持久卷 + MediaStore 接口，需要时迁移私有对象存储 | 小规模降低服务数量；不把媒体放公网静态目录；保存与备份周期待 D07 |
 | 模型 | ModelGateway 抽象文本生成、视觉理解、语音转写；假实现先行 | 不锁厂商或自称所有模型能理解动态表情；D06 选供应商后按实际模型分别测质量、费用、时延、数据设置 |
-| 部署 | Linux 单机 Docker Compose，反向代理提供 HTTPS；API、worker、数据库及媒体卷 | 官方支持 Compose 单机部署 [S5]；不是高可用，需备份/恢复；平台若要求专用常在线设备或 Windows，adapter 独立桥接，核心不迁移 |
-| 登录 | 单个本人账号，无注册；成熟密码哈希库、HttpOnly/Secure 会话 cookie、CSRF/Origin 校验与限速 | 单用户降低复杂度；凭据不入仓库；真实公网启用前由 07 验证登录、会话撤销、鉴权及恢复方式 |
+| 部署 | P0–P4 本机运行；部署位置到 P5 再决定；核心与平台桥接边界保持独立 | 单机 Compose 是历史候选 [S5]，不是当前宿主决定；管理端私网访问，备份恢复与关机运行按 P5 验收 |
+| 登录 | 单个本人账号，无注册；成熟密码哈希库、HttpOnly/Secure 会话 cookie、CSRF/Origin 校验与限速 | 单用户降低复杂度；凭据不入仓库；远程访问启用前由 07 验证登录、会话撤销、鉴权及恢复方式 |
 | 测试 | 模块测试、真实 PostgreSQL 契约/竞态测试、手机视口浏览器 E2E、真实平台专项 | 假平台/假模型保证可复现；不代替真实 AC23 或生成质量验收 |
 
 暂以 2 vCPU / 4 GB RAM 作为不跑本地大模型的测试起点，仅为容量假设，不是购买建议、报价或 SLA。实际规格取决于媒体并发、连接器及数据库测量。月成本模型：云主机+存储/备份+模型输入输出 token+转写/图片计费+接入服务/常在线设备+通知。07 在 D06 数量与预算确定后给出实时报价、限额和超额暂停机制；本次不产生费用。
@@ -77,11 +77,11 @@ docs/tasks/                # 本次七份任务提示词
 docs/reports/              # 后续模块交付、接入实验、验收证据
 ```
 
-同仓协作先确定文件归属；不同任务不同时修改 package.json、锁文件、公共契约或迁移编号。公共需求以变更提案交总控合并。可以使用独立分支/worktree，但本次尚未初始化 Git，也不要求自行创建 Codex 任务。
+同仓协作先确定文件归属；不同任务不同时修改 package.json、锁文件、公共契约或迁移编号。公共需求以变更提案交总控合并。可以使用独立分支/worktree；每卡分支与合并按开发计划 §2.3，不自动创建新聊天。
 
 ## 4. 一致性与故障边界
 
-业务状态和 outbox 同事务写入；消费者至少一次投递，以 inbox 去重。每联系人串行的短事务 + conversationRevision CAS，模型在锁外运行，结果回来再对版本。平台提交用持久化发送账本与唯一 sendKey；本地幂等不等于平台 exactly-once，无法核对的未知结果保持阻塞。G0 的 `withDispatchLease` 暂以单库全局 advisory lock 串行提交、暂停与依赖失效的提交边界，个人部署流量低时以简单和安全为先；网络提交前已持久写入 `SUBMITTING`，异常恢复只能转 `RESULT_UNKNOWN`。02/03 现有持久 provider 已接入该边界，后续 provider 必须沿用，不能直接调用底层 claim 后绕开锁；鉴权入口、worker 装配与真实平台仍未交付。详细对象和状态只在 [contracts.md](contracts.md) 定义。
+业务状态和 outbox 同事务写入；消费者至少一次投递，以 inbox 去重。每联系人串行的短事务 + conversationRevision CAS，模型在锁外运行，结果回来再对版本。平台提交用持久化发送账本与唯一 sendKey；本地幂等不等于平台 exactly-once，无法核对的未知结果保持阻塞。G0 的 `withDispatchLease` 暂以单库全局 advisory lock 串行提交、暂停与依赖失效的提交边界，个人部署流量低时以简单和安全为先；网络提交前已持久写入 `SUBMITTING`，异常恢复只能转 `RESULT_UNKNOWN`。02/03 现有持久 provider 已接入该边界，后续 provider 必须沿用，不能直接调用底层 claim 后绕开锁；工程与平台实测状态以开发计划 §0 及证据为准。详细对象和状态只在 [contracts.md](contracts.md) 定义。
 
 全局暂停、策略/证据/技能失效必须先更新可同步检查的 epoch/version，再异步传播清理；不能仅依赖事件最终到达。03/05 修改依赖时与依赖版本更新、outbox 一起提交；02 dispatch 读取当前版本。G0 的 0002 数据表启用联系人 RLS，0003 修订事实策略的 scope 判断（空字符串等同无 scope）；运行角色必须受限且不得具备 BYPASSRLS，02/04 读取须在可信服务事务中设置联系人 scope，本人跨联系人管理走独立鉴权查询端口。任何自动确认式的“模型认为可以”都无效。
 

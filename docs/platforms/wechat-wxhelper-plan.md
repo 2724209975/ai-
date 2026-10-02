@@ -1,5 +1,7 @@
 # 微信 wxhelper 路线计划
 
+> 本页保留原查证日期的历史调研、提案或阶段快照，不表示当前能力与进度；最新状态只见 [开发计划 §0](../development-plan.md#0-当前状态每完成一个任务由总控更新本节)，执行范围和顺序以当前任务卡为准。真实操作由本人执行，旧授权不用于新增发送；部署位置到 P5 再决定。
+
 日期：2026-09-24。状态：**只接收已实测通过（偏移移植后），发送侧未做**。本文件是计划与中止条件；能力结论只以 [platform-wechat-capability-snapshot-2026-09-24.json](../reports/platform-wechat-capability-snapshot-2026-09-24.json) 为准——目前只有 `receive_types` 是 `tested`，总体仍 `unknown`。完整过程、崩溃记录与偏移移植细节见 [platform-wechat-wxhelper-2026-09-24.md](../reports/platform-wechat-wxhelper-2026-09-24.md)。
 
 **2026-09-25 发送离线门禁**：旧发送偏移不是函数入口，上游 HTTP 成功码也不能证明内部发送成功；后续已用交叉调用证据定位三个本机入口并离线重建 DLL，假传输候选端口通过隔离数据库门禁。真实出站仍关闭，待测试号单次验证。见 [离线核验报告](../reports/wechat-send-offline-2026-09-25.md)。

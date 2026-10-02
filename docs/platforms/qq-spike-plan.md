@@ -1,5 +1,7 @@
 # QQ 真实接入 Spike 计划（G2 前置）
 
+> 本页保留原查证日期的历史调研、提案或阶段快照，不表示当前能力与进度；最新状态只见 [开发计划 §0](../development-plan.md#0-当前状态每完成一个任务由总控更新本节)，执行范围和顺序以当前任务卡为准。真实操作由本人执行，旧授权不用于新增发送；部署位置到 P5 再决定。
+
 日期：2026-09-24。现状：**QQ 非主力个人账号在本机 Windows 完成只接收试验与两次本人逐条授权的真实文字发送，结论 CONDITIONAL**，见 [脱敏报告](../reports/platform-qq-2026-09-24.md)。本人已接受非官方路线与账号风险，知情测试联系人已配合；阿里云后置，本人接管、媒体原件、已批准表情发送与 AC23 尚未验证。报告由本人/原操作人提交，逐样本私有索引待另一人复核；不可把它说成独立审计已完成。基线：PRD v1.3、公共契约 v0.3.0、[platform-validation.md](../platform-validation.md)、[aliyun-readiness.md](aliyun-readiness.md)、[packages/platform/qq](../../packages/platform/qq/README.md)。复现步骤与停机条件见 [qq-receive-only-runbook.md](qq-receive-only-runbook.md)。
 
 本页把 G2 入口的账号、知情联系人与常在线宿主条件及工程缺口分开列出。公开资料只作 spike 输入，不构成能力验证。

@@ -1,6 +1,8 @@
-# 平台模块：当前仅离线模拟
+# 平台模块与模拟器边界
 
-遵循 docs/contracts.md v0.3.0 的 PlatformPort 语义、八类事件名和发送状态。此目录已有 QQ 候选 HTTP 传输代码，但没有真实微信/QQ 连接、账号登录或平台调用；未安装外部依赖、未保存凭据。`packages/contracts` v0.3.0 已提供公共机器契约，但本目录尚未切换为导入它；mock/adapter.mts 的类型仍是模拟器内部投影，不能作为另一个公共契约发布。
+当前状态只见 [开发计划 §0](../../docs/development-plan.md#0-当前状态每完成一个任务由总控更新本节)；本页保留模块说明与操作约束，不维护测试数字或进度。
+
+遵循 docs/contracts.md v0.3.0 的平台端口、事件和发送状态。mock 类型是模拟器内部投影，不作为另一个公共契约发布；真实连接装配见 apps/bridge，登录和注入由本人执行。当前能力与实测边界只见开发计划 §0。
 
 ## 运行
 
@@ -11,13 +13,13 @@ node --test packages/platform/mock/adapter.test.mts
 node packages/platform/mock/examples.mts
 ```
 
-续作新增 QQ OneBot 协议解析、格式转换及回调接纳入口（无真实连接），见 [qq/README.md](qq/README.md)。全部测试命令：
+QQ OneBot 协议解析、格式转换及回调接纳入口，见 [qq/README.md](qq/README.md)。全部测试命令：
 
 ```powershell
 node --test packages/platform/mock/adapter.test.mts packages/platform/qq/onebot-codec.test.mts packages/platform/qq/webhook-ingress.test.mts packages/platform/qq/send-executor.test.mts
 ```
 
-Node 原生剥离 TypeScript 类型运行测试，不做静态类型检查。本机没有 tsc，尚未执行 strict 类型检查或全项目 CI；不声称通过正式 contract tests。
+Node 原生剥离 TypeScript 类型运行这些测试；完整门禁与类型检查范围见根 package.json 和开发计划 §0。
 
 ## 提供给 02/03 的使用方式
 
@@ -25,7 +27,7 @@ Node 原生剥离 TypeScript 类型运行测试，不做静态类型检查。本
 
 submitSend 每次读取 02 注入的 preflight 回调（默认拒绝），校验截止时间、平台能力、批准素材查询结果。同 sendKey 返回账本已有结果；同键不同内容、同任务不同键拒绝。RESULT_UNKNOWN 阻止同会话新任务，不阻止其他会话；所有结果带 adapter=mock。明确失败也不由适配器自动重试。
 
-observe 接受合成 Observation，而非未经验证的网络 payload。只有测试驱动提供 verifiedOwnerEvidence 才产生 owner；账本平台 ID 匹配优先视为 agent。无关联的自身消息保留 unknown，交 02 暂停/核对；不能以“没有找到发送记录”推定本人。先回显、后回执时，初次 unknown 不自动改成 owner；正式来源更正事件尚待 00 定义。
+observe 接受合成 Observation，而非未经验证的网络 payload。只有测试驱动提供 verifiedOwnerEvidence 才产生 owner；账本平台 ID 匹配优先视为 agent。无关联的自身消息保留 unknown，交 02 暂停/核对；不能以“没有找到发送记录”推定本人。先回显、后回执时，初次 unknown 不自动改成 owner；来源更正事件见公共契约，真实平台证据不足时保持 unknown。
 
 reconcile 只返回模拟事件/未决发送，不重发；CONNECTED 前必须经过 RECONCILING。historyComplete=false 明示没有平台历史补齐证据。恢复后是否可发送旧计划必须由 02 对 generation/policy/暂停等最新状态重新核对，mock 不代替业务状态机。
 
@@ -35,4 +37,4 @@ snapshot 是隔离的内存副本，用来模拟账本恢复，不是持久化�
 
 ## 真实路径
 
-见 docs/platforms/feasibility.md、github-reuse.md、capabilities.md、verification.md。微信和 QQ 真实能力均 unknown；无已验证路径时不创建返回模拟成功的“真实适配器”。配置示例只是说明，不会启用任何平台连接。
+见 docs/platforms/feasibility.md、github-reuse.md、capabilities.md、verification.md。逐项真实能力只见开发计划 §0 引用的证据；不得创建返回模拟成功的“真实适配器”。配置示例只是说明，不会启用任何平台连接。

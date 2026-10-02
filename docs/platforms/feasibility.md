@@ -1,5 +1,7 @@
 # 微信与 QQ 接入可行性（阶段 A）
 
+> 本页保留原查证日期的历史调研、提案或阶段快照，不表示当前能力与进度；最新状态只见 [开发计划 §0](../development-plan.md#0-当前状态每完成一个任务由总控更新本节)，执行范围和顺序以当前任务卡为准。真实操作由本人执行，旧授权不用于新增发送；部署位置到 P5 再决定。
+
 日期：2026-09-22；需求：PRD v1.3。结论：资料查证已开展，两个个人账号真实接入均未验证，AC23 均未通过；不能宣称当前已可代聊。
 
 初查时 AGENTS.md、architecture/contracts/development-plan/decisions/tasks/01-platform 均不存在。随后工作区新增 requirements.md、README.md、architecture.md，已阅读并采用模块归属；其余公共文档以实际出现后的版本为准，不以 README 的链接当作文件已完成。未改公共约定。
