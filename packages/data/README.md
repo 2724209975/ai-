@@ -21,7 +21,7 @@
 `postgres/media-repository.mts` 只由 `postgres/provider.mts` 在 03 的事务内调用；调用方负责事务、`setContactScope` 和发送边界锁，仓储自身不接收浏览器路径或平台凭据。
 
 - `registerMediaAsset` 只登记 03 私有字节存储产出的元数据（`MediaAsset`）：资产必须与同一联系人的 live 来信消息一一对应，`fetch_status=stored`、`completeness=complete`、SHA-256 合法、MIME 与 `mediaType` 相符，且未被批准发送。重复登记返回 `duplicate` 且不重复抬高 epoch。
-- `attachMediaToMessage` 是收信路径用的登记入口：01 先读字节并写入 03 的私有存储，再把 `MediaAsset` 交给这个方法，它只建资产行并回写消息的 `media_id`，与插入该消息处于同一事务。重放同一平台消息是幂等的（资产已存在则不覆盖 `media_id`）。它**不**额外抬高 epoch 或写失效事件：同一事务里的消息插入已经做过，且瞬刻之前不存在的资产不可能被快照引用。因为 `data_media_assets` 没有 `(contact_id,message_id)` 唯一约束，会并发获取同一消息的调用方必须先自行查重。
+- `attachMediaToMessage` 是收信后补绑定入口：消息先提交，01 取得字节并经 03 私有存储落盘，再由该方法复用 `registerMediaAsset` 完成绑定。绑定在独立事务里提交，必须同步抬高 epoch、失效旧快照及派生依据、写 `EvidenceInvalidated`。首次绑定返回 `duplicate=false`；精确重放同一资产返回 `true`，不再改变版本或产生事件。共享发送边界锁与消息版本 CAS 拒绝竞争资产，不能用事前查重替代事务复核。桥接读取消息和 `FileMediaStore` 的消息归属回查均使用可信联系人 scope 的短事务，适用于受 RLS 限制的运行账号。
 - `storeMediaInterpretation` 把 04 的完整草稿存为新的 `valid` 版本，写入前逐项复核：草稿状态、结构化含义中的 `mediaType/sourceAssetVersion/sourceSha256/promptVersion/dataRegion/retentionPolicy`、覆盖声明（图片 `full_image`、语音 `complete_transcript`）、消息与资产版本（CAS，不符返回 `CONFLICT_VERSION`）、来源消息的 `actor=contact`、`mode=live`、早于 cutoff，以及证据引用必须等于由可信消息绑定与文件哈希构造的两个引用（不采纳模型自报引用）。相同输入的幂等重放返回 `duplicate`。
 - `readMediaInterpretation` 只返回最新 `valid` 版本，并把该版本的 `data_evidence` 与当前源消息/资产版本逐项比对；任一不符（含直接改库、缺少某个证据行、来源不再是 live 来信）就按「没有可用解释」返回 `undefined`，不做部分降级。因此这个读路径是同步失效复核，不依赖 outbox 是否被消费。
 - `changeMediaInterpretation` 是本人纠正/删除：纠正另存新版本并记 `correctedByOwner`，删除清空正文并让该资产回到 `interpretation_status=pending`。既有版本一律置 `invalid` 且清空正文，只保留版本号与引用。
@@ -30,5 +30,4 @@
 
 ### 微信原文件获取（P4-4，01 取值 / 03 落库）
 
-桥接在收信后按 `WECHAT_MEDIA_FETCH=1` 取图片原文件：先请 helper 把文件写到微信数据目录（`<WECHAT_DATA_PATH>\wxhelper\image\<msgId>.dat`），桥接自己按字节解出容器与图片，再用 03 的私有 `FileMediaStore` 落盘，最后由 `attachMediaToMessage` 在同一事务里把资产与消息绑起来。任何一步失败都只让该图片以 `media_id=NULL` 落库并转人工，**不重试、不猜格式、不改标媒体类型**。语音在本固定 helper 构建上取不到（`GetVoiceByDB` 是空壳），因此一次请求都不会发出。
-
+桥接在收信后按 `WECHAT_MEDIA_FETCH=1` 取图片原文件：先请 helper 把文件写到微信数据目录（`<WECHAT_DATA_PATH>\wxhelper\image\<msgId>.dat`），桥接自己按字节识别容器并解混淆，再用 03 的私有 `FileMediaStore` 落盘，最后由 `attachMediaToMessage` 在第二段事务里把资产与消息绑起来。任何一步失败都转人工，**不重试、不改标媒体类型**。默认 8 秒是 helper 请求、轮询和读取共用的总时限；中止/超时后的结果不再进入存储。语音在本固定 helper 构建上没有可用获取入口（`GetVoiceByDB` 是空壳），因此一次请求都不会发出。当前容器检查仅确认文件头，不解码像素或证明完整下载；真实理解接线前仍须补完整性验收。

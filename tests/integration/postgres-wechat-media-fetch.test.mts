@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -18,6 +18,7 @@ import { changeGlobalPause } from '../../packages/infrastructure/postgres/dispat
 import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { setContactScope, withTransaction } from '../../packages/infrastructure/postgres/transaction.mts';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
+import type { MediaAsset } from '../../packages/data/media/file-store.mts';
 import { adaptDataContextProjection } from '../../packages/ai/index.mts';
 import { defaultPolicy } from '../../packages/orchestration/policy/evaluate.mts';
 import { newId } from '../../packages/orchestration/postgres/ids.mts';
@@ -68,12 +69,15 @@ async function fixture(media: 'enabled' | 'disabled', helper: Awaited<ReturnType
   overrides: { maxBytes?: number; dataRoot?: string } = {}) {
   if (!databaseUrl) throw new Error('TEST_DATABASE_URL_REQUIRED');
   const { Client, Pool } = await import('pg');
-  const schema = `test_wxmedia_${randomBytes(8).toString('hex')}`;
+  const suffix = randomBytes(8).toString('hex'), schema = `test_wxmedia_${suffix}`, role = `wxmedia_role_${suffix}`;
   const admin = new Client({ connectionString: databaseUrl }); await admin.connect();
   await admin.query(`CREATE SCHEMA ${schema}`);
   await admin.query(`SET search_path TO ${schema}`);
   await applyMigrations(admin, resolve('db/migrations'));
-  const pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 4 });
+  await admin.query(`CREATE ROLE ${role} NOLOGIN NOBYPASSRLS`);
+  await admin.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}`);
+  await admin.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${role}`);
+  const pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema} -c role=${role}`, max: 4 });
   const rawRoot = await mkdtemp(join(tmpdir(), 'wx-media-raw-'));
   const mediaRoot = await mkdtemp(join(tmpdir(), 'wx-media-private-'));
   const dataRoot = overrides.dataRoot ?? await mkdtemp(join(tmpdir(), 'wx-media-data-'));
@@ -107,14 +111,16 @@ async function fixture(media: 'enabled' | 'disabled', helper: Awaited<ReturnType
       health: () => fetch(`${base}/healthz`).then(response => response.json() as Promise<Record<string, unknown>>),
       send: (type: number, msgId = imageMessageId) => fetch(`${base}/wxhelper/event?token=test-loopback-secret`, {
         method: 'POST', body: Buffer.from(`{"fromUser":${JSON.stringify(peer)},"toUser":${JSON.stringify(self)},"msgId":${msgId},"msgSequence":1,"createTime":1727100000,"type":${type}}`) }),
-      messages: () => pool.query<{ id: string; media_id: string | null; type: string; version: string }>(
-        'SELECT id,media_id,type,version FROM data_messages ORDER BY created_at'),
-      assets: () => pool.query<{ id: string; message_id: string; media_type: string; fetch_status: string; completeness: string; sha256: string; storage_ref: string | null; approval_status: string }>(
-        'SELECT id,message_id,media_type,fetch_status,completeness,sha256,storage_ref,approval_status FROM data_media_assets'),
+      messages: () => withTransaction(pool, async tx => { await setContactScope(tx, contactId);
+        return tx.query<{ id: string; media_id: string | null; type: string; version: string }>(
+          'SELECT id,media_id,type,version FROM data_messages ORDER BY created_at'); }),
+      assets: () => withTransaction(pool, async tx => { await setContactScope(tx, contactId);
+        return tx.query<{ id: string; message_id: string; media_type: string; fetch_status: string; completeness: string; sha256: string; storage_ref: string | null; approval_status: string }>(
+          'SELECT id,message_id,media_type,fetch_status,completeness,sha256,storage_ref,approval_status FROM data_media_assets'); }),
       async cleanup() {
         if (bridge) await bridge.stop();
         await pool.end();
-        await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();
+        await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.query(`DROP ROLE ${role}`); await admin.end();
         for (const root of ownsDataRoot ? [rawRoot, mediaRoot, dataRoot] : [rawRoot, mediaRoot]) {
           assert.ok(resolve(root).startsWith(resolve(tmpdir())));
           await rm(root, { recursive: true, force: true });
@@ -122,7 +128,7 @@ async function fixture(media: 'enabled' | 'disabled', helper: Awaited<ReturnType
       } };
   } catch (error) {
     if (bridge) await bridge.stop();
-    await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();
+    await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.query(`DROP ROLE ${role}`); await admin.end();
     for (const root of ownsDataRoot ? [rawRoot, mediaRoot, dataRoot] : [rawRoot, mediaRoot]) await rm(root, { recursive: true, force: true });
     throw error;
   }
@@ -255,4 +261,43 @@ test('a bridge configured with an incomplete media option is refused instead of 
       onError: () => {}, media: { transport: { downloadAttach: async () => ({ ok: true }) }, dataPath: '', mediaRoot: '' } }),
       { message: 'WX_BRIDGE_CONFIG_INVALID' });
   } finally { await f.cleanup(); }
+});
+
+test('late image binding invalidates existing snapshots once; scoped reads and exact replays preserve isolation', settings, async () => {
+  const probe = await mkdtemp(join(tmpdir(), 'wx-media-probe-'));
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>(done => { release = done; }), started = new Promise<void>(done => { entered = done; });
+  const helper = await fakeHelper({ dir: join(probe, 'wxhelper', 'image'), write: async (dir, msgId) => {
+    entered(); await gate; await mkdir(dir, { recursive: true }); await writeFile(join(dir, `${msgId}.dat`), obfuscated(0x23));
+  } });
+  const f = await fixture('enabled', helper, { dataRoot: probe });
+  const pending = f.send(3);
+  try {
+    await Promise.race([started, sleep(1000).then(() => { throw new Error('SCOPED_FETCH_NOT_STARTED'); })]);
+    const data = new PgDataProvider(), scope = { callerContactId: f.contactId, contactId: f.contactId, allowedScopes: [f.contactId] };
+    const old = await withTransaction(f.pool, async tx => {
+      const control = (await tx.query<{ generation: string }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [f.conversationId])).rows[0]!;
+      return data.buildContext(tx, { ...scope, generation: Number(control.generation), policyVersion: 1, cutoffTime: new Date().toISOString() });
+    });
+    const events = Number((await f.pool.query('SELECT count(*) AS n FROM event_outbox')).rows[0].n);
+    release(); assert.equal((await pending).status, 200);
+    const control = (await f.pool.query('SELECT dependency_epoch FROM dispatch_control WHERE conversation_id=$1', [f.conversationId])).rows[0];
+    assert.equal(Number(control.dependency_epoch), old.dependencyEpoch + 1);
+    assert.equal(Number((await f.pool.query('SELECT count(*) AS n FROM event_outbox')).rows[0].n), events + 1);
+    await assert.rejects(withTransaction(f.pool, tx => data.readContextProjection(tx, { ...scope,
+      snapshotId: old.snapshot.id, expectedDependencyEpoch: old.dependencyEpoch })), /STALE_CONTEXT/);
+    const message = (await f.messages()).rows[0]!, assetId = (await f.assets()).rows[0]!.id;
+    const asset = JSON.parse(await readFile(join(f.mediaRoot, `${assetId}.json`), 'utf8')) as MediaAsset;
+    const duplicate = await withTransaction(f.pool, tx => data.attachMediaToMessage(tx, { ...scope,
+      messageId: message.id, expectedMessageVersion: 1, asset }));
+    assert.equal(duplicate.duplicate, true); assert.equal(Number((await f.messages()).rows[0]!.version), 2);
+    assert.equal(Number((await f.pool.query('SELECT dependency_epoch FROM dispatch_control WHERE conversation_id=$1', [f.conversationId])).rows[0].dependency_epoch), old.dependencyEpoch + 1);
+    assert.equal((await f.pool.query('SELECT * FROM data_media_assets')).rows.length, 0, 'scope cannot leak through the pool');
+    await withTransaction(f.pool, async tx => {
+      await setContactScope(tx, newId());
+      assert.equal((await tx.query('SELECT * FROM data_media_assets')).rows.length, 0);
+      assert.equal((await tx.query('SELECT * FROM data_messages')).rows.length, 0);
+    });
+  } finally { release(); await pending; await f.cleanup(); await helper.close();
+    assert.ok(resolve(probe).startsWith(resolve(join(tmpdir(), 'wx-media-probe-')))); await rm(probe, { recursive: true, force: true }); }
 });

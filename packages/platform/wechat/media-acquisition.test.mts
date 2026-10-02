@@ -143,3 +143,30 @@ test('a data path that is not absolute, or that would escape it, is refused befo
   assert.ok(inside.endsWith(join('wxhelper', 'image', '42.dat')));
   assert.equal(helper.calls.length, 0);
 });
+
+test('pre-aborted acquisition performs no helper or disk I/O', async () => {
+  let calls = 0;
+  const controller = new AbortController(); controller.abort();
+  const result = await acquireWxMedia({ observation, dataPath: tmpdir(), signal: controller.signal,
+    transport: { async downloadAttach() { calls++; return { ok: true }; } },
+    statSize: async () => { calls++; return png.length; }, readBytes: async () => { calls++; return png; } });
+  assert.equal(result.fetchStatus, 'unavailable'); assert.equal(calls, 0);
+});
+
+test('the total deadline rejects a helper result arriving after the deadline', async () => {
+  let diskReads = 0, aborted = false;
+  const result = await acquireWxMedia({ observation, dataPath: tmpdir(), pollMs: 5, pollTimeoutMs: 30,
+    transport: { async downloadAttach({ signal }) {
+      signal.addEventListener('abort', () => { aborted = true; }, { once: true });
+      await new Promise(done => setTimeout(done, 120)); return { ok: true };
+    } }, statSize: async () => { diskReads++; return png.length; }, readBytes: async () => { diskReads++; return png; } });
+  assert.equal(result.fetchStatus, 'unavailable'); assert.equal(aborted, true); assert.equal(diskReads, 0);
+});
+
+test('abort during reading discards late bytes instead of marking them complete', async () => {
+  const controller = new AbortController();
+  const result = await acquireWxMedia({ observation, dataPath: tmpdir(), signal: controller.signal,
+    transport: { async downloadAttach() { return { ok: true }; } }, statSize: async () => png.length,
+    readBytes: async () => { controller.abort(); return png; } });
+  assert.equal(result.fetchStatus, 'unavailable');
+});

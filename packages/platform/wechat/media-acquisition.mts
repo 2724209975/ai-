@@ -82,6 +82,21 @@ async function defaultReadBytes(path: string): Promise<Uint8Array> {
   return new Uint8Array(await readFile(path));
 }
 
+/** Injected implementations may ignore cancellation; late results still cannot escape. */
+async function bounded<T>(operation: () => Promise<T>, signal: AbortSignal, deadline: number): Promise<T> {
+  if (signal.aborted || Date.now() >= deadline) throw new Error('MEDIA_ACQUISITION_CANCELLED');
+  let onAbort!: () => void;
+  const cancelled = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new Error('MEDIA_ACQUISITION_CANCELLED'));
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    const value = await Promise.race([operation(), cancelled]);
+    if (signal.aborted || Date.now() >= deadline) throw new Error('MEDIA_ACQUISITION_CANCELLED');
+    return value;
+  } finally { signal.removeEventListener('abort', onAbort); }
+}
+
 export async function acquireWxMedia(options: WxMediaAcquisitionOptions): Promise<WxMediaAcquisitionResult> {
   const { observation, transport, dataPath } = options ?? {} as WxMediaAcquisitionOptions;
   if (!observation || !transport || !dataPath) return unavailable('PATH_INVALID');
@@ -95,38 +110,45 @@ export async function acquireWxMedia(options: WxMediaAcquisitionOptions): Promis
   if (![maxBytes, pollMs, pollTimeoutMs].every(value => Number.isSafeInteger(value) && value > 0)) return unavailable('PATH_INVALID');
   const path = buildDatPath(dataPath, observation.platformMessageId);
   if (!path) return unavailable('PATH_INVALID');
-  const wait = options.sleep ?? (ms => sleep(ms));
   const statSize = options.statSize ?? defaultStatSize;
   const readBytes = options.readBytes ?? defaultReadBytes;
+  if (options.signal?.aborted) return unavailable('TRANSPORT_FAILED');
   const controller = new AbortController();
+  const wait = options.sleep ?? (ms => sleep(ms, undefined, { signal: controller.signal }));
+  const deadline = Date.now() + pollTimeoutMs;
+  const timer = setTimeout(() => controller.abort(), pollTimeoutMs);
   const onAbort = (): void => controller.abort();
   options.signal?.addEventListener('abort', onAbort, { once: true });
+  let failure: WxMediaUnavailableReason = 'TRANSPORT_FAILED';
   try {
     let accepted: { ok: boolean };
-    try { accepted = await transport.downloadAttach({ msgId: observation.platformMessageId, signal: controller.signal }); }
+    try { accepted = await bounded(() => transport.downloadAttach({ msgId: observation.platformMessageId, signal: controller.signal }), controller.signal, deadline); }
     catch { return unavailable('TRANSPORT_FAILED'); }
     if (!accepted?.ok) return unavailable('HELPER_REJECTED');
-    const deadline = Date.now() + pollTimeoutMs;
+    failure = 'FILE_NOT_WRITTEN';
     let size: number | undefined;
     for (;;) {
       try {
-        const candidate = await statSize(path);
+        const candidate = await bounded(() => statSize(path), controller.signal, deadline);
         if (candidate > 0) { size = candidate; break; }
       } catch { /* not written yet, or never will be */ }
-      if (Date.now() >= deadline) return unavailable('FILE_NOT_WRITTEN');
-      await wait(pollMs);
+      if (controller.signal.aborted || Date.now() >= deadline) return unavailable('FILE_NOT_WRITTEN');
+      await bounded(() => wait(Math.min(pollMs, deadline - Date.now())), controller.signal, deadline);
     }
     if (size! > maxBytes) return unavailable('FILE_TOO_LARGE');
     let raw: Uint8Array;
-    try { raw = await readBytes(path); }
+    try { raw = await bounded(() => readBytes(path), controller.signal, deadline); }
     catch { return unavailable('FILE_NOT_WRITTEN'); }
     if (!raw.length || raw.length > maxBytes) return unavailable('FILE_TOO_LARGE');
     const decoded = decodeWxDatImage(raw);
     if (!decoded) return unavailable('DECODE_FAILED');
+    if (controller.signal.aborted || Date.now() >= deadline) return unavailable('FILE_NOT_WRITTEN');
     return { fetchStatus: 'fetched', mediaType: 'image', mimeType: decoded.mimeType, bytes: decoded.bytes,
       sha256: createHash('sha256').update(decoded.bytes).digest('hex'), completeness: 'complete',
       platformMetadata: { msgId: observation.platformMessageId, dataFileBytes: raw.length } };
-  } finally {
+  } catch { return unavailable(failure); }
+  finally {
+    clearTimeout(timer);
     options.signal?.removeEventListener('abort', onAbort);
   }
 }

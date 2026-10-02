@@ -242,26 +242,16 @@ export class PgDataProvider {
    * Binds an already-stored private asset to the message it came from, in the caller's transaction.
    *
    * 01 reads the bytes and 03 owns the rows, so this takes a `MediaAsset` that 03's own private store
-   * produced and only creates the asset row plus the `media_id` back-reference. A repeat delivery of
-   * the same platform message is a no-op: the asset row already exists and `media_id` is not
-   * overwritten. Callers that might race on the same message must check for an existing asset first,
-   * because `data_media_assets` has no `(contact_id,message_id)` uniqueness.
+   * produced. Acquisition can finish after a snapshot was built, so binding must use the same
+   * synchronous dependency invalidation as every other media write. The shared boundary and
+   * message CAS serialize competing assets; exact asset replays have no second side effect.
    */
   async attachMediaToMessage(tx: PgClient, input: { callerContactId: string; contactId: string; messageId: string;
     expectedMessageVersion: number; asset: MediaAsset }): Promise<{ mediaId: string; duplicate: boolean }> {
     requireScope(input.callerContactId, input.contactId, []);
     if (input.asset?.messageId !== input.messageId || input.asset?.contactId !== input.contactId) throw new Error('VALIDATION_FAILED');
-    await this.#boundary(tx); await this.#scope(tx, input.callerContactId, input.contactId, []);
-    const ref = await new PgMediaRepository(tx, input.contactId).register(input.asset, input.expectedMessageVersion);
-    if (!ref.duplicate) {
-      const linked = await tx.query(`UPDATE data_messages SET media_id=$2,version=version+1,updated_at=now()
-        WHERE id=$1 AND contact_id=$3 AND media_id IS NULL`, [input.messageId, ref.id, input.contactId]);
-      // No second epoch bump or EvidenceInvalidated event: this runs inside the same transaction
-      // that just inserted the message (which already invalidated), and no snapshot can reference an
-      // asset that did not exist a statement earlier.
-      return { mediaId: ref.id, duplicate: linked.rowCount === 0 };
-    }
-    return { mediaId: ref.id, duplicate: true };
+    const ref = await this.registerMediaAsset(tx, input, uuid7());
+    return { mediaId: ref.id, duplicate: ref.duplicate };
   }
 
   async registerMediaAsset(tx: PgClient, input: { callerContactId: string; contactId: string; asset: MediaAsset; expectedMessageVersion: number }, correlationId: string) {
