@@ -20,6 +20,8 @@ export type { DeepSeekProviderOptions } from './generation/deepseek-provider.mts
 export type { DeepSeekEnv } from './generation/deepseek-env.mts';
 export { DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROMPT_VERSION } from './generation/deepseek-provider.mts';
 export type { MediaGateway } from './understanding/media-gateway.mts';
+export { interpretContextMedia, prepareReplyWithMedia } from './understanding/media-provider.mts';
+export type { BinaryMediaProvider, PrivateMediaReader, MediaUnderstandingOptions, MediaModelMeasurement } from './understanding/media-provider.mts';
 
 export function createFakeIntelligencePort(gateway: CandidateGateway = new FakeCandidateGateway(), fallback: CandidateGateway | null = null) {
   return {
