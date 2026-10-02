@@ -7,6 +7,7 @@ import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv
 import { createWxBridge } from './wechat-bridge.mts';
 import { resolveWxBridgeRunMode } from './run-mode.mts';
 import { preflightWxBinaryFiles, type WxBinaryFingerprint } from '../../packages/platform/wechat/binary-preflight.mts';
+import { localHelperProbe } from './watchdog.mts';
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -31,6 +32,8 @@ catch (error) {
   process.stderr.write(`wechat binary preflight rejected: ${error instanceof Error ? error.message : 'WX_BINARY_PREFLIGHT_FAILED'}\n`);
   process.exit(1);
 }
+const wechatPid = Number(required('WECHAT_PROCESS_ID'));
+const watchdogProbe = localHelperProbe({ pid: wechatPid });
 const wxhelperBaseUrl = runMode.outboundEnabled ? required('WECHAT_WXHELPER_BASE_URL') : undefined;
 // Candidates come from whichever provider the operator names; anything else is refused outright.
 const intelligenceProvider = (process.env.WECHAT_INTELLIGENCE?.trim() || 'persistent-fake').toLowerCase();
@@ -46,6 +49,9 @@ const intelligence = intelligenceProvider === 'deepseek'
 const { Pool } = await import('pg');
 const pool = new Pool({ connectionString: required('DATABASE_URL'), max: 8 });
 const bridge = createWxBridge({ pool, accountId, binaryFingerprint,
+  startPaused: true, watchdog: { probe: watchdogProbe,
+    quietMs: Number(process.env.WECHAT_QUIET_MS ?? '300000'), intervalMs: Number(process.env.WECHAT_WATCHDOG_INTERVAL_MS ?? '10000') },
+  onWatchdogFatal: () => process.exit(1),
   selfRef, ingressToken,
   ...(intelligence ? { intelligence } : {}),
   rawStore: createFileRawEventStore(resolve(process.env.RAW_EVENT_DIR?.trim() || '.local-wechat-raw'), Date.now, 'wechat'),

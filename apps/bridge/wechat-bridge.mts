@@ -17,6 +17,7 @@ import { decodeWxhelperPush, rawRef, WxWireError } from '../../packages/platform
 import { createWxhelperSendCandidate, type WxhelperSendTransport } from '../../packages/platform/wechat/wxhelper-send-port.mts';
 import { createPlatformOutboxPump } from './outbox-pump.mts';
 import type { WxBinaryFingerprint } from '../../packages/platform/wechat/binary-preflight.mts';
+import { createAccountWatchdog, type HealthProbe } from './watchdog.mts';
 
 export const WX_BRIDGE_ADAPTER_VERSION = 'wechat-wxhelper-0.2.0';
 
@@ -33,6 +34,9 @@ export function createWxBridge(options: {
   binaryFingerprint?: WxBinaryFingerprint;
   /** 04's provider. Defaults to the persistent fake; a real model is supplied here, not fetched. */
   intelligence?: PersistentIntelligence;
+  startPaused?: boolean;
+  watchdog?: { probe: HealthProbe; quietMs?: number; intervalMs?: number; timeoutMs?: number; now?: () => number };
+  onWatchdogFatal?(): void;
   /** Presence is the entire outbound switch: no transport means no worker and no send path. */
   dispatch?: { transport: WxhelperSendTransport; workerIntervalMs?: number; workerEnabled?: boolean; now?: () => number };
 }) {
@@ -81,15 +85,19 @@ export function createWxBridge(options: {
         onError: (error, phase) => report(`worker-${phase}-${error instanceof Error ? error.message : 'unknown'}`) })
     : undefined;
   const workerEnabled = Boolean(options.dispatch) && options.dispatch?.workerEnabled !== false;
+  const watchdog = options.watchdog ? createAccountWatchdog({ ...options.watchdog,
+    record: (healthy, faultCode) => service.recordAccountHealth({ accountId: options.accountId, healthy, faultCode }),
+    onFatal() { report('watchdog-persistence-failed'); void worker?.stop(); options.onWatchdogFatal?.(); } }) : undefined;
 
   const server = createServer((request, response) => {
     void (async () => {
       const url = new URL(request.url ?? '/', 'http://localhost');
       if (request.method === 'GET' && url.pathname === '/healthz') {
-        response.writeHead(200, { 'content-type': 'application/json' });
+        response.writeHead(watchdog?.state().status === 'fatal' ? 503 : 200, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ status: 'ok',
           mode: options.dispatch ? 'receive-and-dispatch' : 'receive-only',
           worker: workerEnabled ? 'enabled' : 'disabled',
+          ...(watchdog ? { watchdog: watchdog.state() } : {}),
           ...(options.binaryFingerprint ? { binaryFingerprint: {
             offsetBuild: options.binaryFingerprint.offsetBuild,
             clientPrefix: options.binaryFingerprint.clientPrefix,
@@ -98,6 +106,7 @@ export function createWxBridge(options: {
         return;
       }
       if (request.method !== 'POST' || url.pathname !== '/wxhelper/event') { response.writeHead(404); response.end(); return; }
+      if (watchdog?.state().status === 'fatal') { response.writeHead(503); response.end(); return; }
       // wxhelper does not sign push bodies. This is a private loopback receiver with a secret URL,
       // never an Internet-facing webhook. The query string is never logged or returned.
       if (!['127.0.0.1', '::ffff:127.0.0.1', '::1'].includes(request.socket.remoteAddress ?? '')
@@ -114,6 +123,7 @@ export function createWxBridge(options: {
       const body = Buffer.concat(chunks);
       const observation = decodeWxhelperPush(body, { expectedSelfRef: options.selfRef,
         rawEventRef: rawRef(options.accountId, body) });
+      watchdog?.received();
       const outcome = await reception.commitReceived(body, observation);
       response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify({ code: 200, msg: outcome }));
@@ -129,14 +139,16 @@ export function createWxBridge(options: {
     });
   });
 
-  return { server, service, outbox, worker,
+  return { server, service, outbox, worker, watchdog,
     async start() {
+      if (options.startPaused || watchdog) await service.recordAccountHealth({ accountId: options.accountId, healthy: false, faultCode: 'BRIDGE_RESTARTED' });
       // Recovery first: no new send may happen before ambiguous attempts are reconciled.
       await service.recover();
+      if (watchdog) { await watchdog.tick(); if (watchdog.state().status === 'fatal') throw new Error('WATCHDOG_PERSISTENCE_FAILED'); watchdog.start(); }
       await outbox.tick();
       outbox.start();
       if (workerEnabled) worker?.start();
     },
-    async stop() { await new Promise<void>(done => server.close(() => done())); await worker?.stop(); await outbox.stop(); },
+    async stop() { await watchdog?.stop(); await new Promise<void>(done => server.close(() => done())); await worker?.stop(); await outbox.stop(); },
   };
 }

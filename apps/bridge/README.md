@@ -46,6 +46,8 @@ npm run spike:report  # 从能力快照 + 去敏汇总生成 G2 报告骨架（�
 
 启动前还必须配置 `WECHAT_CLIENT_DLL_PATH` 与 `WECHAT_HELPER_DLL_PATH`，分别指向本人将使用的客户端 DLL 与移植 helper DLL。接收模式也必须通过完整 SHA-256 守护；不匹配、缺路径或文件不可读时，不装配模型、数据库、接收服务或发送 worker。允许构建写在 `packages/platform/wechat/binary-preflight.mts`，当前为客户端 `2058A926…` 与 W01 诊断 helper `B48BD850…`；不能用环境变量替换预期指纹。`/healthz` 的 `binaryFingerprint` 只报 8 位前缀和偏移构建名，不报完整哈希或路径。升级流程见 [运行手册](../../deploy/runbook.md)。
 
+P2-4 增加必填 `WECHAT_PROCESS_ID`：本人提供本次微信进程 PID，每次重开微信后需更新。桥接启动先将账号记为 `BRIDGE_RESTARTED` 并保持暂停；周期检测进程存活及回环 helper 的 `api/checkLogin`。默认每 10 秒检查，超时 3 秒；无有效回调达 5 分钟且登录异常才判 hook 疑似失效。健康恢复不会解除账号故障暂停，需本人在联系人页逐一恢复。`WECHAT_QUIET_MS` / `WECHAT_WATCHDOG_INTERVAL_MS` 仅用于调整检测周期。详见 [本机常驻与故障演练](../../deploy/runbook.md#本机常驻与故障演练p2-4)。
+
 ### 出站（默认关闭）
 
 设 `WECHAT_ENABLE_OUTBOUND=1` 与 `WECHAT_WXHELPER_BASE_URL=http://127.0.0.1:19088/` 后，桥接才会创建发送传输并启动派发 worker；`WECHAT_ENABLE_OUTBOUND=1` 配 `WORKER_ENABLED=0` 可以只装配不派发，而**只接收却要开 worker 会直接拒绝启动**。约束与 QQ 侧一致，另有两条微信特性：

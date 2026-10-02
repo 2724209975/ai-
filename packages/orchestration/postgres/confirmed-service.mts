@@ -61,7 +61,7 @@ function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode
   if (has('MISSING_FACT')) return 'PAUSED_MISSING_FACT';
   if (has('MEDIA_UNCERTAIN')) return 'PAUSED_MEDIA';
   if (has('UNKNOWN_SEND')) return 'PAUSED_UNKNOWN_SEND';
-  if (has('RECEIPT_CONFLICT') || has('SEND_FAILURE') || has('INTELLIGENCE_FAILURE') || has('PLATFORM_MUTATION_UNVERIFIED')) return 'PAUSED_FAILURE';
+  if (has('ACCOUNT_FAULT') || has('RECEIPT_CONFLICT') || has('SEND_FAILURE') || has('INTELLIGENCE_FAILURE') || has('PLATFORM_MUTATION_UNVERIFIED')) return 'PAUSED_FAILURE';
   if (has('AWAITING_MANUAL_RESUME') || has('CONFIRMATION_REJECTED')) return 'PAUSED_POLICY';
   return !agentEnabled ? 'DISABLED' : sendMode === 'auto' ? 'READY_AUTO' : 'READY_CONFIRM';
 }
@@ -88,12 +88,43 @@ export class PgConfirmedService {
     const policy = defaultPolicy(input.contactId, input.timezone, input.goal);
     if (input.accountId !== this.#platform.accountId) fail('VALIDATION_FAILED');
     return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
       await setContactScope(tx, input.contactId);
       const contact = await tx.query<{ conversation_id: string; platform_account_id: string; external_contact_ref: string }>(`SELECT conversation_id,platform_account_id,external_contact_ref FROM data_contacts WHERE id=$1 AND enrollment_status='enrolled'`, [input.contactId]);
       const c = contact.rows[0]; if (!c || c.conversation_id !== input.conversationId || c.platform_account_id !== input.accountId || c.external_contact_ref !== input.externalContactRef) fail('FORBIDDEN');
       await tx.query(`INSERT INTO dispatch_control(conversation_id,account_id,paused) VALUES($1,$2,false)`, [input.conversationId, input.accountId]);
       await tx.query(`INSERT INTO orch_conversations(conversation_id,contact_id,account_id,external_contact_ref,policy,policy_version,generation,revision,state) VALUES($1,$2,$3,$4,$5::jsonb,1,1,1,'READY_CONFIRM')`, [input.conversationId, input.contactId, input.accountId, input.externalContactRef, JSON.stringify(policy)]);
+      if ((await tx.query(`SELECT account_id FROM orch_account_health h WHERE account_id=$1 AND (healthy=false OR
+        EXISTS(SELECT 1 FROM orch_conversations c WHERE c.account_id=h.account_id AND 'ACCOUNT_FAULT'=ANY(c.pause_reasons)))`, [input.accountId])).rows.length) {
+        await changeContactPause(tx, input.conversationId, true);
+        await tx.query(`UPDATE orch_conversations SET generation=(SELECT generation FROM dispatch_control WHERE conversation_id=$1),state='PAUSED_FAILURE',pause_reasons=ARRAY['ACCOUNT_FAULT'] WHERE conversation_id=$1`, [input.conversationId]);
+      }
       return policy;
+    });
+  }
+
+  /** Trusted bridge probe. 02 owns the same dispatch boundary used by submissions and pauses. */
+  async recordAccountHealth(input: { accountId: string; healthy: boolean; faultCode?: string }) {
+    const codes = ['BRIDGE_RESTARTED','PROCESS_EXITED','HOOK_LOGIN_ABNORMAL','HELPER_UNRESPONSIVE'];
+    if (input.accountId !== this.#platform.accountId || typeof input.healthy !== 'boolean' || (!input.healthy && !codes.includes(input.faultCode ?? '')) || (input.healthy && input.faultCode !== undefined)) fail('VALIDATION_FAILED');
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      await tx.query(`INSERT INTO orch_account_health(account_id,healthy,fault_code) VALUES($1,$2,$3)
+        ON CONFLICT(account_id) DO UPDATE SET healthy=EXCLUDED.healthy,fault_code=COALESCE(EXCLUDED.fault_code,orch_account_health.fault_code),
+        observed_at=now(),version=orch_account_health.version+CASE WHEN orch_account_health.healthy IS DISTINCT FROM EXCLUDED.healthy OR
+        (EXCLUDED.fault_code IS NOT NULL AND orch_account_health.fault_code IS DISTINCT FROM EXCLUDED.fault_code) THEN 1 ELSE 0 END`,
+        [input.accountId, input.healthy, input.faultCode ?? null]);
+      if (!input.healthy) {
+        const rows = (await tx.query<Row>('SELECT * FROM orch_conversations WHERE account_id=$1 ORDER BY conversation_id FOR UPDATE', [input.accountId])).rows;
+        for (const row of rows) {
+          if (row.pause_reasons.includes('ACCOUNT_FAULT')) continue;
+          await changeContactPause(tx, row.conversation_id, true);
+          await this.#invalidate(tx, row.conversation_id, 'ACCOUNT_FAULT');
+          await tx.query(`UPDATE orch_conversations SET generation=(SELECT generation FROM dispatch_control WHERE conversation_id=$1),
+            state='PAUSED_FAILURE',pause_reasons=array_append(pause_reasons,'ACCOUNT_FAULT'),collection_started_at=NULL,collection_due_at=NULL,
+            collection_message_ids='{}'::uuid[],version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id]);
+        }
+      }
     });
   }
 
@@ -499,9 +530,18 @@ export class PgConfirmedService {
       if (!global) fail('NOT_FOUND');
       const counts = (await tx.query<{ pending: string; unknown: string }>(`SELECT (SELECT count(*) FROM orch_confirmation_tasks WHERE status='PENDING')::text AS pending,
         (SELECT count(*) FROM orch_send_tasks WHERE status='RESULT_UNKNOWN')::text AS unknown`)).rows[0]!;
+      const health = (await tx.query<{ account_id: string; healthy: boolean; fault_code: string | null; version: string; held: boolean }>(`SELECT h.*,
+        EXISTS(SELECT 1 FROM orch_conversations c WHERE c.account_id=h.account_id AND 'ACCOUNT_FAULT'=ANY(c.pause_reasons)) AS held
+        FROM orch_account_health h ORDER BY h.account_id`)).rows;
+      const coverage = (await tx.query<{ covered: boolean }>(`SELECT EXISTS(SELECT 1 FROM orch_account_health) AND NOT EXISTS(
+        SELECT 1 FROM orch_conversations c WHERE NOT EXISTS(SELECT 1 FROM orch_account_health h WHERE h.account_id=c.account_id)) AS covered`)).rows[0]?.covered === true;
+      const summaries: Record<string,string> = { BRIDGE_RESTARTED: '桥接重新启动，账号保持暂停', PROCESS_EXITED: '微信进程已退出，账号已暂停',
+        HOOK_LOGIN_ABNORMAL: '接收长时间无事件且登录探测异常，账号已暂停', HELPER_UNRESPONSIVE: '微信 helper 无响应或响应异常，账号已暂停' };
+      const faults = health.filter(h => !h.healthy || h.held).map((h, index) => ({ id: `account-fault-${index + 1}`, version: Number(h.version),
+        status: h.healthy ? 'RECOVERED_AWAITING_OWNER' : 'ACTIVE', summary: summaries[h.fault_code ?? ''] ?? '账号健康状态未知，保持暂停', allowedActions: [] }));
       return { id: 'global', version: Number(global.pause_epoch), status: global.paused ? 'PAUSED' : 'ACTIVE', globalPaused: global.paused,
         allowedActions: global.paused ? ['resumeAll'] : ['pauseAll'], pendingCount: Number(counts.pending), unknownSendCount: Number(counts.unknown),
-        connectionQueryStatus: 'unavailable' as const, faultQueryStatus: 'unavailable' as const, connections: [], faults: [] };
+        connectionQueryStatus: 'unavailable' as const, faultQueryStatus: coverage ? 'ready' as const : 'unavailable' as const, connections: [], faults };
     });
   }
 
@@ -863,6 +903,7 @@ export class PgConfirmedService {
 
   /** Clears one pause reason; the others keep the contact paused. Refuses while a send is unresolved. */
   async #clearPauseReason(tx: PgClient, row: Row, reason: string, correlationId: string): Promise<number> {
+    if (reason === 'ACCOUNT_FAULT' && !(await tx.query('SELECT account_id FROM orch_account_health WHERE account_id=$1 AND healthy=true', [row.account_id])).rows.length) fail('POLICY_BLOCKED');
     const control = (await tx.query<{ unresolved_send_key: string | null }>('SELECT unresolved_send_key FROM dispatch_control WHERE conversation_id=$1 FOR UPDATE', [row.conversation_id])).rows[0];
     if (control?.unresolved_send_key) fail('SEND_RESULT_UNKNOWN');
     const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];

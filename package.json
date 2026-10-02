@@ -17,6 +17,7 @@
     "serve:core": "node apps/core/main.mts",
     "serve:bridge": "node apps/bridge/main.mts",
     "serve:wechat-receive": "node apps/bridge/wechat-main.mts",
+    "serve:local": "node scripts/local-stack.mts",
     "smoke:deepseek-candidate": "node scripts/deepseek-candidate-smoke.mts",
     "spike:posture": "node scripts/qq-spike-summary.mts posture",
     "spike:preflight": "node scripts/qq-spike-preflight.mts",
