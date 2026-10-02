@@ -1,5 +1,7 @@
 # 06 手机网页管理端
 
+当前计划、进度、测试基线与实测边界只见 [开发计划 §0](../../docs/development-plan.md#0-当前状态每完成一个任务由总控更新本节)。本页仅说明模块操作与约束，历史证据见任务卡引用的报告。
+
 ## 构建与运行
 
 ```powershell
@@ -39,7 +41,3 @@ npm run serve:owner                  # 管理 API + 静态页面，默认 127.0.
 `/skills`、`/imports`、`/faults` 还没有持久 provider，返回 `501 NOT_IMPLEMENTED`，页面会显示明确错误而不是空列表。这些路由与字段仍以 [06 REST 提案](../../docs/reports/web-06-api-proposal-2026-09-23.md) 和 [contracts.md](../../docs/contracts.md) §3 为准；未列入契约的字段不得作为稳定接口使用。
 
 G2/G3 的连接与恢复字段仍是 [只读提案](../../docs/reports/web-06-g2-g3-proposal-2026-09-24.md)。当前 overview 的空连接和空故障数组没有查询覆盖证据，页面明确显示“尚未接入、无法判断”。来源未明的自身账号消息在会话中保持 unknown 并提示人工核对；自动模式的 `AUTO_REVIEW_UNAVAILABLE` 仍是确认待办。320–390px 的 409/503/501 页面回归位于 `server/g2-mobile-browser.test.mts`，已由 `tests/e2e/web-server.test.mts` 接入 `npm run test:e2e`（`RUN_BROWSER_E2E=1` 时执行）；它只使用合成 HTTP 响应，不能算真实平台证据。
-
-## 验收状态
-
-构建、390px Chromium fixture、真实登录→HTTP→PostgreSQL→mock 发送的浏览器流程已在本机通过（`npm run test:e2e`）。真实平台、生产登录生命周期（轮换、单设备撤销）和其余管理资源仍未交付，AC 证据见 [验收矩阵](../../docs/reports/acceptance-matrix.csv)。

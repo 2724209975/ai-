@@ -1,5 +1,7 @@
 # 01 QQ 桥接组合根
 
+当前计划、进度、测试基线与实测边界只见 [开发计划 §0](../../docs/development-plan.md#0-当前状态每完成一个任务由总控更新本节)。本页仅说明模块操作与约束，历史证据见任务卡引用的报告。
+
 把 NapCat 一类 OneBot 11 桥接推来的私聊事件接进 02/03/04，并把 02 授权后的分条发回桥接。它**不登录 QQ、不保存平台凭据、不暴露公网**；客户端登录与桥接本体由本人在本机测试环境操作，独立在线宿主留待后续验证。
 
 ```powershell
@@ -22,9 +24,9 @@ node apps/bridge/main.mts
 
 出站只能由 02 的 dispatch 租约发起；桥接只负责把已经授权的分条编码成一次 OneBot 请求并如实回报结果。桥接明确失败或超时都保守记为结果未知，绝不重发；`accepted` 只代表桥接受理，不代表送达。
 
-本机真实账号已完成只接收 spike 与两次逐条授权的真实文字发送，结论和未测项见[脱敏报告](../../docs/reports/platform-qq-2026-09-24.md)。已接线的 outbox pump 在启动及常驻运行时重投待处理的 01 事件，只有 02 消费提交后才标记 `published_at`；重复推送由 inbox 去重。仍缺媒体原件下载与 03 私有存储、本人发言的经审核 peer mapper、已批准表情发送、平台历史连续覆盖与独立宿主关机验证。NapCat 的许可与风险见 [QQ spike 计划](../../docs/platforms/qq-spike-plan.md)，复现步骤见 [runbook](../../docs/platforms/qq-receive-only-runbook.md)。
+outbox pump 在启动及常驻运行时重投待处理的 01 事件，只有 02 消费提交后才标记 published_at；重复推送由 inbox 去重。平台能力和未测项以开发计划 §0 及其证据为准。NapCat 的许可与风险见 [QQ spike 计划](../../docs/platforms/qq-spike-plan.md)，操作步骤见 [runbook](../../docs/platforms/qq-receive-only-runbook.md)。
 
-## 只接收采证用的两个命令
+## 只接收采证命令
 
 ```powershell
 npm run spike:preflight # 一次性 schema + 合成事件，验证真实入口进程（只需 DATABASE_URL）
