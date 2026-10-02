@@ -8,11 +8,13 @@ export class WxWireError extends Error {
 }
 
 type ObjectValue = Record<string, unknown>;
+/** Set only after 03 has bound a private asset to this message; absent means no usable original. */
+export type WxObservedMedia = Readonly<{ mediaId: string; mimeType: string; completeness: 'complete' }>;
 export type WxObservation = {
   kind: 'incoming' | 'self' | 'unmapped_self' | 'out_of_scope';
   accountRef: string; peerRef?: string; platformMessageId: string; sentAt: string;
   dedupeKey: string; rawEventRef: string; type: MessageType; contentRef?: string;
-  requiresReview: boolean; typeCode: number; msgSequence?: number;
+  requiresReview: boolean; typeCode: number; msgSequence?: number; media?: WxObservedMedia;
 };
 
 /** Quote only the top-level msgId integer before JSON.parse can round its 64-bit value. */
@@ -127,9 +129,11 @@ export function normalizeWxObservation(observation: WxObservation, context: Norm
     sentAt: observation.sentAt, receivedAt, type: observation.type, contentRef: observation.contentRef,
     dedupeKey: observation.dedupeKey, mode: 'live' as const, actor: 'contact' as const,
     isAgentGenerated: false as const, requiresReview: observation.requiresReview,
+    ...(observation.media ? { mediaId: observation.media.mediaId } : {}),
     provenance: { source: 'wxhelper_loopback', rawEventRef: observation.rawEventRef, adapterVersion,
       msgSequence: observation.msgSequence,
-      mediaCompleteness: observation.type === 'image' || observation.type === 'voice' ? 'unknown' : undefined } };
+      mediaCompleteness: observation.media?.completeness
+        ?? (observation.type === 'image' || observation.type === 'voice' ? 'unknown' : undefined) } };
   return { eventId, eventType: 'PlatformInboundObserved', eventVersion: 1, occurredAt: receivedAt,
     correlationId, causationId: observation.dedupeKey, aggregateId: conversationId,
     aggregateVersion: 1, payload };

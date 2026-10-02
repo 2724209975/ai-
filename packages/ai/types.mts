@@ -19,6 +19,8 @@ export interface ContextSnapshotProjection {
   analysisRefs: SnapshotRef[];
   policyVersion: number;
   hash: string;
+  /** Valid persisted interpretation versions selected by 03 for these messages. */
+  mediaRefs?: SnapshotRef[];
 }
 
 export interface MessageProjection {
@@ -32,7 +34,7 @@ export interface MessageProjection {
   mode: Mode;
   evidenceRef: string;
   mediaId?: string;
-  mediaInterpretation?: MediaInterpretationDraft;
+  mediaInterpretation?: MediaInterpretationDraft | StoredMediaInterpretationProjection;
 }
 
 export interface FactProjection {
@@ -180,4 +182,10 @@ export interface MediaInterpretationDraft {
   evidenceRefs: string[];
   correctedByOwner: false;
   status: 'draft';
+}
+export interface StoredMediaInterpretationProjection extends Omit<MediaInterpretationDraft, 'status' | 'correctedByOwner'> {
+  id: string;
+  version: number;
+  correctedByOwner: boolean;
+  status: 'valid';
 }

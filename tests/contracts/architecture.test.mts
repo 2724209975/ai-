@@ -35,6 +35,16 @@ test('04/05/06 production modules cannot import platform send implementation', a
   }
 });
 
+test('the WeChat media path cannot reach the send port', async () => {
+  // 01 reads original files and 02 sends; sharing a process must not let one become the other.
+  for (const name of ['wxhelper-media-transport.mts', 'media-acquisition.mts', 'media-dat.mts']) {
+    const path = `packages/platform/wechat/${name}`;
+    const content = await readFile(resolve(root, path), 'utf8');
+    assert.ok(!content.includes('wxhelper-send-port'), `${name} must not import the send port`);
+    assert.doesNotMatch(content, /\bsubmitSend\s*\(/, `${name} must not invoke platform sending`);
+  }
+});
+
 test('global migrations have unique consecutive numbers and never use per-module numbering', async () => {
   const directory = resolve(root, 'db/migrations');
   const names = (await readdir(directory)).filter(name => name.endsWith('.sql')).sort();

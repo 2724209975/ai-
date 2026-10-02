@@ -67,6 +67,22 @@ test('the intelligence provider must be named and only the implemented one is ac
   assert.equal(JSON.stringify(deepSeek).includes('unit-test'), false, 'the key must not be copied into the config');
 });
 
+test('media understanding stays off, and a half-configured opt-in fails at startup', () => {
+  const off = readCoreConfig(base);
+  assert.equal(off.mediaImageEnabled, false);
+  assert.equal(off.mediaVoiceEnabled, false);
+  assert.equal(off.mediaVisionModelId, null);
+  // The text model key must never be reused as a media key.
+  assert.throws(() => readCoreConfig({ ...base, MEDIA_VISION_ENABLED: '1', DEEPSEEK_API_KEY: 'unit-test' }), { message: 'MISSING_ENV:MEDIA_API_KEY' });
+  assert.throws(() => readCoreConfig({ ...base, MEDIA_VOICE_ENABLED: '1', MEDIA_API_KEY: 'unit-test' }), { message: 'MISSING_ENV:MEDIA_VOICE_ENDPOINT' });
+  assert.throws(() => readCoreConfig({ ...base, MEDIA_DAILY_VOICE_CALL_LIMIT: '0' }), { message: 'INVALID_ENV:MEDIA_DAILY_VOICE_CALL_LIMIT' });
+  const images = readCoreConfig({ ...base, MEDIA_VISION_ENABLED: 'on', MEDIA_API_KEY: 'unit-test', MEDIA_VISION_MODEL: 'deepseek-flash' });
+  assert.equal(images.mediaImageEnabled, true);
+  assert.equal(images.mediaVoiceEnabled, false);
+  assert.equal(images.mediaVisionModelId, 'deepseek-flash');
+  assert.equal(JSON.stringify(images).includes('unit-test'), false, 'the media key must not be copied into the config');
+});
+
 test('an operator can opt out of the paused start, but only explicitly', () => {
   assert.equal(readCoreConfig({ ...base, START_PAUSED: '0' }).startPaused, false);
   assert.equal(readCoreConfig({ ...base, START_PAUSED: 'false' }).startPaused, false);

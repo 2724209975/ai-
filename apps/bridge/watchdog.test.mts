@@ -13,7 +13,10 @@ test('fixture helper: process exit, timeout, quiet abnormal login and recovery; 
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   const watchdog = createAccountWatchdog({ probe: localHelperProbe({ pid: 1, baseUrl: `http://127.0.0.1:${address.port}/`, alive: () => alive }),
-    quietMs: 100, timeoutMs: 30, now: () => now, record: async (healthy, code) => { records.push([healthy, code]); } });
+    // 500 ms, not 30 ms: a real loopback round trip under a fully parallel gate can exceed a few tens
+    // of milliseconds, and the first healthy tick then reports HELPER_UNRESPONSIVE. The hanging tick
+    // below still exceeds this budget, so the timeout path stays covered.
+    quietMs: 100, timeoutMs: 500, now: () => now, record: async (healthy, code) => { records.push([healthy, code]); } });
   try {
     await watchdog.tick(); assert.deepEqual(records.pop(), [true, undefined]);
     alive = false; await watchdog.tick(); assert.deepEqual(records.pop(), [false, 'PROCESS_EXITED']);

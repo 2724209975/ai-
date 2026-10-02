@@ -41,6 +41,30 @@
 
 成本参考（2026-09-26 官方定价页）：`deepseek-flash` 每 1M token 输入未命中缓存 $0.15 谷/$0.3 峰、输出 $0.6 谷/$1.2 峰；峰时为 UTC 周一至周五 01:00–04:00 与 06:00–10:00（北京时间 09:00–12:00、14:00–18:00），其余时间为谷时。账单以平台为准，本手册只记录当时页面事实。
 
+### 微信原文件获取（P4-4，默认关闭）
+
+默认不取原文件：图片和语音照旧转人工。开启后桥接在收信时把**图片**取回并私有落盘；**语音取不到**——本固定 helper 构建的 `GetVoiceByDB` 是空壳（`return 0`），所以语音一次请求都不发，继续转人工。
+
+- `WECHAT_MEDIA_FETCH=1` 才开启，且必须同时给两个**绝对**路径：`WECHAT_DATA_PATH`（微信数据目录）与 `WECHAT_MEDIA_DIR`（私有媒体目录，不能放在网页静态目录里）。缺任一项进程**启动即失败**。
+- 可选：`WECHAT_WXHELPER_BASE_URL`（默认 `http://127.0.0.1:19088/`，只接受 http + 回环 + 无凭据/查询）、`WECHAT_MEDIA_MAX_BYTES`（默认 10 MiB）、`WECHAT_MEDIA_POLL_MS`（默认 250）、`WECHAT_MEDIA_POLL_TIMEOUT_MS`（默认 8000）。
+- `GET /healthz` 的 `mediaFetch` 只报计数与固定原因码：`{enabled,image,voice:'unsupported-by-helper',disabled,attempted,fetched,unavailable,duplicate,lastReason}`。不含路径、消息 ID 或联系人。
+- 失败一律降级为转人工且**不重试**：`TRANSPORT_FAILED`、`HELPER_REJECTED`、`FILE_NOT_WRITTEN`、`FILE_TOO_LARGE`、`DECODE_FAILED`、`PATH_INVALID`、`VOICE_UNSUPPORTED_BY_HELPER`。
+- **消息 ID 上限**：helper 用 nlohmann 按 int64 解析 `msgId`，而桥接的请求体是 JSON 数字；超过 2^53 的 ID 会被 JSON 解析器四舍五入成另一个 ID。桥接因此**主动拒绝 16 位以上或大于 2^53 的 ID**（`WX_MEDIA_MSGID_UNSAFE`），宁可转人工也不去取错的消息。真机复测时若真实 ID 超限，必须先决定改协议（例如让 helper 接受字符串 ID）再开启。
+- 真机只接收复测（本人执行）：①暂停并确认无未决发送；②启动微信 3.9.11.25、注入同一 helper；③用测试号发一张图片；④核对 `/healthz` 的 `mediaFetch.fetched` 增 1、数据库有一条 `data_media_assets`（`stored/complete`）且对应消息 `media_id` 非空；⑤确认该图片会话按预期转人工；⑥再发一条语音，确认 `mediaFetch` 不出现语音请求、语音仍转人工；⑦全局暂停并保留证据。
+- 已知未决点（复测时一并回答）：`downloadAttach` 是否在本机真的写出文件（依赖 `kGetMgrByPrefixLocalId`/`kPushAttachTask` 移植偏移）；保存图片后 `.dat` 的实际位置是否等于 `GetCurrentDataPath()`；真实 `msgId` 是否在安全整数范围内。
+
+### 媒体理解 provider（P4-3，默认关闭，本机尚未接线）
+
+图片与语音的真实 provider 已实现但**没有装配到任何进程**：核心组合根只做配置校验，媒体进信仍转人工。启用前要明确这是把联系人的图片/语音发给模型并产生费用。
+
+- `MEDIA_VISION_ENABLED=1` 才启用图片：需要 `MEDIA_API_KEY`（或单独的 `MEDIA_VISION_API_KEY`）。**不会读取 `DEEPSEEK_API_KEY`**，文本密钥不能顺手解锁媒体调用。
+- 可选：`MEDIA_VISION_MODEL`（默认 `deepseek-flash`，官方文档称该模型支持图像输入，格式按文件内容判定：JPEG/PNG/GIF/WebP）、`MEDIA_VISION_MODEL_VERSION`、`MEDIA_VISION_DETAIL`（默认 `original`；`low` 会缩放到 512×512，不足以声称全图覆盖）、`MEDIA_BASE_URL`、`MEDIA_TIMEOUT_MS`、`MEDIA_MAX_TOKENS`、`MEDIA_TEMPERATURE`、`MEDIA_DATA_REGION`、`MEDIA_RETENTION_POLICY`。
+- `MEDIA_VOICE_ENABLED=1` 才启用语音，且必须同时给 `MEDIA_VOICE_ENDPOINT`（完整 https transcriptions 地址）与 `MEDIA_VOICE_MODEL`；可选 `MEDIA_VOICE_LANGUAGE`（两位小写）、`MEDIA_VOICE_TIMEOUT_MS`。**本仓库没有声明任何供应商支持语音转写**，不配置就只有「不支持」，不会有猜测性实现。
+- **独立失控闸**：`MEDIA_DAILY_IMAGE_CALL_LIMIT` / `MEDIA_DAILY_IMAGE_TOKEN_LIMIT` / `MEDIA_DAILY_VOICE_CALL_LIMIT` / `MEDIA_DAILY_VOICE_TOKEN_LIMIT`，默认各 200 次、各 200k token（本人 2026-10-03 确认）。按 UTC 日、按类型分别计数，与文本限额互不占用；重启清零，不是月预算也不是账单上限（D06 未定）。
+- 任一开关配置错误（缺密钥、缺端点、非法取值）都会让进程**启动即失败**，而不是等到第一条来信才发现。四项限额即使类型关闭也会校验。
+- 未完成：真实模型调用、真实供应商兼容性、微信原文件获取与本人真机验收。这些都需要本人在场并单独授权；离线测试只证明请求形状、格式复核、失败映射与限额隔离。
+
+
 ### 本机复现隔离 PostgreSQL 的两个坑（2026-09-26 实测）
 
 - **二进制不能放在中文路径下**：`C:\1\ai代聊\.pg-local\...` 下 `initdb` 会在 post-bootstrap 以 `invalid byte sequence for encoding "UTF8": 0xb4` 失败（路径里的中文字符被按 GBK 字节传给了 UTF-8 后端）。把二进制解到纯 ASCII 目录（如 `%TEMP%\pg17ascii`）即可。

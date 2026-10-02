@@ -6,14 +6,19 @@
  */
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { resolve } from 'node:path';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
+import { FileMediaStore } from '../../packages/data/media/file-store.mts';
 import { createPgPersistentFakeIntelligence } from '../../packages/ai/index.mts';
 import { PgConfirmedService, type DispatchPlatform, type PersistentIntelligence } from '../../packages/orchestration/postgres/confirmed-service.mts';
 import { createDispatchWorker } from '../../packages/orchestration/postgres/worker.mts';
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
+import { withTransaction } from '../../packages/infrastructure/postgres/transaction.mts';
 import type { RawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { createWxReceptionPort } from '../../packages/platform/wechat/reception.mts';
 import { decodeWxhelperPush, rawRef, WxWireError } from '../../packages/platform/wechat/wxhelper-codec.mts';
+import { acquireWxMedia, type WxMediaUnavailableReason } from '../../packages/platform/wechat/media-acquisition.mts';
+import type { WxhelperMediaTransport } from '../../packages/platform/wechat/wxhelper-media-transport.mts';
 import { createWxhelperSendCandidate, type WxhelperSendTransport } from '../../packages/platform/wechat/wxhelper-send-port.mts';
 import { createPlatformOutboxPump } from './outbox-pump.mts';
 import type { WxBinaryFingerprint } from '../../packages/platform/wechat/binary-preflight.mts';
@@ -39,9 +44,22 @@ export function createWxBridge(options: {
   onWatchdogFatal?(): void;
   /** Presence is the entire outbound switch: no transport means no worker and no send path. */
   dispatch?: { transport: WxhelperSendTransport; workerIntervalMs?: number; workerEnabled?: boolean; now?: () => number };
+  /** Absent means images keep going to a human exactly as before; nothing is fetched. */
+  media?: { transport: WxhelperMediaTransport; dataPath: string; mediaRoot: string;
+    maxBytes?: number; pollMs?: number; pollTimeoutMs?: number };
 }) {
   if (!options.pool || !options.accountId || !options.selfRef || !options.ingressToken || !options.rawStore)
     throw new Error('WX_BRIDGE_CONFIG_INVALID');
+  if (options.media && (!options.media.transport || !options.media.dataPath?.trim() || !options.media.mediaRoot?.trim()))
+    throw new Error('WX_BRIDGE_CONFIG_INVALID');
+  const mediaStore = options.media ? new FileMediaStore(resolve(options.media.mediaRoot), async messageId => {
+    const found = await options.pool.query<{ contact_id: string }>(
+      'SELECT contact_id FROM data_messages WHERE id=$1 AND deletion_status=\'active\'', [messageId]);
+    return found.rows[0]?.contact_id ?? null;
+  }) : undefined;
+  // Counters only: no path, message id or contact ever reaches a log line or /healthz.
+  const mediaFetch = { disabled: 0, attempted: 0, fetched: 0, unavailable: 0, duplicate: 0,
+    lastReason: null as WxMediaUnavailableReason | null };
   const maxBodyBytes = options.maxBodyBytes ?? 1_048_576;
   if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1) throw new Error('WX_BRIDGE_CONFIG_INVALID');
   const report = options.onError ?? ((phase: string) => process.stderr.write(`wechat bridge ${phase}\n`));
@@ -63,16 +81,19 @@ export function createWxBridge(options: {
   const service = new PgConfirmedService({ pool: options.pool, data,
     intelligence: options.intelligence ?? createPgPersistentFakeIntelligence({ pool: options.pool, data }),
     platform, authority, aggregationWindowMs: 0 });
-  const reception = createWxReceptionPort({ pool: options.pool, store: options.rawStore,
+  const resolvePeer = async (peerRef: string) => {
+    const client = await options.pool.connect();
+    try {
+      const found = await client.query<{ conversation_id: string; contact_id: string }>(
+        `SELECT conversation_id,contact_id FROM orch_conversations
+         WHERE account_id=$1 AND external_contact_ref=$2`, [options.accountId, peerRef]);
+      const row = found.rows[0];
+      return row ? { conversationId: row.conversation_id, contactId: row.contact_id, peerRef } : undefined;
+    } finally { client.release?.(); }
+  };
+  const reception = createWxReceptionPort({ pool: options.pool, store: options.rawStore, data,
     accountId: options.accountId, adapterVersion: WX_BRIDGE_ADAPTER_VERSION,
-    async resolveConversation(peerRef) {
-      const client = await options.pool.connect();
-      try {
-        const found = await client.query<{ conversation_id: string }>(`SELECT conversation_id FROM orch_conversations
-          WHERE account_id=$1 AND external_contact_ref=$2`, [options.accountId, peerRef]);
-        return found.rows[0]?.conversation_id;
-      } finally { client.release?.(); }
-    },
+    async resolveConversation(peerRef) { return (await resolvePeer(peerRef))?.conversationId; },
     onEvent: event => service.ingestPlatformEvent(event).then(() => {}),
     onUnmappedSelf: (tx, input) => service.pauseAccountForUnmappedSelf(tx, input.accountId, input).then(() => {}),
   });
@@ -89,6 +110,35 @@ export function createWxBridge(options: {
     record: (healthy, faultCode) => service.recordAccountHealth({ accountId: options.accountId, healthy, faultCode }),
     onFatal() { report('watchdog-persistence-failed'); void worker?.stop(); options.onWatchdogFatal?.(); } }) : undefined;
 
+  const fetchAndBindMedia = async (platformMessageId: string, peerRef: string) => {
+    const media = options.media!;
+    const store = mediaStore!;
+    const peer = await resolvePeer(peerRef);
+    if (!peer) { mediaFetch.disabled += 1; return; }
+    const persisted = await options.pool.query<{ id: string; version: string | number }>(
+      `SELECT id,version FROM data_messages WHERE contact_id=$1 AND conversation_id=$2
+       AND platform_account_id=$3 AND platform_message_id=$4 AND mode='live' AND deletion_status='active'`,
+      [peer.contactId, peer.conversationId, options.accountId, platformMessageId]);
+    const row = persisted.rows[0];
+    if (!row) { mediaFetch.disabled += 1; return; }
+    const existing = await options.pool.query(
+      'SELECT 1 FROM data_media_assets WHERE contact_id=$1 AND message_id=$2 LIMIT 1', [peer.contactId, row.id]);
+    if (existing.rows.length) { mediaFetch.duplicate += 1; return; }
+    mediaFetch.attempted += 1;
+    const acquired = await acquireWxMedia({ observation: { kind: 'incoming', type: 'image', platformMessageId },
+      transport: media.transport, dataPath: media.dataPath, maxBytes: media.maxBytes,
+      pollMs: media.pollMs, pollTimeoutMs: media.pollTimeoutMs });
+    if (acquired.fetchStatus !== 'fetched') { mediaFetch.unavailable += 1; mediaFetch.lastReason = acquired.reason; return; }
+    const asset = await store.storeMedia({ callerContactId: peer.contactId, contactId: peer.contactId,
+      messageId: row.id, mediaType: 'image', mimeType: acquired.mimeType, bytes: acquired.bytes,
+      completeness: 'complete', platformMetadata: acquired.platformMetadata });
+    if (asset.sha256 !== acquired.sha256) throw new Error('MEDIA_HASH_MISMATCH');
+    const bound = await withTransaction(options.pool, tx => data.attachMediaToMessage(tx, {
+      callerContactId: peer.contactId, contactId: peer.contactId, messageId: row.id,
+      expectedMessageVersion: Number(row.version), asset }));
+    mediaFetch.fetched += 1; mediaFetch.lastReason = null;
+    report(`media-${bound.duplicate ? 'duplicate' : 'bound'}`);
+  };
   const server = createServer((request, response) => {
     void (async () => {
       const url = new URL(request.url ?? '/', 'http://localhost');
@@ -98,6 +148,8 @@ export function createWxBridge(options: {
           mode: options.dispatch ? 'receive-and-dispatch' : 'receive-only',
           worker: workerEnabled ? 'enabled' : 'disabled',
           ...(watchdog ? { watchdog: watchdog.state() } : {}),
+          ...(options.media ? { mediaFetch: { enabled: true, image: 'enabled',
+            voice: 'unsupported-by-helper', ...mediaFetch } } : {}),
           ...(options.binaryFingerprint ? { binaryFingerprint: {
             offsetBuild: options.binaryFingerprint.offsetBuild,
             clientPrefix: options.binaryFingerprint.clientPrefix,
@@ -124,7 +176,18 @@ export function createWxBridge(options: {
       const observation = decodeWxhelperPush(body, { expectedSelfRef: options.selfRef,
         rawEventRef: rawRef(options.accountId, body) });
       watchdog?.received();
+      // Ordered so the asset can be written before the message exists: 1) commit the message,
+      // 2) fetch and store the bytes, 3) bind them in a second transaction. Any failure at any step
+      // simply leaves `media_id` empty and the image goes to a human; nothing here is ever retried.
       const outcome = await reception.commitReceived(body, observation);
+      if (outcome === 'inserted' && options.media && mediaStore
+        && observation.kind === 'incoming' && observation.type === 'image') {
+        try { await fetchAndBindMedia(observation.platformMessageId, observation.peerRef!); }
+        catch { mediaFetch.unavailable += 1; mediaFetch.lastReason = 'BIND_FAILED'; }
+      } else if (outcome === 'duplicate' && options.media && observation.kind === 'incoming' && observation.type === 'image') {
+        // A replay never reaches the fetch path; count it so /healthz explains why nothing happened.
+        mediaFetch.duplicate += 1;
+      }
       response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify({ code: 200, msg: outcome }));
       report(`ingress-${outcome}`);

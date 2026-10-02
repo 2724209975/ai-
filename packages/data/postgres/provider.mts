@@ -8,15 +8,19 @@ import { getDependencyEpoch } from '../../infrastructure/postgres/dispatch-journ
 import { invalidateDependencies } from '../../infrastructure/postgres/event-store.mts';
 import type { EventEnvelope } from '../../contracts/index.mts';
 import { PgContextRepository } from './context-repository.mts';
+import { PgMediaRepository, interpretationRef, type MediaDraftInput, type StoredMediaInterpretation } from './media-repository.mts';
+import type { MediaAsset } from '../media/file-store.mts';
+import type { MediaInterpretationRef } from '../../contracts/index.mts';
 
 export type Ref = Readonly<{ id: string; version: number }>;
+type MessageRef = Ref & { type?: string; mediaInterpretation?: MediaInterpretationRef };
 export type ObservedMessage = Readonly<{ contactId: string; conversationId: string; platformAccountId: string; platformMessageId: string; platformEventId: string; platformOrderKey?: string; actor: 'owner' | 'contact' | 'agent' | 'system' | 'platform' | 'unknown'; type: 'text' | 'image' | 'voice' | 'sticker_static' | 'sticker_animated' | 'unsupported'; contentRef?: string; mediaId?: string; quotedMessageId?: string; sentAt: string; receivedAt: string; provenance: Record<string, unknown>; isAgentGenerated: boolean; mode: 'live' | 'import' | 'trial' | 'replay' }>;
 export type FactInput = Readonly<{ subject: string; scope: string; content: string; sourceCategory: 'owner-confirmed' | 'owner-message-candidate' | 'model-inference'; evidenceRefs: readonly Ref[]; validFrom: string; validUntil?: string }>;
 export type BuildInput = Readonly<{ callerContactId: string; contactId: string; cutoffTime: string; cutoffMessageId?: string; generation: number; allowedScopes: readonly string[]; policyVersion: number; mode?: 'live' | 'import' }>;
 type DbMessage = Record<string, unknown> & { id: string; version: string | number; contact_id: string; conversation_id: string; content_ref: string | null; media_id: string | null; deletion_status: string };
 type DbFact = Record<string, unknown> & { id: string; version: string | number; scope: string; content: string | null; confirmation_status: string; deletion_status: string; valid_from: Date | string; valid_until: Date | string | null };
 type DbAnalysis = Record<string, unknown> & { id: string; version: string | number; contact_id: string; status: string };
-type DbSnapshot = { id: string; contact_id: string; conversation_id: string; generation: string | number; cutoff_time: Date | string; cutoff_message_id: string | null; policy_version: string | number; message_refs: Ref[]; summary_refs: Ref[]; fact_refs: Ref[]; analysis_refs: Ref[]; hash: string; status: string; created_at: Date | string; updated_at: Date | string };
+type DbSnapshot = { id: string; contact_id: string; conversation_id: string; generation: string | number; cutoff_time: Date | string; cutoff_message_id: string | null; policy_version: string | number; message_refs: MessageRef[]; summary_refs: Ref[]; fact_refs: Ref[]; analysis_refs: Ref[]; hash: string; status: string; created_at: Date | string; updated_at: Date | string };
 
 function uuid7(): string {
   const b = randomBytes(16); b.writeUIntBE(Date.now(), 0, 6);
@@ -32,7 +36,15 @@ function requireScope(caller: string, contact: string, allowed: readonly string[
 }
 function asIso(value: Date | string) { return value instanceof Date ? value.toISOString() : new Date(value).toISOString(); }
 function refs(rows: readonly { id: string; version: string | number }[]): Ref[] { return rows.map(r => ({ id: r.id, version: Number(r.version) })); }
-function sameRefs(a: readonly Ref[], b: readonly Ref[]) { return JSON.stringify(a) === JSON.stringify(b); }
+// JSONB does not preserve object key order. Preserve array order and every value,
+// but compare nested interpretation refs independently of serialization order.
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
+function sameRefs(a: readonly Ref[], b: readonly Ref[]) { return canonicalJson(a) === canonicalJson(b); }
 
 export class PgDataProvider {
   async #boundary(tx: PgClient) { await tx.query('SELECT pg_advisory_xact_lock($1)', [220924]); }
@@ -217,12 +229,115 @@ export class PgDataProvider {
     const affected = await tx.query<{ owner_id: string }>(`SELECT owner_id FROM data_evidence WHERE owner_kind='fact' AND source_kind='message' AND source_id=$1`, [m.id]);
     const factIds = affected.rows.map(r => r.owner_id);
     await tx.query(`UPDATE data_messages SET content_ref=NULL,media_id=NULL,deletion_status='deleted',version=version+1,updated_at=now() WHERE id=$1`, [m.id]);
+    await new PgMediaRepository(tx, input.contactId).purgeMessage(m.id);
     await tx.query(`UPDATE data_facts SET content=NULL,deletion_status='deleted',version=version+1,updated_at=now() WHERE id=ANY($1::uuid[])`, [factIds]);
     await tx.query(`UPDATE data_analyses SET status='invalid',claims='[]'::jsonb,stage_hypotheses='[]'::jsonb,supporting_evidence='[]'::jsonb,counter_evidence='[]'::jsonb,trend=NULL,corrections='[]'::jsonb,version=version+1,updated_at=now()
       WHERE id IN (SELECT owner_id FROM data_evidence WHERE owner_kind='analysis' AND (source_kind='message' AND source_id=$1 OR source_kind='fact' AND source_id=ANY($2::uuid[])))`, [m.id,factIds]);
     await tx.query(`DELETE FROM data_evidence WHERE owner_kind='fact' AND owner_id=ANY($1::uuid[])`, [factIds]);
     await this.#invalidate(tx,input.contactId,'EvidenceInvalidated',{ id: m.id, version: input.expectedVersion + 1 },correlationId,reason);
     return { id: m.id, version: input.expectedVersion + 1 };
+  }
+
+  /**
+   * Binds an already-stored private asset to the message it came from, in the caller's transaction.
+   *
+   * 01 reads the bytes and 03 owns the rows, so this takes a `MediaAsset` that 03's own private store
+   * produced and only creates the asset row plus the `media_id` back-reference. A repeat delivery of
+   * the same platform message is a no-op: the asset row already exists and `media_id` is not
+   * overwritten. Callers that might race on the same message must check for an existing asset first,
+   * because `data_media_assets` has no `(contact_id,message_id)` uniqueness.
+   */
+  async attachMediaToMessage(tx: PgClient, input: { callerContactId: string; contactId: string; messageId: string;
+    expectedMessageVersion: number; asset: MediaAsset }): Promise<{ mediaId: string; duplicate: boolean }> {
+    requireScope(input.callerContactId, input.contactId, []);
+    if (input.asset?.messageId !== input.messageId || input.asset?.contactId !== input.contactId) throw new Error('VALIDATION_FAILED');
+    await this.#boundary(tx); await this.#scope(tx, input.callerContactId, input.contactId, []);
+    const ref = await new PgMediaRepository(tx, input.contactId).register(input.asset, input.expectedMessageVersion);
+    if (!ref.duplicate) {
+      const linked = await tx.query(`UPDATE data_messages SET media_id=$2,version=version+1,updated_at=now()
+        WHERE id=$1 AND contact_id=$3 AND media_id IS NULL`, [input.messageId, ref.id, input.contactId]);
+      // No second epoch bump or EvidenceInvalidated event: this runs inside the same transaction
+      // that just inserted the message (which already invalidated), and no snapshot can reference an
+      // asset that did not exist a statement earlier.
+      return { mediaId: ref.id, duplicate: linked.rowCount === 0 };
+    }
+    return { mediaId: ref.id, duplicate: true };
+  }
+
+  async registerMediaAsset(tx: PgClient, input: { callerContactId: string; contactId: string; asset: MediaAsset; expectedMessageVersion: number }, correlationId: string) {
+    requireScope(input.callerContactId, input.contactId, []);
+    await this.#boundary(tx); await this.#scope(tx, input.callerContactId, input.contactId, []);
+    const ref = await new PgMediaRepository(tx, input.contactId).register(input.asset, input.expectedMessageVersion);
+    if (!ref.duplicate) {
+      await this.#invalidateMediaDerived(tx, input.contactId, input.asset.id);
+      await this.#invalidate(tx, input.contactId, 'EvidenceInvalidated', ref, correlationId, 'media_registered');
+    }
+    return ref;
+  }
+
+  async storeMediaInterpretation(tx: PgClient, input: { callerContactId: string; contactId: string; draft: MediaDraftInput;
+    expectedMessageVersion: number; expectedAssetVersion: number; expectedInterpretationVersion: number; cutoffTime: string }, correlationId: string) {
+    requireScope(input.callerContactId, input.contactId, []); time(input.cutoffTime);
+    await this.#boundary(tx); await this.#scope(tx, input.callerContactId, input.contactId, []);
+    const ref = await new PgMediaRepository(tx, input.contactId).store(input);
+    if (!ref.duplicate) {
+      await this.#invalidateMediaDerived(tx, input.contactId, input.draft.mediaId);
+      await this.#invalidate(tx, input.contactId, 'EvidenceInvalidated', ref, correlationId, 'media_interpreted');
+    }
+    return ref;
+  }
+
+  /** Trusted OwnerDataQueryPort calls this; never passed to 04 or a media provider. */
+  async changeMediaInterpretation(tx: PgClient, input: { callerContactId: string; contactId: string; mediaId: string;
+    expectedInterpretationVersion: number; action: 'correct' | 'delete'; text?: string }, correlationId: string) {
+    requireScope(input.callerContactId, input.contactId, []);
+    await this.#boundary(tx); await this.#scope(tx, input.callerContactId, input.contactId, []);
+    const ref = await new PgMediaRepository(tx, input.contactId).change(input);
+    await this.#invalidateMediaDerived(tx, input.contactId, input.mediaId);
+    await this.#invalidate(tx, input.contactId, 'EvidenceInvalidated', ref, correlationId, `media_${input.action}`);
+    return ref;
+  }
+
+  /** Existing facts/analyses cite the source message, not an interpretation version.
+   * Conservatively invalidate those dependants when its media meaning changes.
+   * Independent owner facts and other messages remain intact; no second epoch/event.
+   */
+  async #invalidateMediaDerived(tx: PgClient, contactId: string, mediaId: string) {
+    const source = (await tx.query<{ message_id: string }>(
+      'SELECT message_id FROM data_media_assets WHERE id=$1 AND contact_id=$2', [mediaId, contactId])).rows[0];
+    if (!source) throw new Error('NOT_FOUND');
+    const affected = await tx.query<{ owner_id: string }>(`SELECT owner_id FROM data_evidence WHERE contact_id=$3 AND owner_kind='fact'
+      AND (source_kind='message' AND source_id=$1 OR source_kind='media' AND source_id=$2)`, [source.message_id, mediaId, contactId]);
+    const factIds = affected.rows.map(r => r.owner_id);
+    await tx.query(`UPDATE data_facts SET content=NULL,deletion_status='deleted',version=version+1,updated_at=now()
+      WHERE id=ANY($1::uuid[]) AND scope=$2 AND deletion_status='active'`, [factIds, contactId]);
+    await tx.query(`UPDATE data_analyses SET status='invalid',claims='[]'::jsonb,stage_hypotheses='[]'::jsonb,
+      supporting_evidence='[]'::jsonb,counter_evidence='[]'::jsonb,trend=NULL,corrections='[]'::jsonb,version=version+1,updated_at=now()
+      WHERE contact_id=$4 AND status='valid' AND id IN (SELECT owner_id FROM data_evidence WHERE owner_kind='analysis'
+        AND contact_id=$4 AND (source_kind='message' AND source_id=$1 OR source_kind='media' AND source_id=$2
+          OR source_kind='fact' AND source_id=ANY($3::uuid[])))`, [source.message_id, mediaId, factIds, contactId]);
+    await tx.query(`DELETE FROM data_evidence WHERE contact_id=$2 AND owner_kind='fact' AND owner_id=ANY($1::uuid[])`, [factIds, contactId]);
+  }
+
+  async readMediaInterpretation(tx: PgClient, input: { callerContactId: string; contactId: string; mediaId: string }) {
+    requireScope(input.callerContactId, input.contactId, []);
+    await this.#boundary(tx); await this.#scope(tx, input.callerContactId, input.contactId, []);
+    return await new PgMediaRepository(tx, input.contactId).read(input.mediaId);
+  }
+
+  async #mediaMessages(tx: PgClient, contactId: string, rows: readonly DbMessage[]) {
+    const repository = new PgMediaRepository(tx, contactId);
+    const interpretations = new Map<string, StoredMediaInterpretation>();
+    for (const m of rows) {
+      if (!m.media_id || !['image', 'voice'].includes(String(m.type))) continue;
+      const i = await repository.read(m.media_id);
+      if (i && i.messageId === m.id) interpretations.set(m.id, i);
+    }
+    const messageRefs: MessageRef[] = rows.map(m => {
+      const i = interpretations.get(m.id);
+      return { id: m.id, version: Number(m.version), ...(i ? { type: String(m.type), mediaInterpretation: interpretationRef(i) } : {}) };
+    });
+    return { messageRefs, interpretations };
   }
 
   async storeAnalysisSnapshot(tx: PgClient, input: { callerContactId: string; contactId: string; analysisVersion: string; taxonomyVersion: string; cutoff: string; sampleRange: Record<string, unknown>; claims: readonly unknown[]; stageHypotheses: readonly unknown[]; trend: unknown; supportingEvidence: readonly unknown[]; counterEvidence: readonly unknown[]; uncertainty: unknown; corrections: readonly unknown[]; dependencySet: readonly Ref[]; allowedScopes: readonly string[] }, correlationId: string): Promise<Ref> {
@@ -262,8 +377,10 @@ export class PgDataProvider {
     const messages = await repo.queryMessages({ ...scope, cutoffTime: input.cutoffTime, cutoffMessageId: input.cutoffMessageId, mode: input.mode });
     const facts = await repo.queryFacts({ ...scope, asOf: input.cutoffTime });
     const analysis = await repo.queryAnalysis({ ...scope, cutoffTime: input.cutoffTime });
-    const core = { conversationId: c.conversation_id, contactId: input.contactId, generation: input.generation, cutoffMessageId: input.cutoffMessageId ?? null, cutoffTime: input.cutoffTime, messageRefs: refs(messages as DbMessage[]), summaryRefs: [], factRefs: refs(facts as DbFact[]), analysisRefs: analysis ? refs([analysis as DbAnalysis]) : [], policyVersion: input.policyVersion };
-    const snapshot = { ...core, id: uuid7(), hash: sha({ core, messageContent: messages.map(m => [m.id,m.content_ref,m.media_id]), factContent: facts.map(f => [f.id,f.content]) }) };
+    const media = await this.#mediaMessages(tx, input.contactId, messages as DbMessage[]);
+    const core = { conversationId: c.conversation_id, contactId: input.contactId, generation: input.generation, cutoffMessageId: input.cutoffMessageId ?? null, cutoffTime: input.cutoffTime, messageRefs: media.messageRefs, summaryRefs: [], factRefs: refs(facts as DbFact[]), analysisRefs: analysis ? refs([analysis as DbAnalysis]) : [], policyVersion: input.policyVersion };
+    const snapshot = { ...core, id: uuid7(), hash: sha({ core, messageContent: messages.map(m => [m.id,m.content_ref,m.media_id]),
+      factContent: facts.map(f => [f.id,f.content]), mediaContent: [...media.interpretations.values()] }) };
     await tx.query(`INSERT INTO data_context_snapshots(id,conversation_id,contact_id,generation,cutoff_message_id,cutoff_time,message_refs,summary_refs,fact_refs,analysis_refs,policy_version,hash,status,created_at,updated_at)
       VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,'[]'::jsonb,$8::jsonb,$9::jsonb,$10,$11,'valid',now(),now())`, [snapshot.id,c.conversation_id,input.contactId,input.generation,input.cutoffMessageId ?? null,input.cutoffTime,JSON.stringify(core.messageRefs),JSON.stringify(core.factRefs),JSON.stringify(core.analysisRefs),input.policyVersion,snapshot.hash]);
     const dependencyEpoch = await getDependencyEpoch(tx,c.conversation_id);
@@ -301,13 +418,15 @@ export class PgDataProvider {
       const current = await new PgContextRepository(tx).queryAnalysis({ callerContactId: input.callerContactId, contactId: input.contactId, allowedScopes: input.allowedScopes, cutoffTime: asIso(s.cutoff_time) });
       if (!current || current.id !== s.analysis_refs[0]!.id || Number(current.version) !== s.analysis_refs[0]!.version) throw new Error('STALE_CONTEXT');
     }
-    const messageRefs = refs(messages.rows).sort((a,b) => a.id.localeCompare(b.id));
+    const media = await this.#mediaMessages(tx, input.contactId, messages.rows);
+    const messageRefs = media.messageRefs.sort((a,b) => a.id.localeCompare(b.id));
     const factRefs = refs(facts.rows).sort((a,b) => a.id.localeCompare(b.id));
     const analysisRefs = refs(analyses.rows).sort((a,b) => a.id.localeCompare(b.id));
     if (!sameRefs(messageRefs,[...s.message_refs].sort((a,b) => a.id.localeCompare(b.id))) || !sameRefs(factRefs,[...s.fact_refs].sort((a,b) => a.id.localeCompare(b.id))) || !sameRefs(analysisRefs,[...s.analysis_refs].sort((a,b) => a.id.localeCompare(b.id)))) throw new Error('STALE_CONTEXT');
     const snapshot = { id: s.id, contactId: s.contact_id, conversationId: s.conversation_id, generation: Number(s.generation), cutoffTime: asIso(s.cutoff_time), cutoffMessageId: s.cutoff_message_id ?? undefined, policyVersion: Number(s.policy_version), messageRefs: s.message_refs, summaryRefs: s.summary_refs, factRefs: s.fact_refs, analysisRefs: s.analysis_refs, hash: s.hash, createdAt: asIso(s.created_at), updatedAt: asIso(s.updated_at) };
     const byRef = <T extends { id: string }>(rows: readonly T[], ordered: readonly Ref[]) => { const map = new Map(rows.map(r => [r.id,r])); return ordered.map(r => map.get(r.id)!); };
-    return { snapshot, messages: byRef(messages.rows,s.message_refs).map(m => this.#message(m)), facts: await this.#facts(tx,byRef(facts.rows,s.fact_refs)), analyses: await Promise.all(byRef(analyses.rows,s.analysis_refs).map(a => this.#analysis(tx,a))), dependencyEpoch: input.expectedDependencyEpoch };
+    return { snapshot, messages: byRef(messages.rows,s.message_refs).map(m => ({ ...this.#message(m),
+      mediaInterpretation: media.interpretations.get(m.id) })), facts: await this.#facts(tx,byRef(facts.rows,s.fact_refs)), analyses: await Promise.all(byRef(analyses.rows,s.analysis_refs).map(a => this.#analysis(tx,a))), dependencyEpoch: input.expectedDependencyEpoch };
   }
 
   async getDependencyEpoch(tx: PgClient, callerContactId: string, contactId: string) {

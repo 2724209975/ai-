@@ -49,7 +49,7 @@ export class DeepSeekHttpError extends Error {
 }
 
 /** Reads at most a couple of KB and picks out the provider's own error code, never the message. */
-async function providerErrorCode(response: Response): Promise<string | null> {
+export async function providerErrorCode(response: Response): Promise<string | null> {
   try {
     const text = (await response.text()).slice(0, 2_048);
     const parsed = JSON.parse(text) as { error?: { code?: unknown; type?: unknown } };

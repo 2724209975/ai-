@@ -9,7 +9,7 @@
 import { randomBytes } from 'node:crypto';
 import type { PgClient, PgPool } from '../../infrastructure/postgres/transaction.mts';
 import { setContactScope, withTransaction } from '../../infrastructure/postgres/transaction.mts';
-import { bumpDependencyEpoch } from '../../infrastructure/postgres/dispatch-journal.mts';
+import { acquireDispatchBoundary, bumpDependencyEpoch } from '../../infrastructure/postgres/dispatch-journal.mts';
 import { appendOutbox } from '../../infrastructure/postgres/event-store.mts';
 import { PgDataProvider } from './provider.mts';
 
@@ -150,6 +150,26 @@ export class PgOwnerDataPort {
         approvedPlatforms: m.allowed_platforms,
       };
     }) };
+  }
+
+  /** Owner-only internal command; the HTTP/UI route is wired in a later media card. */
+  async changeMediaInterpretation(scope: OwnerScope, input: { mediaId: string; expectedInterpretationVersion: number; action: 'correct' | 'delete'; text?: string }): Promise<OwnerChangeResult> {
+    requireText(input?.mediaId);
+    if (!Number.isSafeInteger(input.expectedInterpretationVersion) || input.expectedInterpretationVersion < 1) throw new Error('VALIDATION_FAILED');
+    if (!['correct', 'delete'].includes(input.action)) throw new Error('VALIDATION_FAILED');
+    const correlationId = uuid7();
+    const result = await withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      for (const contactId of scope.contactIds) {
+        await setContactScope(tx, contactId);
+        const found = await tx.query('SELECT id FROM data_media_assets WHERE id=$1 AND contact_id=$2', [input.mediaId, contactId]);
+        if (!found.rows.length) continue;
+        const ref = await new PgDataProvider().changeMediaInterpretation(tx, { ...input, callerContactId: contactId, contactId }, correlationId);
+        return { resultVersion: ref.version, status: input.action === 'correct' ? 'CORRECTED' : 'INVALIDATED' };
+      }
+      throw new Error('NOT_FOUND');
+    });
+    return { ...result, correlationId };
   }
 
   /** Only approved stickers may be sent, so approval is limited to sticker media and a platform list. */

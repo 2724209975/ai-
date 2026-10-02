@@ -22,6 +22,16 @@ export { DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROMPT_VERS
 export type { MediaGateway } from './understanding/media-gateway.mts';
 export { interpretContextMedia, prepareReplyWithMedia } from './understanding/media-provider.mts';
 export type { BinaryMediaProvider, PrivateMediaReader, MediaUnderstandingOptions, MediaModelMeasurement } from './understanding/media-provider.mts';
+export { createVisionMediaProvider, normaliseImageInterpretation, parseVisionJson, IMAGE_UNDERSTANDING_PROMPT, VISION_DETAIL_LEVELS } from './understanding/vision-provider.mts';
+export type { VisionProviderOptions, ImageDetail } from './understanding/vision-provider.mts';
+export { createVoiceMediaProvider, normaliseTranscriptInterpretation, SUPPORTED_AUDIO_FORMATS, VOICE_TRANSCRIPTION_PROMPT } from './understanding/voice-provider.mts';
+export type { VoiceProviderOptions } from './understanding/voice-provider.mts';
+export { createMediaUnderstandingFromEnv, readMediaEnv } from './understanding/media-env.mts';
+export type { MediaEnv, MediaProviderSelection } from './understanding/media-env.mts';
+export { withMediaDailyBudget, mediaBudgetOptionsFromEnv, DEFAULT_MEDIA_DAILY_CALL_LIMIT, DEFAULT_MEDIA_DAILY_TOKEN_LIMIT } from './understanding/media-budget.mts';
+export type { MediaBudgetOptions, MediaRefusal } from './understanding/media-budget.mts';
+export { detectImageFormat, imageFormatMatches, SUPPORTED_IMAGE_FORMATS } from './understanding/image-format.mts';
+export type { ImageFormat } from './understanding/image-format.mts';
 
 export function createFakeIntelligencePort(gateway: CandidateGateway = new FakeCandidateGateway(), fallback: CandidateGateway | null = null) {
   return {
