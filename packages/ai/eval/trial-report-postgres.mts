@@ -16,7 +16,7 @@ export async function readTrialReport(client: Client, input: TrialWindow, logs: 
         CROSS JOIN dispatch_global_control g WHERE c.contact_id=$1 AND g.singleton=true`, [contactId]);
       if (current.rows.length !== 1) throw new Error('TRIAL_CONTACT_NOT_FOUND');
       const result = await client.query(`SELECT f.contact_id,f.plan_id,f.action,f.reason,f.rating->>'terminalAt' AS terminal_at,
-        f.shown_alternative_ids,p.alternatives,p.approved_alternative_id,
+        f.shown_alternative_ids,p.alternatives,p.approved_alternative_id,p.context_snapshot_id,p.prompt_version,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('sequence',s.sequence,'content',s.content) ORDER BY s.sequence)
           FROM orch_send_tasks s WHERE s.plan_id=p.id),'[]'::jsonb) AS final_parts
         FROM data_feedback f JOIN orch_plans p ON p.id=f.plan_id AND p.contact_id=f.contact_id

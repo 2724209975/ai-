@@ -54,7 +54,7 @@ test('the WeChat bridge dispatches a confirmed part only with a transport, and k
         rawStore: createFileRawEventStore(rawRoot, Date.now, 'wechat'), outboxIntervalMs: 600_000, onError: () => {},
         // Real provider and validation pipeline, synthetic model endpoint. No billable API call.
         intelligence: createTextModelIntelligence(createDeepSeekTextProvider({
-          apiKey: 'fixture-key', modelId: 'fixture-model', promptVersion: 'fixture-v1', dataRegion: 'test', retentionPolicy: 'test',
+          apiKey: 'fixture-key', modelId: 'fixture-model', promptVersion: 'reply-candidates-1', dataRegion: 'test', retentionPolicy: 'test',
           fetchImpl: async (_url, init) => {
             modelRequests.push(String(init?.body));
             return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({

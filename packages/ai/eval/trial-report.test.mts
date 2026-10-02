@@ -79,3 +79,16 @@ test('trial reader rolls back on failure, missing contact or bounded overflow', 
     await assert.rejects(readTrialReport(client, window)); assert.equal(queries.at(-1), 'ROLLBACK');
   }
 });
+
+test('trial groups registered versions and accepts only unique consistent snapshot associations', () => {
+  const snapshot = randomUUID(), row = fixture('selected', { context_snapshot_id: snapshot, prompt_version: 'reply-candidates-1' });
+  const measurements = parseModelLogs([JSON.stringify({ event: 'model_call', ts: at, contextSnapshotId: snapshot, callId: randomUUID(), outcome: 'ok', inputTokens: 100, outputTokens: 20, elapsedMs: 50 })], window);
+  const report = buildTrialReport(window, [row, fixture('rejected', { prompt_version: 'PRIVATE_VERSION' })], [], measurements);
+  assert.equal(report.model.linkedCandidateCount, 1); assert.equal(report.model.inputTokens, 100);
+  assert.equal(report.promptVersions[0]!.promptVersion, 'reply-candidates-1'); assert.equal(report.promptVersions[1]!.promptVersion, 'unknown');
+  assert.equal(JSON.stringify(report).includes('PRIVATE'), false);
+  const ambiguous = buildTrialReport(window, [row, fixture('edited', { context_snapshot_id: snapshot })], [], measurements);
+  assert.equal(ambiguous.model.linkedCandidateCount, 0);
+  const mismatched = buildTrialReport(window, [row], [], [{ ...measurements[0]!, planId: row.plan_id, contextSnapshotId: randomUUID() }]);
+  assert.equal(mismatched.model.calls, 0);
+});

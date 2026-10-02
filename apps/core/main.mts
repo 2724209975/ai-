@@ -47,6 +47,7 @@ try {
         // The measurement carries versions, latency and token counts only - never prompt or answer.
         return createTextModelIntelligence(createDeepSeekFromEnv(process.env), measurement => logger.info('model_call', {
           providerId: measurement.providerId, modelId: measurement.modelId, modelVersion: measurement.modelVersion,
+          contextSnapshotId: measurement.contextSnapshotId, callId: measurement.callId,
           promptVersion: measurement.promptVersion, dataRegion: measurement.dataRegion,
           outcome: measurement.outcome, elapsedMs: Math.round(measurement.elapsedMs),
           inputTokens: measurement.inputTokens ?? undefined, outputTokens: measurement.outputTokens ?? undefined,

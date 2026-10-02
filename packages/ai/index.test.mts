@@ -415,6 +415,8 @@ test('replaceable text provider records version and usage without storing messag
   if (result.ok) assert.deepEqual([result.value.proposal?.generatorVersion, result.value.proposal?.promptVersion], ['stub/text-stub@1', 'prompt-2']);
   assert.equal(measurements.length, 1);
   assert.equal(measurements[0]?.outcome, 'ok');
+  assert.equal(measurements[0]?.contextSnapshotId, context.snapshot.id);
+  assert.match(measurements[0]!.callId, /^[0-9a-f-]{36}$/);
   assert.deepEqual([measurements[0]?.inputTokens, measurements[0]?.outputTokens], [12, 2]);
   assert.equal(JSON.stringify(measurements).includes('你好'), false);
 });

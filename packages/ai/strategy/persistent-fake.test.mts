@@ -31,6 +31,7 @@ test('02 PersistentIntelligence gets 03 scoped text and returns checked structur
   assert.equal(draft.alternatives.length, 3);
   assert.equal(draft.alternatives[1]?.parts.length, 2);
   assert.equal(draft.generatorVersion, 'fake-deterministic-1');
+  assert.equal(draft.promptVersion, 'fixture-1');
   const edited = await ai.checkEdited(context, policy, [{ type: 'text', content: '你好' }]);
   assert.equal(edited.allowed, true);
   const unsupportedFact = await ai.checkEdited(context, policy, [{ type: 'text', content: '我明天有空，我们两点见。' }]);

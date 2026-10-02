@@ -1,5 +1,6 @@
 import type { CandidateGateway } from './fake-provider.mts';
 import type { PolicyProjection, ReplyDecision, ScopedContext } from '../types.mts';
+import { randomUUID } from 'node:crypto';
 
 /** Provider selection, region and retention are D06 decisions, not defaults here. */
 export interface TextModelProvider {
@@ -16,6 +17,7 @@ export interface TextModelProvider {
 }
 
 export type TextModelMeasurement = Readonly<{
+  contextSnapshotId: string; callId: string;
   providerId: string; modelId: string; modelVersion: string; promptVersion: string;
   dataRegion: string; retentionPolicy: string; elapsedMs: number;
   outcome: 'ok' | 'error';
@@ -42,7 +44,7 @@ export function createTextCandidateGateway(provider: TextModelProvider, observe?
       } finally {
         const validCount = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
         try {
-          observe?.({ providerId: provider.providerId, modelId: provider.modelId, modelVersion: provider.modelVersion,
+          observe?.({ contextSnapshotId: context.snapshot.id, callId: randomUUID(), providerId: provider.providerId, modelId: provider.modelId, modelVersion: provider.modelVersion,
             promptVersion: provider.promptVersion, dataRegion: provider.dataRegion, retentionPolicy: provider.retentionPolicy,
             elapsedMs: performance.now() - started, outcome,
             inputTokens: validCount(usage?.inputTokens) ? usage!.inputTokens! : null,

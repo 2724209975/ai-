@@ -47,7 +47,7 @@ function intelligenceFromPort(ai: ReturnType<typeof createFakeIntelligencePort>,
       const risks = [...new Set(decision.riskCategories.map(risk => riskMap[risk]))];
       if (decision.requiredFacts.length && !risks.includes('unknown_fact')) risks.push('unknown_fact');
       if (!proposal) return { shouldReply: false, risks, alternatives: [], generatorVersion: decision.generatorVersion, timing: decision.timing === 'wait' ? 'wait' : 'no_reply' };
-      return { shouldReply: true, risks, generatorVersion: proposal.generatorVersion, timing: 'now',
+      return { shouldReply: true, risks, generatorVersion: proposal.generatorVersion, promptVersion: proposal.promptVersion, timing: 'now',
         alternatives: proposal.alternatives.map(a => ({ key: a.clientAlternativeKey, strategySummary: a.strategySummary,
           parts: a.parts.map(p => ({ key: p.clientPartKey, sequence: p.sequence, type: p.type, content: p.content })) })),
         factVersions: Object.fromEntries(full.snapshot.factRefs.map(r => [r.id, r.version])),

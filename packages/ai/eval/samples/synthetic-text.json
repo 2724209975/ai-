@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "authorization": { "ownerAuthorized": true, "deidentified": true, "externalModelAuthorized": false },
+  "samples": [{
+    "cutoffTime": "2026-10-02T04:01:00Z",
+    "cutoffMessageId": "m2",
+    "policy": { "effectiveAt": "2026-10-02T04:00:00Z", "sendMode": "confirm", "goal": "自然聊天", "restrictions": [], "stylePreferences": ["简短"] },
+    "messages": [
+      { "id": "m1", "actor": "owner", "sentAt": "2026-10-02T04:00:00Z", "text": "今天过得怎么样？" },
+      { "id": "m2", "actor": "contact", "sentAt": "2026-10-02T04:01:00Z", "text": "还不错，刚刚散步回来。" },
+      { "id": "m3", "actor": "owner", "sentAt": "2026-10-02T04:02:00Z", "text": "这是截止后的历史回复，不应进入回放输入。" }
+    ],
+    "facts": []
+  }]
+}

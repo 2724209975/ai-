@@ -1,10 +1,11 @@
 /** Private inputs, public numeric projection. Never return source rows or arbitrary labels. */
+import { reportPromptVersion } from '../generation/prompt-versions.mts';
 export type TrialWindow = { contactIds: string[]; start: string; end: string };
 export type Tariff = { inputPerMillion: number; outputPerMillion: number; currency: 'CNY' | 'USD' };
 export type TrialRow = { contact_id: string; plan_id: string; action: string; reason?: unknown; terminal_at: unknown;
-  alternatives?: unknown; approved_alternative_id?: unknown; final_parts?: unknown; shown_alternative_ids?: unknown };
+  alternatives?: unknown; approved_alternative_id?: unknown; final_parts?: unknown; shown_alternative_ids?: unknown; context_snapshot_id?: string; prompt_version?: unknown };
 export type PauseRow = { contact_id: string; pause_reasons: unknown; paused: unknown; global_paused?: unknown };
-export type ModelCall = { planId?: string; callId?: string; at: string; outcome: 'ok' | 'error'; inputTokens: number | null;
+export type ModelCall = { planId?: string; contextSnapshotId?: string; callId?: string; at: string; outcome: 'ok' | 'error'; inputTokens: number | null;
   outputTokens: number | null; elapsedMs: number | null };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const actions = ['selected', 'edited', 'rejected', 'regenerated', 'expired'] as const;
@@ -42,6 +43,7 @@ export function parseModelLogs(logs: string[], window: TrialWindow): ModelCall[]
     if (!at || at < window.start || at >= window.end) continue;
     const callId = typeof row.callId === 'string' && uuid.test(row.callId) ? row.callId.toLowerCase() : undefined;
     const call: ModelCall = { at, callId, planId: typeof row.planId === 'string' && uuid.test(row.planId) ? row.planId.toLowerCase() : undefined,
+      contextSnapshotId: typeof row.contextSnapshotId === 'string' && uuid.test(row.contextSnapshotId) ? row.contextSnapshotId.toLowerCase() : undefined,
       outcome: row.outcome === 'ok' ? 'ok' : 'error', inputTokens: count(row.inputTokens), outputTokens: count(row.outputTokens),
       elapsedMs: typeof row.elapsedMs === 'number' && Number.isFinite(row.elapsedMs) && row.elapsedMs >= 0 ? row.elapsedMs : null };
     if (callId) {
@@ -93,7 +95,12 @@ export function buildTrialReport(window: TrialWindow, rows: TrialRow[], pauses: 
     if (!selectedContacts.has(row.contact_id) || !at || at < window.start || at >= window.end || !actions.includes(row.action as typeof actions[number])) return false;
     if (seen.has(row.plan_id)) throw new Error('TRIAL_DUPLICATE_PLAN'); seen.add(row.plan_id); return true;
   });
-  const linked = calls.filter(c => !!c.planId && seen.has(c.planId) && c.at >= window.start && c.at < window.end);
+  const linked = calls.flatMap(c => {
+    if (c.at < window.start || c.at >= window.end) return [];
+    const matches = valid.filter(r => c.planId ? r.plan_id === c.planId && (!c.contextSnapshotId || r.context_snapshot_id === c.contextSnapshotId) :
+      !!c.contextSnapshotId && r.context_snapshot_id === c.contextSnapshotId);
+    return matches.length === 1 ? [{ ...c, planId: matches[0]!.plan_id }] : [];
+  });
   const summary = (items: TrialRow[]) => {
     const counts = Object.fromEntries(actions.map(action => [action, items.filter(r => r.action === action).length]));
     return { terminalCount: items.length, counts, directAdoptionRate: items.length ? counts.selected! / items.length : null,
@@ -108,7 +115,7 @@ export function buildTrialReport(window: TrialWindow, rows: TrialRow[], pauses: 
       const chosenIndex = typeof row.approved_alternative_id === 'string' ? alternatives.findIndex(a => a?.alternativeId === row.approved_alternative_id) : -1;
       const original = chosenIndex < 0 ? null : parts(alternatives[chosenIndex]?.parts), final = parts(row.final_parts);
       const metric = original === null || final === null || !['selected', 'edited'].includes(row.action) ? null : editMagnitude(original, final);
-      return { candidate: ordinal + 1, action: row.action, chosenAlternative: chosenIndex < 0 ? null : chosenIndex + 1,
+      return { candidate: ordinal + 1, action: row.action, promptVersion: reportPromptVersion(row.prompt_version), chosenAlternative: chosenIndex < 0 ? null : chosenIndex + 1,
         shownAlternativeCount: Array.isArray(row.shown_alternative_ids) ? new Set(row.shown_alternative_ids).size : 0,
         edit: metric, model: modelMetrics(linked.filter(c => c.planId === row.plan_id), tariff) };
     });
@@ -120,8 +127,11 @@ export function buildTrialReport(window: TrialWindow, rows: TrialRow[], pauses: 
         currentReasons: Object.fromEntries([...currentReasons].map(r => [r, 1])) } };
   });
   return { schemaVersion: 1, window: { start: window.start, end: window.end }, cohort: 'terminal-at', ...summary(valid),
-    contacts, pricing: tariff ?? null, model: { ...modelMetrics(linked, tariff), linkedCandidateCount: new Set(linked.map(c => c.planId)).size,
-      unattributedWindowRows: calls.length - linked.length, attribution: 'explicit-plan-id-only' },
+    contacts, promptVersions: [...new Set(valid.map(r => reportPromptVersion(r.prompt_version)))].map(version => {
+      const items = valid.filter(r => reportPromptVersion(r.prompt_version) === version), ids = new Set(items.map(r => r.plan_id));
+      return { promptVersion: version, ...summary(items), model: modelMetrics(linked.filter(c => ids.has(c.planId!)), tariff) };
+    }), pricing: tariff ?? null, model: { ...modelMetrics(linked, tariff), linkedCandidateCount: new Set(linked.map(c => c.planId)).size,
+      unattributedWindowRows: calls.length - linked.length, attribution: 'explicit-plan-or-unique-snapshot' },
     limitations: ['Rates use all terminal outcomes; presented is excluded. Confirmation is not delivery.',
       'Unlinked model logs cannot be assigned to selected contacts. Null means unavailable, never zero.',
       'Costs use supplied flat rates, exclude cache discounts and are estimates for whole plan generation.',
@@ -137,6 +147,7 @@ export function renderTrialMarkdown(report: TrialReport): string {
     '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   for (const contact of report.contacts) for (const candidate of contact.candidates) lines.push(`| ${contact.contact} | ${candidate.candidate} | ${candidate.action} | ${candidate.chosenAlternative ?? '—'} | ${value(candidate.edit?.ratio ?? null)} | ${value(candidate.model.inputTokens)}/${value(candidate.model.outputTokens)} | ${value(candidate.model.meanElapsedMs)} | ${value(candidate.model.estimatedCost)} |`);
   lines.push('', `费用币种：${report.pricing?.currency ?? '未提供费率'}；已关联方案：${report.model.linkedCandidateCount}；区间不可归属日志行：${report.model.unattributedWindowRows}。`, '');
+  for (const group of report.promptVersions) lines.push(`提示词 ${group.promptVersion}：终态 ${group.terminalCount}，直接采用率 ${value(group.directAdoptionRate)}，编辑采用率 ${value(group.editedAdoptionRate)}，拒绝率 ${value(group.rejectionRate)}。`);
   for (const contact of report.contacts) lines.push(`联系人 ${contact.contact}：拒绝原因 ${JSON.stringify(contact.rejectionReasons)}；区间暂停次数：数据不足；当前暂停原因 ${JSON.stringify(contact.pauses.currentReasons)}。`);
   lines.push('', '口径：采用率以全部区间终态为分母；确认不代表送达。模型只接受明确方案关联；空值代表未知。费用按显式平价费率估算，方案生成费用不按替代候选重复计费。暂停历史不完整，当前原因是执行时快照。', '');
   return lines.join('\n');

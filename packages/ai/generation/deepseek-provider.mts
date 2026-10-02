@@ -10,6 +10,7 @@
  */
 import type { PolicyProjection, ReplyDecision, ScopedContext } from '../types.mts';
 import type { TextModelProvider } from './text-provider-contract.mts';
+import { DEFAULT_CANDIDATE_PROMPT, candidatePromptVersion, promptInstruction } from './prompt-versions.mts';
 
 export type DeepSeekProviderOptions = {
   apiKey: string;
@@ -32,7 +33,7 @@ export type DeepSeekProviderOptions = {
 export const DEEPSEEK_DEFAULT_BASE_URL = 'https://api.deepseek.com';
 /** Current API model name; `deepseek-v4-flash` is a still-accepted legacy alias of the same model. */
 export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-flash';
-export const DEEPSEEK_PROMPT_VERSION = 'reply-candidates-1';
+export const DEEPSEEK_PROMPT_VERSION = DEFAULT_CANDIDATE_PROMPT;
 
 /** Carries the platform's status for operator tooling. The product path never logs it: 04's gateway
  * turns any failure here into MODEL_UNAVAILABLE before it reaches a log or a contact. */
@@ -67,7 +68,7 @@ function text(value: unknown): string {
 }
 
 /** The contact's own words are the only chat content sent; everything else is owner configuration. */
-export function buildPrompt(context: ScopedContext, decision: ReplyDecision, policy: PolicyProjection): { system: string; user: string } {
+export function buildPrompt(context: ScopedContext, decision: ReplyDecision, policy: PolicyProjection, version: string = DEEPSEEK_PROMPT_VERSION): { system: string; user: string } {
   const system = [
     '你是本人（账号主人）的聊天回复助手，负责给对方写候选回复。',
     '只输出一个 JSON 对象，不要输出解释、Markdown 或代码块围栏。',
@@ -78,7 +79,7 @@ export function buildPrompt(context: ScopedContext, decision: ReplyDecision, pol
     '3) 不要提出具体见面时间地点，不要表白、不要确认或否认关系、不要谈钱；',
     '4) 语气贴近本人平时的表达，像日常聊天，不要客服腔、不要书面语；',
     '5) 与最后一条消息自然衔接，可以只回一句。',
-  ].join('\n');
+  ].concat(promptInstruction(version) ? [promptInstruction(version)] : []).join('\n');
   const history = context.messages.slice(-MAX_HISTORY).map(message => {
     const who = message.actor === 'contact' ? '对方' : message.actor === 'owner' ? '本人' : message.actor === 'agent' ? '助手（已发）' : '未知来源';
     const body = message.type === 'text' ? (message.text ?? '').trim() : `[${message.type} 内容未取到可靠文本]`;
@@ -134,6 +135,7 @@ export function parseModelJson(content: string): unknown {
 export function createDeepSeekTextProvider(options: DeepSeekProviderOptions): TextModelProvider {
   if (!options?.apiKey?.trim()) throw new Error('MISSING_DEEPSEEK_API_KEY');
   if (!options.modelId?.trim() || !options.promptVersion?.trim() || !options.dataRegion?.trim() || !options.retentionPolicy?.trim()) throw new Error('VALIDATION_FAILED');
+  const version = candidatePromptVersion(options.promptVersion.trim());
   let endpoint: URL;
   try { endpoint = new URL('chat/completions', options.baseUrl?.trim() || DEEPSEEK_DEFAULT_BASE_URL); }
   catch { throw new Error('INVALID_DEEPSEEK_BASE_URL'); }
@@ -156,7 +158,7 @@ export function createDeepSeekTextProvider(options: DeepSeekProviderOptions): Te
     dataRegion: options.dataRegion.trim(),
     retentionPolicy: options.retentionPolicy.trim(),
     async invoke({ context, decision, policy, signal }) {
-      const prompt = buildPrompt(context, decision, policy);
+      const prompt = buildPrompt(context, decision, policy, version);
       const request = {
         model: options.modelId.trim(),
         messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],

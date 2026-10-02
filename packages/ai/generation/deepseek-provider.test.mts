@@ -47,7 +47,7 @@ test('the prompt carries the goal, restrictions and scoped facts, and marks spec
 test('a well-formed answer becomes the validated alternative shape with usage recorded', async () => {
   let seen: Record<string, unknown> | undefined;
   const provider = createDeepSeekTextProvider({
-    apiKey: 'unit-test-key', modelId: 'deepseek-chat', promptVersion: 'p1', dataRegion: 'CN', retentionPolicy: 'unverified',
+    apiKey: 'unit-test-key', modelId: 'deepseek-chat', promptVersion: 'reply-candidates-1', dataRegion: 'CN', retentionPolicy: 'unverified',
     fetchImpl: async (url, init) => {
       seen = { url: String(url), headers: (init?.headers ?? {}) as Record<string, string>, body: JSON.parse(String(init?.body)) };
       return completion(JSON.stringify({ alternatives: [
@@ -96,7 +96,7 @@ test('HTTP failures, empty answers and unusable JSON all fail closed without lea
     async () => completion(JSON.stringify({ alternatives: [] })),
   ];
   for (const fetchImpl of cases) {
-    const provider = createDeepSeekTextProvider({ apiKey: key, modelId: 'deepseek-chat', promptVersion: 'p1',
+    const provider = createDeepSeekTextProvider({ apiKey: key, modelId: 'deepseek-chat', promptVersion: 'reply-candidates-1',
       dataRegion: 'CN', retentionPolicy: 'unverified', fetchImpl });
     await assert.rejects(provider.invoke({ context, decision, policy, signal: new AbortController().signal }),
       (error: unknown) => {
@@ -108,8 +108,9 @@ test('HTTP failures, empty answers and unusable JSON all fail closed without lea
 });
 
 test('configuration is validated and the key stays out of the describable view', () => {
-  assert.throws(() => createDeepSeekTextProvider({ apiKey: '', modelId: 'deepseek-chat', promptVersion: 'p1', dataRegion: 'CN', retentionPolicy: 'x' }), { message: 'MISSING_DEEPSEEK_API_KEY' });
-  assert.throws(() => createDeepSeekTextProvider({ apiKey: 'k', modelId: 'deepseek-chat', promptVersion: 'p1', dataRegion: 'CN', retentionPolicy: 'x', baseUrl: 'http://api.deepseek.com' }), { message: 'INVALID_DEEPSEEK_BASE_URL' });
+  assert.throws(() => createDeepSeekTextProvider({ apiKey: 'k', modelId: 'm', promptVersion: 'arbitrary-private-label', dataRegion: 'CN', retentionPolicy: 'x' }), /PROMPT_VERSION_UNKNOWN/);
+  assert.throws(() => createDeepSeekTextProvider({ apiKey: '', modelId: 'deepseek-chat', promptVersion: 'reply-candidates-1', dataRegion: 'CN', retentionPolicy: 'x' }), { message: 'MISSING_DEEPSEEK_API_KEY' });
+  assert.throws(() => createDeepSeekTextProvider({ apiKey: 'k', modelId: 'deepseek-chat', promptVersion: 'reply-candidates-1', dataRegion: 'CN', retentionPolicy: 'x', baseUrl: 'http://api.deepseek.com' }), { message: 'INVALID_DEEPSEEK_BASE_URL' });
   assert.throws(() => readDeepSeekEnv({}), { message: 'MISSING_ENV:DEEPSEEK_API_KEY' });
   assert.throws(() => readDeepSeekEnv({ DEEPSEEK_API_KEY: 'k', DEEPSEEK_MAX_TOKENS: 'lots' }), { message: 'INVALID_ENV:DEEPSEEK_MAX_TOKENS' });
 
@@ -132,7 +133,7 @@ test('configuration is validated and the key stays out of the describable view',
 test('thinking mode can be turned back on, and the request says so explicitly either way', async () => {
   const bodies: Record<string, unknown>[] = [];
   for (const thinking of ['disabled', 'enabled'] as const) {
-    const provider = createDeepSeekTextProvider({ apiKey: 'k', modelId: 'deepseek-v4-pro', promptVersion: 'p1',
+    const provider = createDeepSeekTextProvider({ apiKey: 'k', modelId: 'deepseek-v4-pro', promptVersion: 'reply-candidates-1',
       dataRegion: 'CN', retentionPolicy: 'x', thinking,
       fetchImpl: async (_url, init) => { bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
         return completion(JSON.stringify({ alternatives: [{ summary: 's', parts: ['ok'] }] })); } });
@@ -143,7 +144,7 @@ test('thinking mode can be turned back on, and the request says so explicitly ei
 });
 
 test('a slow endpoint aborts on our own timeout rather than hanging the contact', async () => {
-  const provider = createDeepSeekTextProvider({ apiKey: 'k', modelId: 'deepseek-chat', promptVersion: 'p1',
+  const provider = createDeepSeekTextProvider({ apiKey: 'k', modelId: 'deepseek-chat', promptVersion: 'reply-candidates-1',
     dataRegion: 'CN', retentionPolicy: 'x', timeoutMs: 1_000,
     fetchImpl: async (_url, init) => new Promise((_resolve, reject) => {
       (init?.signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')));
