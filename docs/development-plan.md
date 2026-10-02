@@ -8,10 +8,10 @@
 
 | 项 | 状态 | 证据 |
 | --- | --- | --- |
-| 本机确认主线 | 已通过（mock/fake 加真实 DeepSeek 代码路径）：342 项测试与网页构建，0 失败、0 跳过。本次重写时未重跑 | [确认主线收尾](reports/core-confirmation-hardening-2026-09-30.md) |
+| 本机确认主线 | 2026-10-02 在干净 main 复核：342 项测试与网页构建通过，0 失败、0 跳过；mock/fake 与模拟模型端点，不计真实平台验收 | [P0-3 基线复核](reports/P0-3-2026-10-02.md)、[确认主线收尾](reports/core-confirmation-hardening-2026-09-30.md) |
 | 微信接收 | 真实实测通过（文字/图片/语音，带平台消息 ID）。只绑定客户端 3.9.11.25（`WeChatWin.dll` 前缀 `2058A926`） | [A21](decisions.md)、[接收接入](reports/wechat-receive-bridge-2026-09-24.md) |
 | 微信发送 | 真实发送 1 次，经人工核对已送达。**发送后没有 hook 回显或平台消息 ID**，所以每次发送都会记为 `RESULT_UNKNOWN` 并暂停该联系人 | [真机发送](reports/wechat-real-send-2026-09-26.md)、[W01](reports/wechat-w01-2026-09-26.md) |
-| 真实模型 | DeepSeek `deepseek-flash` 跑通 1 次真实来信到候选（约 1 秒，322 token）；有按日计的调用和 token 上限 | [真实来信候选](reports/wechat-deepseek-live-inbound-2026-09-27.md)、[A25](decisions.md) |
+| 真实模型 | DeepSeek `deepseek-flash` 跑通 1 次真实来信到候选（约 1 秒，322 token）；限额是单进程 UTC 日调用/token 计数，重启清零，非月费用硬上限 | [真实来信候选](reports/wechat-deepseek-live-inbound-2026-09-27.md)、[A25](decisions.md) |
 | 真实候选 + 真实发送同次闭环 | **未做**，是 P1 的目标 | — |
 | 回复质量 | **从未评估**（D08 未定）。`data_feedback` 表已存在，但没有写入路径 | `db/migrations/0002_data.sql` |
 | 关机后持续运行（AC23） | 未做。部署位置**按本人安排推迟到所有开发完成后（P5）再决定**；在此之前一律在本人电脑上运行 | — |
@@ -73,7 +73,7 @@ P0–P4 全部在本人电脑上运行：电脑开着才收信、出候选和发
   | --- | --- | --- |
   | 0011 | （未分配） | — |
 
-  注意：[A20](decisions.md) 曾把 `0010` 预留给来源更正审计，[A23](decisions.md) 提议用 `0011`。这两条已与实际编号不符，由 P0-2 更正。
+  2026-10-02 P0-2 已更正 [A20/A23](decisions.md)：原预留撤销，两项提案都须由总控重新分配；`0011` 仍未分配。
 - 已应用的迁移、他人的历史报告一律不改写。
 - **不要写死部署位置**：部署位置要到 P5 才定。P0–P4 的代码和配置不能假设某种宿主（阿里云、家用主机、某个操作系统），本机专用的启动脚本放在 `scripts/` 并注明「本机开发用」。
 
