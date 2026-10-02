@@ -10,7 +10,7 @@ const enabled = process.env.RUN_BROWSER_E2E === '1';
 const build = resolve(dirname(fileURLToPath(import.meta.url)), '../build');
 const evidence = resolve(dirname(fileURLToPath(import.meta.url)), '../evidence');
 
-async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
+async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue' | 'feedback') {
   let stale = false;
   let contact = { id: 'contact-1', version: 1, status: 'READY_CONFIRM', allowedActions: ['updatePolicy'],
     name: '测试联系人', platform: 'wechat', agentEnabled: true, sendMode: 'confirm', goal: '自然聊天',
@@ -18,10 +18,11 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
     restrictions: [] as string[], stylePreferences: [] as string[], pauseReasons: [] as string[], policyVersion: 1 };
   let savedPolicy: Record<string, unknown> | undefined;
   const resolutions: Record<string, unknown>[] = [];
+  const candidateCommands: { action: string; body: Record<string, unknown> }[] = [];
   const task = () => ({ id: 'task-1', taskId: 'task-1', taskVersion: stale ? 2 : 1, version: stale ? 2 : 1,
     planId: 'plan-1', planVersion: stale ? 2 : 1, contactId: 'contact-1', contactName: '测试联系人',
     conversationId: 'conversation-1', status: stale ? 'INVALIDATED' : 'AWAITING_CONFIRMATION',
-    allowedActions: stale ? [] : ['confirmPlan'], reasonCodes: ['AUTO_REVIEW_UNAVAILABLE'],
+    allowedActions: stale ? [] : mode === 'feedback' ? ['confirmPlan', 'rejectPlan', 'regeneratePlan'] : ['confirmPlan'], reasonCodes: ['AUTO_REVIEW_UNAVAILABLE'],
     triggerMessages: [{ id: 'message-1', type: 'text', text: '你好', at: '2026-09-24T00:00:00Z' }],
     alternatives: [{ alternativeId: 'a-1', strategySummary: '回应', parts: [{ replyPartId: 'part-1', sequence: 1, type: 'text', content: '你好呀' }] }],
     sends: [], ...(stale ? { invalidationReason: 'NEW_MESSAGE' } : {}) });
@@ -56,6 +57,15 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
       stale = true;
       return json(409, { code: 'STALE_PLAN', message: '候选已失效', retryable: false, correlationId: 'trace-409' });
     }
+    if (/^\/api\/v1\/tasks\/task-1\/(present|reject)$/.test(path) && request.method === 'POST') {
+      let body = ''; for await (const chunk of request) body += chunk;
+      const action = path.split('/').at(-1)!;
+      candidateCommands.push({ action, body: JSON.parse(body) });
+      if (mode === 'feedback' && action === 'reject' && candidateCommands.filter(c => c.action === 'reject').length === 1)
+        return json(503, { code: 'MODEL_UNAVAILABLE', message: '合成临时故障', retryable: true, correlationId: 'feedback-retry' });
+      if (action === 'reject') stale = true;
+      return json(200, { resultVersion: stale ? 2 : 1, correlationId: 'candidate-recorded', status: 'RECORDED' });
+    }
     if (path === '/api/v1/sends/unknown-send/resolve' && request.method === 'POST') {
       let body = '';
       for await (const chunk of request) body += chunk;
@@ -81,9 +91,32 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue') {
   });
   await new Promise<void>(resolveListening => server.listen(0, '127.0.0.1', resolveListening));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
-  return { url: `http://127.0.0.1:${address.port}`, savedPolicy: () => savedPolicy, resolutions,
+  return { url: `http://127.0.0.1:${address.port}`, savedPolicy: () => savedPolicy, resolutions, candidateCommands,
     close: () => new Promise<void>(resolveClose => server.close(() => resolveClose())) };
 }
+
+test('390px: candidate view and optional quick rejection reason reach the server', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
+  const { chromium } = await import('playwright');
+  const api = await fixture('feedback'); const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await page.goto(api.url + '/#tasks');
+    await page.getByLabel('拒绝原因（可选）').selectOption('too_long');
+    await page.getByRole('button', { name: '拒绝候选', exact: true }).click();
+    await page.getByText(/feedback-retry/).first().waitFor();
+    assert.equal(await page.getByLabel('拒绝原因（可选）').inputValue(), 'too_long', 'failed command preserves optional reason');
+    await page.getByRole('button', { name: '拒绝候选', exact: true }).click();
+    await page.getByText('暂无待处理任务', { exact: true }).waitFor();
+    const rejected = api.candidateCommands.filter(c => c.action === 'reject');
+    assert.equal(rejected.length, 2);
+    assert.equal(rejected[1]!.body.rejectionReason, 'too_long');
+    assert.equal(rejected[0]!.body.rejectionReason, 'too_long');
+    assert.deepEqual(rejected[0]!.body.shownAlternativeIds, ['a-1']);
+    assert.equal(rejected[0]!.body.expectedVersion, 1);
+    assert.ok(api.candidateCommands.some(c => c.action === 'present' && JSON.stringify(c.body.shownAlternativeIds) === '["a-1"]'));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+  } finally { await browser.close(); await api.close(); }
+});
 
 test('390px: contact expression preferences and restrictions save together', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
   const { chromium } = await import('playwright');

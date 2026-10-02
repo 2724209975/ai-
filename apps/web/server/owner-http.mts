@@ -3,6 +3,7 @@
  * Reads are protected by the session cookie; writes additionally require Origin + CSRF.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { validRejectionReason, type RejectionReason } from '../../../packages/data/feedback/pg-candidate-journal.mts';
 import { requestIdOf } from '../../../packages/infrastructure/observability/request-id.mts';
 
 type Session = { ownerId: string };
@@ -17,8 +18,9 @@ export type OwnerPort = {
   media(ownerId: string): Promise<{ items: unknown[] }>;
   audit(ownerId: string): Promise<{ items: unknown[] }>;
   confirm(ownerId: string, taskId: string, command: ConfirmCommand): Promise<CommandResult>;
-  reject(ownerId: string, taskId: string, command: VersionCommand): Promise<CommandResult>;
-  regenerate(ownerId: string, taskId: string, command: VersionCommand): Promise<CommandResult>;
+  present(ownerId: string, taskId: string, command: CandidateCommand & { shownAlternativeIds: string[] }): Promise<CommandResult>;
+  reject(ownerId: string, taskId: string, command: CandidateCommand): Promise<CommandResult>;
+  regenerate(ownerId: string, taskId: string, command: CandidateCommand): Promise<CommandResult>;
   pauseAll(ownerId: string, command: VersionCommand): Promise<CommandResult>;
   resumeAll(ownerId: string, command: VersionCommand): Promise<CommandResult>;
   pauseContact(ownerId: string, contactId: string, command: VersionCommand): Promise<CommandResult>;
@@ -35,8 +37,10 @@ export type OwnerPort = {
 export type ConfirmCommand = {
   taskVersion: number; planVersion: number; alternativeId: string;
   editedParts: { type: 'text'; content: string }[]; contentHash: string; idempotencyKey: string;
+  shownAlternativeIds?: string[];
 };
 export type VersionCommand = { expectedVersion: number; idempotencyKey: string; reason?: string };
+export type CandidateCommand = VersionCommand & { shownAlternativeIds?: string[]; rejectionReason?: RejectionReason };
 export type ResolveSendCommand = {
   status: 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE';
   evidenceRef: string; expectedVersion: number; idempotencyKey: string; platformMessageId?: string;
@@ -91,7 +95,22 @@ function confirmCommand(value: unknown): ConfirmCommand {
     !Array.isArray(value.editedParts) || value.editedParts.length < 1 || value.editedParts.length > 20 ||
     !value.editedParts.every(part => isObject(part) && part.type === 'text' && typeof part.content === 'string' && part.content.trim() && part.content.length <= 4000) ||
     typeof value.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.contentHash) || !isKey(value.idempotencyKey)) throw new HttpError(400, 'VALIDATION_FAILED');
+  shownIds(value.shownAlternativeIds);
   return value as ConfirmCommand;
+}
+function shownIds(value: unknown): void {
+  if (value !== undefined && (!Array.isArray(value) || value.length > 3 || new Set(value).size !== value.length || !value.every(id => typeof id === 'string' && isId(id)))) throw new HttpError(400, 'VALIDATION_FAILED');
+}
+function candidateCommand(value: unknown, action: 'present'): CandidateCommand & { shownAlternativeIds: string[] };
+function candidateCommand(value: unknown, action: 'reject' | 'regenerate'): CandidateCommand;
+function candidateCommand(value: unknown, action: string): CandidateCommand {
+  const command = versionCommand(value);
+  if (!isObject(value)) throw new HttpError(400, 'VALIDATION_FAILED');
+  shownIds(value.shownAlternativeIds);
+  if (action === 'present' && value.shownAlternativeIds === undefined) throw new HttpError(400, 'VALIDATION_FAILED');
+  if (value.rejectionReason !== undefined && (action !== 'reject' || !validRejectionReason(value.rejectionReason))) throw new HttpError(400, 'VALIDATION_FAILED');
+  return { ...command, ...(value.shownAlternativeIds === undefined ? {} : { shownAlternativeIds: value.shownAlternativeIds }),
+    ...(value.rejectionReason === undefined ? {} : { rejectionReason: value.rejectionReason }) } as CandidateCommand;
 }
 /** Resolving an unknown send requires evidence: the owner records what they checked. */
 function resolveSendCommand(value: unknown): ResolveSendCommand {
@@ -210,14 +229,15 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
       if (path === '/api/v1/control/pause-all') return send(response, 200, await deps.ownerPort.pauseAll(ownerId, controlCommand(await readJson(request))));
       if (path === '/api/v1/control/resume-all') return send(response, 200, await deps.ownerPort.resumeAll(ownerId, controlCommand(await readJson(request))));
 
-      let match = /^\/api\/v1\/tasks\/([^/]+)\/(confirm|reject|regenerate)$/.exec(path);
+      let match = /^\/api\/v1\/tasks\/([^/]+)\/(confirm|reject|regenerate|present)$/.exec(path);
       if (match) {
         const taskId = resourceId(match[1]);
         const body = await readJson(request);
-        if (match[2] === 'regenerate') return send(response, 200, await deps.ownerPort.regenerate(ownerId, taskId, versionCommand(body)));
+        if (match[2] === 'present') return send(response, 200, await deps.ownerPort.present(ownerId, taskId, candidateCommand(body, 'present')));
+        if (match[2] === 'regenerate') return send(response, 200, await deps.ownerPort.regenerate(ownerId, taskId, candidateCommand(body, 'regenerate')));
         return send(response, 200, match[2] === 'confirm'
           ? await deps.ownerPort.confirm(ownerId, taskId, confirmCommand(body))
-          : await deps.ownerPort.reject(ownerId, taskId, versionCommand(body)));
+          : await deps.ownerPort.reject(ownerId, taskId, candidateCommand(body, 'reject')));
       }
       match = /^\/api\/v1\/sends\/([^/]+)\/resolve$/.exec(path);
       if (match) {

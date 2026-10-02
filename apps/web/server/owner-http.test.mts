@@ -3,6 +3,37 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createOwnerHttpHandler, type OwnerPort } from './owner-http.mts';
 
+test('Owner HTTP protects candidate telemetry and validates bounded rejection reasons', async () => {
+  const saved: { action: string; command: unknown }[] = [];
+  const port = {
+    async present(ownerId: string, taskId: string, command: unknown) {
+      assert.equal(ownerId, 'trusted-owner'); assert.equal(taskId, 'task-1'); saved.push({ action: 'present', command }); return { resultVersion: 1, correlationId: 'recorded' };
+    },
+    async reject(_ownerId: string, _taskId: string, command: unknown) { saved.push({ action: 'reject', command }); return { resultVersion: 2, correlationId: 'rejected' }; },
+  } as OwnerPort;
+  const server = createServer(createOwnerHttpHandler({ ownerPort: port,
+    authenticate: async request => request.headers.cookie === 'owner=fixture' ? { ownerId: 'trusted-owner' } : null,
+    verifyWrite: request => request.headers['x-csrf-token'] === 'fixture' }));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const command = { expectedVersion: 1, idempotencyKey: 'abcdefgh', shownAlternativeIds: ['alternative-1'] };
+  const request = (action: string, body: unknown, headers: Record<string, string> = { cookie: 'owner=fixture', 'x-csrf-token': 'fixture' }) =>
+    fetch(`http://127.0.0.1:${address.port}/api/v1/tasks/task-1/${action}`, { method: 'POST', headers, body: JSON.stringify(body) });
+  try {
+    assert.equal((await request('present', command, {})).status, 401);
+    assert.equal((await request('present', command, { cookie: 'owner=fixture' })).status, 403);
+    assert.equal((await request('present', { ...command, shownAlternativeIds: undefined })).status, 400);
+    for (const rejectionReason of ['私密自由文本', null, 1, 'TOO_LONG']) assert.equal((await request('reject', { ...command, rejectionReason })).status, 400);
+    assert.equal((await request('reject', { ...command, shownAlternativeIds: ['a', 'a'] })).status, 400);
+    assert.equal(saved.length, 0);
+    assert.equal((await request('present', command)).status, 200); assert.deepEqual(saved[0], { action: 'present', command });
+    for (const rejectionReason of ['not_my_style', 'too_long', 'wrong_tone', 'wrong_fact', 'should_not_reply', undefined]) {
+      assert.equal((await request('reject', { ...command, rejectionReason })).status, 200);
+      assert.deepEqual(saved.at(-1)!.command, { ...command, ...(rejectionReason ? { rejectionReason } : {}) });
+    }
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
 test('Owner HTTP denies missing session and CSRF before reaching 02', async () => {
   let called = 0;
   const port: OwnerPort = {

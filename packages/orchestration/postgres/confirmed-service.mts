@@ -9,6 +9,7 @@ import { setContactScope, withTransaction, type PgClient, type PgPool } from '..
 import { contentHash, type Draft, type ProposedAlternative } from '../conversations/engine.mts';
 import { defaultPolicy, routeReply, type Policy } from '../policy/evaluate.mts';
 import { newId, sha256 } from './ids.mts';
+import { PgCandidateFeedbackJournal, validRejectionReason, type RejectionReason } from '../../data/feedback/pg-candidate-journal.mts';
 
 type Row = { conversation_id: string; contact_id: string; account_id: string; external_contact_ref: string; policy: Policy; policy_version: number | string; generation: number | string; revision: number | string; version: number | string; state: string; pause_reasons: string[]; last_inbound_message_id: string | null; paused_inbound_unreviewed_count: number | string; collection_started_at?: Date | string | null; collection_due_at?: Date | string | null; collection_message_ids?: string[] | null };
 type PlanRow = { id: string; conversation_id: string; contact_id: string; context_snapshot_id: string; generation: number | string; policy_version: number | string; dependency_epoch: number | string; skill_epoch: number | string; trigger_message_ids: string[]; alternatives: { alternativeId: string; strategySummary: string; parts: { replyPartId: string; sequence: number; type: 'text'; content: string }[] }[]; risks: string[]; status: string; version: number | string; final_content_hash: string | null; approved_alternative_id: string | null; invalidation_reasons?: string[] };
@@ -66,6 +67,7 @@ function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode
 }
 
 export class PgConfirmedService {
+  readonly #feedback = new PgCandidateFeedbackJournal();
   readonly #pool: PgPool; readonly #data: PgDataProvider; readonly #ai: PersistentIntelligence;
   readonly #platform: DispatchPlatform; readonly #authority: object; readonly #now: () => number;
   readonly #aggregationWindowMs: number; readonly #maxAggregationMs: number;
@@ -339,7 +341,7 @@ export class PgConfirmedService {
     });
   }
 
-  async confirmPlan(command: { conversationId: string; planId: string; taskVersion: number; planVersion: number; alternativeId: string; editedParts: { type: 'text'; content: string }[]; contentHash: string; idempotencyKey: string }) {
+  async confirmPlan(command: { conversationId: string; planId: string; taskVersion: number; planVersion: number; alternativeId: string; editedParts: { type: 'text'; content: string }[]; contentHash: string; idempotencyKey: string; shownAlternativeIds?: string[] }) {
     requireText(command.idempotencyKey);
     if (!command.editedParts.length || command.editedParts.some(p => p.type !== 'text' || !p.content.trim()) || contentHash(command.editedParts) !== command.contentHash) fail('VALIDATION_FAILED');
     const commandHash = sha256(JSON.stringify({ planId: command.planId, taskVersion: command.taskVersion, planVersion: command.planVersion, alternativeId: command.alternativeId, editedParts: command.editedParts, contentHash: command.contentHash }));
@@ -383,6 +385,9 @@ export class PgConfirmedService {
       }
       await tx.query(`INSERT INTO orch_owner_commands(contact_id,idempotency_key,command_hash,plan_id,result_version) VALUES($1,$2,$3,$4,$5)`, [row.contact_id, command.idempotencyKey, commandHash, plan.id, newVersion]);
       await tx.query(`UPDATE orch_conversations SET state='SCHEDULED',version=version+1 WHERE conversation_id=$1`, [row.conversation_id]);
+      await this.#feedback.recordOutcome(tx, { callerContactId: row.contact_id, contactId: row.contact_id, planId: plan.id,
+        shownAlternativeIds: command.shownAlternativeIds, at: new Date(this.#now()).toISOString(),
+        action: alternative.parts.every((part, i) => part.content === command.editedParts[i]?.content) ? 'selected' : 'edited' });
       return { planId: plan.id, resultVersion: newVersion, duplicate: false };
     });
   }
@@ -552,13 +557,28 @@ export class PgConfirmedService {
     return { resultVersion: result.resultVersion, correlationId: newId(this.#now()), status: 'SCHEDULED' };
   }
 
-  async rejectTask(taskId: string, input: { expectedVersion: number; idempotencyKey: string }) {
+  async recordTaskPresentation(taskId: string, input: { expectedVersion: number; idempotencyKey: string; shownAlternativeIds: string[] }) {
     requireText(input.idempotencyKey);
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const target = (await tx.query<{ plan_id: string; contact_id: string; version: string | number }>(
+        'SELECT t.plan_id,p.contact_id,t.version FROM orch_confirmation_tasks t JOIN orch_plans p ON p.id=t.plan_id WHERE t.id=$1', [taskId])).rows[0];
+      if (!target) fail('NOT_FOUND');
+      if (Number(target.version) !== input.expectedVersion) fail('STALE_PLAN');
+      await this.#feedback.recordPresentation(tx, { callerContactId: target.contact_id, contactId: target.contact_id,
+        planId: target.plan_id, shownAlternativeIds: input.shownAlternativeIds, at: new Date(this.#now()).toISOString() });
+      return { resultVersion: Number(target.version), correlationId: newId(this.#now()), status: 'RECORDED' };
+    });
+  }
+
+  async rejectTask(taskId: string, input: { expectedVersion: number; idempotencyKey: string; rejectionReason?: RejectionReason; shownAlternativeIds?: string[] }) {
+    requireText(input.idempotencyKey);
+    if (input.rejectionReason !== undefined && !validRejectionReason(input.rejectionReason)) fail('VALIDATION_FAILED');
     return withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
       const target = (await tx.query<{ plan_id: string; conversation_id: string; contact_id: string }>(`SELECT t.plan_id,p.conversation_id,p.contact_id FROM orch_confirmation_tasks t JOIN orch_plans p ON p.id=t.plan_id WHERE t.id=$1`, [taskId])).rows[0];
       if (!target) fail('NOT_FOUND');
-      const hash = sha256(JSON.stringify({ action: 'rejectTask', taskId, expectedVersion: input.expectedVersion }));
+      const hash = sha256(JSON.stringify({ action: 'rejectTask', taskId, expectedVersion: input.expectedVersion, rejectionReason: input.rejectionReason }));
       const row = await this.#conversation(tx, target.conversation_id, true);
       const plan = await this.#plan(tx, target.plan_id, true);
       const task = await this.#task(tx, target.plan_id, true);
@@ -570,12 +590,14 @@ export class PgConfirmedService {
       await tx.query(`UPDATE orch_plans SET status='REJECTED',version=$2,updated_at=now() WHERE id=$1`, [plan.id, version]);
       await tx.query(`UPDATE orch_conversations SET state='READY_CONFIRM',version=version+1 WHERE conversation_id=$1 AND state='AWAITING_CONFIRMATION'`, [row.conversation_id]);
       await tx.query('INSERT INTO orch_owner_commands(contact_id,idempotency_key,command_hash,plan_id,result_version) VALUES($1,$2,$3,$4,$5)', [target.contact_id, input.idempotencyKey, hash, plan.id, version]);
+      await this.#feedback.recordOutcome(tx, { callerContactId: target.contact_id, contactId: target.contact_id, planId: plan.id,
+        action: 'rejected', rejectionReason: input.rejectionReason, shownAlternativeIds: input.shownAlternativeIds, at: new Date(this.#now()).toISOString() });
       return { resultVersion: version, correlationId: newId(this.#now()), status: 'REJECTED' };
     });
   }
 
   /** Replace an unconfirmed plan with a durable generation request; never schedules a send. */
-  async regenerateTask(taskId: string, input: { expectedVersion: number; idempotencyKey: string }) {
+  async regenerateTask(taskId: string, input: { expectedVersion: number; idempotencyKey: string; shownAlternativeIds?: string[] }) {
     requireText(input.idempotencyKey);
     return withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
@@ -599,6 +621,8 @@ export class PgConfirmedService {
       if (Number(control.skill_epoch) !== Number(plan.skill_epoch)) fail('STALE_PLAN');
       await this.#readProjection(tx, row, plan);
       if ((await tx.query('SELECT id FROM orch_send_tasks WHERE plan_id=$1 LIMIT 1', [plan.id])).rows.length) fail('STALE_PLAN');
+      if (input.shownAlternativeIds !== undefined) await this.#feedback.recordPresentation(tx, { callerContactId: row.contact_id, contactId: row.contact_id, planId: plan.id,
+        shownAlternativeIds: input.shownAlternativeIds, at: new Date(this.#now()).toISOString() });
       await this.#invalidate(tx, row.conversation_id, 'OWNER_REGENERATE');
       const at = new Date(this.#now()).toISOString();
       const changed = await tx.query<{ version: number | string }>(`UPDATE orch_conversations SET state='COLLECTING',
@@ -918,8 +942,13 @@ export class PgConfirmedService {
   }
 
   async #invalidate(tx: PgClient, conversationId: string, reason: string, staleSkillEpoch?: number): Promise<void> {
+    const unconfirmed = (await tx.query<{ id: string; contact_id: string }>(`SELECT id,contact_id FROM orch_plans
+      WHERE conversation_id=$1 AND status='AWAITING_CONFIRMATION' AND ($2::bigint IS NULL OR skill_epoch<$2::bigint)`, [conversationId, staleSkillEpoch ?? null])).rows;
     const plans = await tx.query<{ id: string; version: string | number }>(`UPDATE orch_plans SET status='INVALIDATED',invalidation_reasons=array_append(invalidation_reasons,$2),version=version+1,updated_at=now() WHERE conversation_id=$1 AND status IN ('AWAITING_CONFIRMATION','APPROVED','PARTIALLY_SENT') AND ($3::bigint IS NULL OR skill_epoch<$3::bigint) RETURNING id,version`, [conversationId, reason, staleSkillEpoch ?? null]);
     for (const p of plans.rows) {
+      const previous = unconfirmed.find(row => row.id === p.id);
+      if (previous) await this.#feedback.recordOutcome(tx, { callerContactId: previous.contact_id, contactId: previous.contact_id,
+        planId: p.id, action: reason === 'OWNER_REGENERATE' ? 'regenerated' : 'expired', invalidationReason: reason, at: new Date(this.#now()).toISOString() });
       await tx.query(`UPDATE orch_confirmation_tasks SET status='INVALIDATED',version=version+1 WHERE plan_id=$1 AND status='PENDING'`, [p.id]);
       await tx.query(`UPDATE orch_send_tasks SET status='CANCELLED_PRE_SUBMIT',version=version+1 WHERE plan_id=$1 AND status='CREATED'`, [p.id]);
       await appendOutbox(tx, { eventId: newId(this.#now()), eventType: 'ReplyPlanInvalidated', eventVersion: 1, occurredAt: new Date(this.#now()).toISOString(), correlationId: newId(this.#now()), causationId: p.id, aggregateId: p.id, aggregateVersion: Number(p.version), payload: { planId: p.id, reason } });

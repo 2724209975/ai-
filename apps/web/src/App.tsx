@@ -88,9 +88,18 @@ function SendState({ sends, run }: { sends: SendTask[]; run?: (path: string, bod
 function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
   const [selected, setSelected] = useState<Alternative | null>(task.alternatives[0] ?? null);
   const [parts, setParts] = useState((task.alternatives[0]?.parts ?? []).map(part => part.content ?? ''));
+  const [rejectionReason, setRejectionReason] = useState('');
+  const shownIds = task.alternatives.map(a => a.alternativeId);
+  const shownKey = shownIds.join(',');
+  const active = can(task, 'confirmPlan') || can(task, 'rejectPlan') || can(task, 'regeneratePlan');
+  useEffect(() => {
+    if (active) void api.command(`/tasks/${encodeURIComponent(task.taskId)}/present`, {
+      expectedVersion: task.taskVersion, idempotencyKey: `candidate-view:${task.taskId}:${task.taskVersion}`, shownAlternativeIds: shownKey ? shownKey.split(',') : [],
+    }).catch(() => {});
+  }, [task.taskId, task.taskVersion, shownKey, active]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { const first = task.alternatives[0] ?? null; setSelected(first); setParts((first?.parts ?? []).map(part => part.content ?? '')); setError(''); }, [task.taskVersion, task.planVersion, task.planId]);
+  useEffect(() => { const first = task.alternatives[0] ?? null; setSelected(first); setParts((first?.parts ?? []).map(part => part.content ?? '')); setError(''); setRejectionReason(''); }, [task.taskVersion, task.planVersion, task.planId]);
   async function submit() {
     if (!selected || busy || !can(task, 'confirmPlan')) return;
     if (selected.parts.some(part => part.type !== 'text')) { setError('当前页面只能编辑文字；表情素材确认接口待定。'); return; }
@@ -100,7 +109,7 @@ function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<
     try {
       await run(`/tasks/${encodeURIComponent(task.taskId)}/confirm`, {
         taskVersion: task.taskVersion, planVersion: task.planVersion, alternativeId: selected.alternativeId,
-        editedParts, contentHash: await contentHash(editedParts), idempotencyKey: key(),
+        editedParts, contentHash: await contentHash(editedParts), idempotencyKey: key(), shownAlternativeIds: shownIds,
       });
     } catch (cause) { setError(formatError(cause)); }
     finally { setBusy(false); }
@@ -108,7 +117,15 @@ function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<
   async function regenerate() {
     if (busy || !can(task, 'regeneratePlan')) return;
     setBusy(true); setError('');
-    try { await run(`/tasks/${encodeURIComponent(task.taskId)}/regenerate`, { expectedVersion: task.taskVersion, idempotencyKey: key() }); }
+    try { await run(`/tasks/${encodeURIComponent(task.taskId)}/regenerate`, { expectedVersion: task.taskVersion, idempotencyKey: key(), shownAlternativeIds: shownIds }); }
+    catch (cause) { setError(formatError(cause)); }
+    finally { setBusy(false); }
+  }
+  async function reject() {
+    if (busy || !can(task, 'rejectPlan')) return;
+    setBusy(true); setError('');
+    try { await run(`/tasks/${encodeURIComponent(task.taskId)}/reject`, { expectedVersion: task.taskVersion, idempotencyKey: key(), shownAlternativeIds: shownIds,
+      ...(rejectionReason ? { rejectionReason } : {}) }); }
     catch (cause) { setError(formatError(cause)); }
     finally { setBusy(false); }
   }
@@ -132,10 +149,14 @@ function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<
       <textarea rows={3} value={parts[index] ?? ''} disabled={busy || part.type !== 'text'} onChange={event => setParts(old => old.map((value, i) => i === index ? event.target.value : value))} />
     </label>)}</div>}
     {error && <p className="error" role="alert">{error}</p>}
+    {can(task, 'rejectPlan') && <label>拒绝原因（可选）<select value={rejectionReason} disabled={busy} onChange={event => setRejectionReason(event.target.value)}>
+      <option value="">不填写</option><option value="not_my_style">不像我</option><option value="too_long">太长</option>
+      <option value="wrong_tone">语气不对</option><option value="wrong_fact">事实错</option><option value="should_not_reply">不该回</option>
+    </select></label>}
     <div className="actions">
       {can(task, 'confirmPlan') && <button className="primary" disabled={busy} onClick={() => void submit()}>确认并发送</button>}
       {can(task, 'regeneratePlan') && <button disabled={busy} onClick={() => void regenerate()}>重新生成候选</button>}
-      {can(task, 'rejectPlan') && <button disabled={busy} onClick={() => void run(`/tasks/${encodeURIComponent(task.taskId)}/reject`, { expectedVersion: task.taskVersion, idempotencyKey: key() })}>拒绝候选</button>}
+      {can(task, 'rejectPlan') && <button disabled={busy} onClick={() => void reject()}>拒绝候选</button>}
     </div>
     <h4>逐条发送状态</h4><SendState sends={task.sends} run={run} />
   </article>;
