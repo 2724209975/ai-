@@ -31,6 +31,44 @@ test('failed startup does not start dependents; backoff caps; stop failure preve
   assert.equal(starts, 1);
 });
 
+test('an earlier dependency exiting while bridge startup waits stops the entire owned stack', async () => {
+  const controller = new AbortController(), trace: string[] = [], events: string[] = [];
+  let exitPostgres!: () => void, bridgeWaiting!: () => void;
+  const postgresExited = new Promise<void>(resolve => { exitPostgres = resolve; });
+  const bridgeIsWaiting = new Promise<void>(resolve => { bridgeWaiting = resolve; });
+  const running = superviseLocalStack({ names: ['postgres', 'core', 'bridge'], signal: controller.signal,
+    log: async (event, service) => { events.push(service ? `${event}:${service}` : event); },
+    start: async name => {
+      trace.push(`start:${name}`);
+      return { ready: async () => { if (name === 'bridge') { bridgeWaiting(); await new Promise<void>(() => {}); } },
+        exited: name === 'postgres' ? postgresExited : new Promise<void>(() => {}),
+        stop: async () => { trace.push(`stop:${name}`); if (name === 'postgres') controller.abort(); } };
+    } });
+  try {
+    await bridgeIsWaiting; exitPostgres();
+    // Fixture readiness has no timers or I/O: a completed cleanup must settle before the next event-loop turn.
+    const stoppedWithoutAbort = await Promise.race([running.then(() => true), new Promise<boolean>(resolve => setImmediate(() => resolve(false)))]);
+    assert.equal(stoppedWithoutAbort, true);
+    assert.deepEqual(trace, ['start:postgres', 'start:core', 'start:bridge', 'stop:bridge', 'stop:core', 'stop:postgres']);
+    assert.deepEqual(events.filter(event => event.startsWith('service_stopped:')), ['service_stopped:bridge', 'service_stopped:core', 'service_stopped:postgres']);
+    assert.ok(!events.includes('stack_ready'));
+  } finally { controller.abort(); await running; }
+});
+
+test('one stop failure still stops other owned dependencies and prevents every replacement', async () => {
+  const trace: string[] = [], events: string[] = [];
+  await assert.rejects(superviseLocalStack({ names: ['postgres', 'core', 'bridge'], signal: new AbortController().signal,
+    log: async (event, service) => { events.push(service ? `${event}:${service}` : event); },
+    start: async name => {
+      trace.push(`start:${name}`);
+      return { ready: async () => {}, exited: name === 'bridge' ? Promise.resolve() : new Promise<void>(() => {}),
+        stop: async () => { trace.push(`stop:${name}`); if (name === 'bridge') throw new Error('private process detail'); } };
+    } }), { message: 'STACK_STOP_FAILED' });
+  assert.deepEqual(trace, ['start:postgres', 'start:core', 'start:bridge', 'stop:bridge', 'stop:core', 'stop:postgres']);
+  assert.deepEqual(events.filter(event => event.startsWith('service_stopped:')), ['service_stopped:core', 'service_stopped:postgres']);
+  assert.ok(!events.includes('stack_restart'));
+});
+
 test('rotating logs stay bounded and reject arbitrary output or identities', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'stack-log-'));
   try {
@@ -42,6 +80,9 @@ test('rotating logs stay bounded and reject arbitrary output or identities', asy
       assert.ok((await stat(join(directory, file))).size <= 256);
       for (const line of (await readFile(join(directory, file), 'utf8')).trim().split('\n')) assert.equal(JSON.parse(line).event, 'service_ready');
     }
+    await log('service_stopped', 'postgres');
+    const stopped = JSON.parse((await readFile(join(directory, 'stack.jsonl'), 'utf8')).trim().split('\n').at(-1)!);
+    assert.equal(stopped.event, 'service_stopped'); assert.equal(stopped.service, 'postgres');
     await log('model_call', 'bridge', { inputTokens: 12, outputTokens: 3, elapsedMs: 45, outcome: 'ok', prompt: 'private body', accountId: 'private identity', secret: 'private key' });
     const lines = (await readFile(join(directory, 'stack.jsonl'), 'utf8')).trim().split('\n');
     const metric = JSON.parse(lines.at(-1)!); assert.equal(metric.inputTokens, 12); assert.equal(metric.outcome, 'ok');

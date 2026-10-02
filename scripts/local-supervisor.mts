@@ -2,6 +2,7 @@ import { appendFile, mkdir, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export type ManagedProcess = { ready(): Promise<void>; exited: Promise<void>; stop(): Promise<void> };
+// start must return the owned child promptly; all readiness waits belong in ready().
 export async function superviseLocalStack(options: { names: string[]; start(name: string): Promise<ManagedProcess>;
   signal: AbortSignal; log(event: string, service?: string): Promise<void>; delay?(ms: number): Promise<void>;
   backoffMs?: number; maxBackoffMs?: number }) {
@@ -13,7 +14,9 @@ export async function superviseLocalStack(options: { names: string[]; start(name
   }));
   let failures = 0;
   while (!options.signal.aborted) {
-    const owned: ManagedProcess[] = []; const startedAt = Date.now();
+    const owned: { name: string; child: ManagedProcess }[] = []; const startedAt = Date.now();
+    let exitSeen = false, signalExit!: () => void;
+    const exited = new Promise<void>(resolve => { signalExit = () => { exitSeen = true; resolve(); }; });
     let removeAbort = () => {};
     const aborted = new Promise<void>(resolve => {
       const done = () => resolve(); options.signal.addEventListener('abort', done, { once: true });
@@ -23,20 +26,30 @@ export async function superviseLocalStack(options: { names: string[]; start(name
     try {
       for (const name of options.names) {
         if (options.signal.aborted) break;
-        const child = await options.start(name); owned.push(child);
-        await Promise.race([child.ready(), child.exited.then(() => { throw new Error('CHILD_EXITED'); }),
+        if (exitSeen) throw new Error('CHILD_EXITED');
+        const child = await options.start(name); owned.push({ name, child });
+        void child.exited.then(signalExit, signalExit);
+        await Promise.race([child.ready(), exited.then(() => { throw new Error('CHILD_EXITED'); }),
           aborted.then(() => { throw new Error('STOPPED'); })]);
+        if (exitSeen) throw new Error('CHILD_EXITED');
         await options.log('service_ready', name);
       }
       if (!options.signal.aborted) {
+        if (exitSeen) throw new Error('CHILD_EXITED');
         await options.log('stack_ready');
-        await Promise.race([...owned.map(child => child.exited), aborted]);
+        await Promise.race([exited.then(() => { throw new Error('CHILD_EXITED'); }), aborted]);
       }
     } catch { if (!options.signal.aborted) await options.log('stack_fault'); }
     finally {
       removeAbort();
       // Never start replacements while an owned dependency may still be alive.
-      for (const child of owned.reverse()) await child.stop();
+      // A failed stop cannot prevent best-effort cleanup of the remaining dependencies.
+      let stopFailed = false;
+      for (const { name, child } of owned.reverse()) {
+        try { await child.stop(); await options.log('service_stopped', name); }
+        catch { stopFailed = true; }
+      }
+      if (stopFailed) throw new Error('STACK_STOP_FAILED');
     }
     if (!options.signal.aborted) {
       failures = Date.now() - startedAt >= 60_000 ? 1 : failures + 1;
@@ -52,7 +65,7 @@ export function rotatingStackLog(directory: string, maxBytes = 1_048_576, archiv
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 128 || !Number.isSafeInteger(archives) || archives < 1 || archives > 20) throw new Error('LOG_CONFIG_INVALID');
   let chain = Promise.resolve();
   return (event: string, service?: string, measurement?: Record<string, unknown>): Promise<void> => {
-    if (!['service_ready', 'stack_ready', 'stack_fault', 'stack_restart', 'stack_stopped', 'process_output', 'process_error', 'model_call'].includes(event)
+    if (!['service_ready', 'service_stopped', 'stack_ready', 'stack_fault', 'stack_restart', 'stack_stopped', 'process_output', 'process_error', 'model_call'].includes(event)
       || (service !== undefined && !['postgres', 'core', 'bridge'].includes(service))) return Promise.reject(new Error('LOG_EVENT_INVALID'));
     const metrics: Record<string, unknown> = {};
     if (event === 'model_call' && measurement) {
