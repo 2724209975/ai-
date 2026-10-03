@@ -12,6 +12,7 @@ import { isLogLevel, type LogLevel } from '../../packages/infrastructure/observa
 import { isPasswordHash } from '../../packages/infrastructure/auth/password.mts';
 import { readDeepSeekEnv } from '../../packages/ai/generation/deepseek-env.mts';
 import { readMediaEnv } from '../../packages/ai/understanding/media-env.mts';
+import { readCoreImageDirectory } from './media-wiring.mts';
 
 export const CORE_PLATFORMS = ['wechat', 'qq'] as const;
 export type CorePlatform = (typeof CORE_PLATFORMS)[number];
@@ -40,8 +41,7 @@ export type CoreConfig = {
   intelligenceProvider: IntelligenceProvider;
   /** Safe to log; the API key is read at wiring time and never stored on the config. */
   deepSeekModelId: string | null;
-  /** Media understanding stays off unless enabled here; this core process has no media path yet, so
-   *  the flags exist to fail fast on a half-configured opt-in rather than to run media. */
+  /** Explicitly enabled images require a private directory; runtime voice is unsupported. */
   mediaImageEnabled: boolean;
   mediaVoiceEnabled: boolean;
   mediaVisionModelId: string | null;
@@ -103,9 +103,9 @@ export function readCoreConfig(env: EnvLike): CoreConfig {
   if (!SUPPORTED_INTELLIGENCE_PROVIDERS.includes(intelligenceProvider as IntelligenceProvider)) throw new Error('UNSUPPORTED_INTELLIGENCE_PROVIDER');
   // Fail before the process starts rather than on the first inbound message.
   const deepSeekModelId = intelligenceProvider === 'deepseek' ? readDeepSeekEnv(env).modelId : null;
-  // Media provider switches and limits are validated here, but the real provider is not assembled:
-  // this process has no media path, and an unconfigured install must keep sending media to a human.
+  // Fail fast on media switches, limits and the private directory before assembling providers.
   const media = readMediaEnv(env);
+  readCoreImageDirectory(env);
 
   const logLevelRaw = text(env, 'LOG_LEVEL', 'info').toLowerCase();
   if (!isLogLevel(logLevelRaw)) throw invalid('LOG_LEVEL');

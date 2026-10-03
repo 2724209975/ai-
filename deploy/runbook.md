@@ -55,16 +55,18 @@
 - 真机只接收复测（本人执行）：①暂停并确认无未决发送；②启动微信 3.9.11.25、注入同一 helper；③用测试号发一张图片；④核对 `/healthz` 的 `mediaFetch.fetched` 增 1、数据库有一条 `data_media_assets`（`stored/complete`）且对应消息 `media_id` 非空；⑤确认该图片会话按预期转人工；⑥再发一条语音，确认 `mediaFetch` 不出现语音请求、语音仍转人工；⑦全局暂停并保留证据。
 - 已知未决点（复测时一并回答）：`downloadAttach` 是否在本机真的写出文件（依赖 `kGetMgrByPrefixLocalId`/`kPushAttachTask` 移植偏移）；保存图片后 `.dat` 的实际位置是否等于 `GetCurrentDataPath()`；真实 `msgId` 是否在安全整数范围内。
 
-### 媒体理解 provider（P4-3，默认关闭，本机尚未接线）
+### 媒体理解 provider（P4-3 / P4-4c，默认关闭）
 
-图片与语音的真实 provider 已实现但**没有装配到任何进程**：核心组合根只做配置校验，媒体进信仍转人工。启用前要明确这是把联系人的图片/语音发给模型并产生费用。
+P4-4c 已装配图片确认模式的受控流程：消息提交后，锁外获取并验证图片，短事务复核后绑定；锁外解释，短事务再复核并通过 03 保存，建立新快照后生成待确认候选。暂停、策略/技能/证据变化或新来信均会拒绝迟到结果，不自动恢复。启用图片会把图片发给配置的模型并产生费用，真实平台与供应商质量尚未验收。
 
 - `MEDIA_VISION_ENABLED=1` 才启用图片：需要 `MEDIA_API_KEY`（或单独的 `MEDIA_VISION_API_KEY`）。**不会读取 `DEEPSEEK_API_KEY`**，文本密钥不能顺手解锁媒体调用。
+- 微信桥接同时需要 `WECHAT_MEDIA_FETCH=1` 与原文件/私有目录配置；core 同时需要绝对路径 `MEDIA_PRIVATE_DIR`，对应桥接的 `WECHAT_MEDIA_DIR` 并位于网页静态目录之外。core 只解释已经绑定的资产，不获取平台文件。两个进程使用相同的模型配置，避免即时来信与人工重新生成采用不同解释配置；各自的单进程预算独立计数。
+- 只处理已入名单、代理开启且未暂停的确认模式图片批次；缺文件、截断、不支持、解释不确定或超时均转人工。关闭理解开关时保留 P4-4 原文件获取行为。已有有效解释和本人纠正会复用；本人删除解释后不自动重新解释。
 - 可选：`MEDIA_VISION_MODEL`（默认 `deepseek-flash`，官方文档称该模型支持图像输入，格式按文件内容判定：JPEG/PNG/GIF/WebP）、`MEDIA_VISION_MODEL_VERSION`、`MEDIA_VISION_DETAIL`（默认 `original`；`low` 会缩放到 512×512，不足以声称全图覆盖）、`MEDIA_BASE_URL`、`MEDIA_TIMEOUT_MS`、`MEDIA_MAX_TOKENS`、`MEDIA_TEMPERATURE`、`MEDIA_DATA_REGION`、`MEDIA_RETENTION_POLICY`。
-- `MEDIA_VOICE_ENABLED=1` 才启用语音，且必须同时给 `MEDIA_VOICE_ENDPOINT`（完整 https transcriptions 地址）与 `MEDIA_VOICE_MODEL`；可选 `MEDIA_VOICE_LANGUAGE`（两位小写）、`MEDIA_VOICE_TIMEOUT_MS`。**本仓库没有声明任何供应商支持语音转写**，不配置就只有「不支持」，不会有猜测性实现。
+- 语音 provider 离线契约仍需 `MEDIA_VOICE_ENDPOINT`（完整 https transcriptions 地址）与 `MEDIA_VOICE_MODEL`，但本卡没有语音获取或运行装配：core / 微信入口对 `MEDIA_VOICE_ENABLED=1` 明确拒绝启动（`VOICE_RUNTIME_UNSUPPORTED`），不能把 adapter 存在当作语音可用。
 - **独立失控闸**：`MEDIA_DAILY_IMAGE_CALL_LIMIT` / `MEDIA_DAILY_IMAGE_TOKEN_LIMIT` / `MEDIA_DAILY_VOICE_CALL_LIMIT` / `MEDIA_DAILY_VOICE_TOKEN_LIMIT`，默认各 200 次、各 200k token（本人 2026-10-03 确认）。按 UTC 日、按类型分别计数，与文本限额互不占用；重启清零，不是月预算也不是账单上限（D06 未定）。
 - 任一开关配置错误（缺密钥、缺端点、非法取值）都会让进程**启动即失败**，而不是等到第一条来信才发现。四项限额即使类型关闭也会校验。
-- 未完成：真实模型调用、真实供应商兼容性、微信原文件获取与本人真机验收。这些都需要本人在场并单独授权；离线测试只证明请求形状、格式复核、失败映射与限额隔离。
+- 未完成：真实图片字节来源、真实模型调用、供应商兼容性、理解质量与本人真机验收。测试只使用合成字节、假 helper/模型及隔离 PostgreSQL。若进程在模型已响应、解释尚未提交时崩溃，恢复可能再次调用；单进程日限额不是跨进程或月费用硬上限。
 
 
 ### 本机复现隔离 PostgreSQL 的两个坑（2026-09-26 实测）

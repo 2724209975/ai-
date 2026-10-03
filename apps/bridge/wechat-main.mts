@@ -4,7 +4,7 @@ import { isAbsolute, resolve } from 'node:path';
 import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-http-transport.mts';
 import { WxhelperLoopbackMediaTransport, WXHELPER_DEFAULT_BASE_URL } from '../../packages/platform/wechat/wxhelper-media-transport.mts';
-import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv, DEEPSEEK_DEFAULT_MODEL } from '../../packages/ai/index.mts';
+import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv, DEEPSEEK_DEFAULT_MODEL, readMediaEnv, createMediaUnderstandingFromEnv } from '../../packages/ai/index.mts';
 import { createWxBridge } from './wechat-bridge.mts';
 import { resolveWxBridgeRunMode } from './run-mode.mts';
 import { preflightWxBinaryFiles, type WxBinaryFingerprint } from '../../packages/platform/wechat/binary-preflight.mts';
@@ -30,7 +30,7 @@ function readMediaOptions(): { dataPath: string; mediaRoot: string; baseUrl: str
   const dataPath = required('WECHAT_DATA_PATH'), mediaRoot = required('WECHAT_MEDIA_DIR');
   if (!isAbsolute(dataPath) || !isAbsolute(mediaRoot)) throw new Error('WECHAT_MEDIA_ABSOLUTE_PATH_REQUIRED');
   return { dataPath, mediaRoot, baseUrl: process.env.WECHAT_WXHELPER_BASE_URL?.trim() || WXHELPER_DEFAULT_BASE_URL,
-    maxBytes: optionalNumber('WECHAT_MEDIA_MAX_BYTES', 10 * 1024 * 1024, 1, 64 * 1024 * 1024),
+    maxBytes: optionalNumber('WECHAT_MEDIA_MAX_BYTES', 10 * 1024 * 1024, 1, 10 * 1024 * 1024),
     pollMs: optionalNumber('WECHAT_MEDIA_POLL_MS', 250, 1, 10_000),
     pollTimeoutMs: optionalNumber('WECHAT_MEDIA_POLL_TIMEOUT_MS', 8_000, 1, 120_000) };
 }
@@ -56,6 +56,10 @@ const wechatPid = Number(required('WECHAT_PROCESS_ID'));
 const watchdogProbe = localHelperProbe({ pid: wechatPid });
 const wxhelperBaseUrl = runMode.outboundEnabled ? required('WECHAT_WXHELPER_BASE_URL') : undefined;
 const mediaOptions = readMediaOptions();
+const mediaEnv = readMediaEnv(process.env);
+if (mediaEnv.voiceEnabled) throw new Error('VOICE_RUNTIME_UNSUPPORTED');
+if (mediaEnv.imageEnabled && !mediaOptions) throw new Error('IMAGE_UNDERSTANDING_REQUIRES_MEDIA_FETCH');
+const imageUnderstanding = createMediaUnderstandingFromEnv(process.env);
 // Candidates come from whichever provider the operator names; anything else is refused outright.
 const intelligenceProvider = (process.env.WECHAT_INTELLIGENCE?.trim() || 'persistent-fake').toLowerCase();
 if (!['persistent-fake', 'deepseek'].includes(intelligenceProvider)) throw new Error('UNSUPPORTED_INTELLIGENCE_PROVIDER');
@@ -75,6 +79,8 @@ const bridge = createWxBridge({ pool, accountId, binaryFingerprint,
   onWatchdogFatal: () => process.exit(1),
   selfRef, ingressToken,
   ...(intelligence ? { intelligence } : {}),
+  ...(imageUnderstanding ? { imageUnderstanding: { provider: imageUnderstanding.provider, timeoutMs: mediaEnv.timeoutMs,
+    observe: measurement => process.stdout.write(`${JSON.stringify({ at: new Date().toISOString(), event: 'media_model_call', ...measurement })}\n`) } } : {}),
   rawStore: createFileRawEventStore(resolve(process.env.RAW_EVENT_DIR?.trim() || '.local-wechat-raw'), Date.now, 'wechat'),
   // Original-file fetch is opt-in; without it an image keeps going to a human exactly as before.
   ...(mediaOptions ? { media: { transport: new WxhelperLoopbackMediaTransport({ baseUrl: mediaOptions.baseUrl }),

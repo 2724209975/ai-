@@ -33,7 +33,7 @@ for (const alternative of proposal.value.alternatives) {
 
 `prepareReplyForOrchestration(port, context, policy)` 依次取得决策、方案并检查所有候选。不回复时返回 `proposal=null`；媒体理解失败等返回结构化错误，02 应据错误建立待办和暂停受影响联系人。成功也始终返回 `authorization=not_evaluated`；02 仍负责方案 ID/版本、确认票据、权限、状态失效及逐条发送前检查。02 装配须保留 `unsupported` 原类型，不得映成文字绕过媒体检查。
 
-媒体夹具声明必须按类型附完整覆盖：图片与静态表情 `full_image`，语音 `transcriptCoverage=complete`，动态表情 `temporal_sequence`。任何关键内容不清楚、局部或单帧结果返回 `MEDIA_UNCERTAIN`，由 02 转人工。当前没有真实视觉、转写或时序模型，覆盖声明只用于夹具契约测试。
+媒体夹具声明必须按类型附完整覆盖：图片与静态表情 `full_image`，语音 `transcriptCoverage=complete`，动态表情 `temporal_sequence`。任何关键内容不清楚、局部或单帧结果返回 `MEDIA_UNCERTAIN`，由 02 转人工。P4-4c 装配了默认关闭的图片 adapter，但本轮测试仍使用夹具声明，真实视觉质量、转写与时序模型尚未验收。
 
 ## P4 媒体字节与解释交接
 
@@ -53,7 +53,7 @@ provider 只收到单个媒体的字节和 codec，不收到联系人身份、�
 
 不存在可用持久解释时，媒体消息仍按 P4-1 口径处理：图片/语音没有完整有效解释则整批 `MEDIA_UNCERTAIN` 转人工；本人删除解释后同一条来信不会重新解读，也不会留下可派发的旧候选。
 
-## 真实媒体 provider 与独立限额（P4-3，未装配生产）
+## 真实媒体 provider 与独立限额（P4-3 / P4-4c，默认关闭）
 
 `understanding/vision-provider.mts` 是真实图片 adapter，`understanding/voice-provider.mts` 是通用语音转写 adapter，`understanding/media-env.mts` 负责显式开关与装配，`understanding/media-budget.mts` 是媒体专用失控闸。三者都实现现有 `BinaryMediaProvider`，都只接收单个已校验媒体，都看不到联系人、消息 ID、路径或策略。
 
@@ -63,7 +63,7 @@ provider 只收到单个媒体的字节和 codec，不收到联系人身份、�
 - 解释一律结构化：非空正文、`completeness`、图片 `visualCoverage=full_image` / 语音 `transcriptCoverage=complete`、不确定性、`criticalUnclear`。模型没给 `uncertainty` 时记为「模型未声明不确定性」，不当作确定。`criticalUnclear` 为真仍走转人工。`evidenceRefs` 由适配器给一个结构占位，`interpretContextMedia` 会丢弃它并换成由可信消息绑定与文件哈希构造的证据——**模型自报引用永远不会成为证据**。
 - 失败分类：HTTP 非 2xx 抛 `DEEPSEEK_HTTP_<status>`（含供应商错误码，不含正文）、结构无效/空文本/超长抛 `MODEL_UNAVAILABLE`、字节与格式不符抛 `MEDIA_UNCERTAIN`、未支持的媒体或容器抛 `UNSUPPORTED_CAPABILITY`，最终都由 04 gateway 与 02 转成暂停转人工。错误文本不含密钥、字节或正文。
 - 限额：`withMediaDailyBudget` 按 UTC 日、**按媒体类型分别**计调用与 token，图片/语音互不影响，也不与文本限额共享；默认各 200 次、各 200k token（本人 2026-10-03 确认的保守失控闸）。超出抛 `MODEL_BUDGET_EXHAUSTED` → `MODEL_UNAVAILABLE`。它重启清零，不是月预算，也不是账单上限。
-- 开关：`MEDIA_VISION_ENABLED` / `MEDIA_VOICE_ENABLED` 默认关闭；开启图片需要 `MEDIA_API_KEY`（或 `MEDIA_VISION_API_KEY`），开启语音还需要 `MEDIA_VOICE_ENDPOINT` 与 `MEDIA_VOICE_MODEL`。**不会回退到 `DEEPSEEK_API_KEY`**：文本密钥不能悄悄解锁媒体付费调用。核心组合根目前只做配置校验，没有媒体路径，生产媒体仍转人工。
+- 开关：`MEDIA_VISION_ENABLED` 默认关闭；开启图片需要 `MEDIA_API_KEY`（或 `MEDIA_VISION_API_KEY`），**不会回退到 `DEEPSEEK_API_KEY`**。P4-4c 在微信桥接与 core 装配受控图片准备端口：04 只返回解释草稿，由 02 在短事务内复核并通过 03 保存，新快照建立后才生成候选。已有有效解释（含本人纠正）不调用模型；删除后的解释不自动重做。桥接还需显式原文件获取配置，core 还需私有目录，具体见 runbook。语音 adapter 保留离线契约，运行入口拒绝 `MEDIA_VOICE_ENABLED=1`。
 
 这些适配器只在本地假 endpoint 上验证过请求形状、格式复核、失败映射与限额隔离；**真实模型质量、真实供应商兼容性与微信原文件仍未验证**，需要本人授权后才能实测。
 

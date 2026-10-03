@@ -10,6 +10,7 @@ import { contentHash, type Draft, type ProposedAlternative } from '../conversati
 import { defaultPolicy, routeReply, type Policy } from '../policy/evaluate.mts';
 import { newId, sha256 } from './ids.mts';
 import { PgCandidateFeedbackJournal, validRejectionReason, type RejectionReason } from '../../data/feedback/pg-candidate-journal.mts';
+import { preparePersistentImages, type ImagePreparationPort } from './media-preparation.mts';
 
 type Row = { conversation_id: string; contact_id: string; account_id: string; external_contact_ref: string; policy: Policy; policy_version: number | string; generation: number | string; revision: number | string; version: number | string; state: string; pause_reasons: string[]; last_inbound_message_id: string | null; paused_inbound_unreviewed_count: number | string; collection_started_at?: Date | string | null; collection_due_at?: Date | string | null; collection_message_ids?: string[] | null };
 type PlanRow = { id: string; conversation_id: string; contact_id: string; context_snapshot_id: string; generation: number | string; policy_version: number | string; dependency_epoch: number | string; skill_epoch: number | string; trigger_message_ids: string[]; alternatives: { alternativeId: string; strategySummary: string; parts: { replyPartId: string; sequence: number; type: 'text'; content: string }[] }[]; risks: string[]; status: string; version: number | string; final_content_hash: string | null; approved_alternative_id: string | null; invalidation_reasons?: string[] };
@@ -72,13 +73,15 @@ export class PgConfirmedService {
   readonly #platform: DispatchPlatform; readonly #authority: object; readonly #now: () => number;
   readonly #aggregationWindowMs: number; readonly #maxAggregationMs: number;
   readonly #mockAutoEnabled: boolean;
+  readonly #images?: ImagePreparationPort;
   #recovered = false;
-  constructor(options: { pool: PgPool; data: PgDataProvider; intelligence: PersistentIntelligence; platform: DispatchPlatform; authority: object; now?: () => number; aggregationWindowMs?: number; maxAggregationMs?: number; mockAutoEnabled?: boolean }) {
+  constructor(options: { pool: PgPool; data: PgDataProvider; intelligence: PersistentIntelligence; platform: DispatchPlatform; authority: object; now?: () => number; aggregationWindowMs?: number; maxAggregationMs?: number; mockAutoEnabled?: boolean; images?: ImagePreparationPort }) {
     this.#pool = options.pool; this.#data = options.data; this.#ai = options.intelligence; this.#platform = options.platform;
     this.#authority = options.authority; this.#now = options.now ?? Date.now;
     this.#aggregationWindowMs = options.aggregationWindowMs ?? 0;
     this.#maxAggregationMs = options.maxAggregationMs ?? 30_000;
     this.#mockAutoEnabled = options.mockAutoEnabled === true;
+    this.#images = options.images;
     if (this.#mockAutoEnabled && !(this.#platform instanceof MockPlatformAdapter)) fail('MOCK_AUTO_REQUIRES_MOCK_PLATFORM');
     if (!Number.isSafeInteger(this.#aggregationWindowMs) || this.#aggregationWindowMs < 0
       || !Number.isSafeInteger(this.#maxAggregationMs) || this.#maxAggregationMs < this.#aggregationWindowMs) fail('VALIDATION_FAILED');
@@ -297,7 +300,7 @@ export class PgConfirmedService {
     // The snapshot must include the messages that triggered it. A platform timestamp with second
     // precision can lead our own clock by up to a second (QQ reports time in whole seconds), and
     // taking only "now" as the cutoff made buildContext reject the trigger message as NOT_FOUND.
-    const projection = await withTransaction(this.#pool, async tx => {
+    let projection = await withTransaction(this.#pool, async tx => {
       const newest = await tx.query<{ sent_at: Date | string }>('SELECT sent_at FROM data_messages WHERE id=$1 AND contact_id=$2', [messageId, row.contact_id]);
       const sentAt = newest.rows[0] ? toMs(newest.rows[0].sent_at) : Number.NaN;
       const cutoffMs = Number.isFinite(sentAt) ? Math.max(this.#now(), sentAt) : this.#now();
@@ -306,8 +309,17 @@ export class PgConfirmedService {
         cutoffTime: new Date(cutoffMs).toISOString(), cutoffMessageId: messageId, mode: 'live' });
     });
     let draft: Draft;
-    try { draft = await this.#ai.propose(projection, row.policy); }
+    try {
+      const lastReply = projection.messages.findLastIndex(m => m.actor === 'owner' || m.actor === 'agent');
+      if (this.#images && projection.messages.slice(lastReply + 1).some(m => m.type === 'image')) {
+        const prepared = await preparePersistentImages({ pool: this.#pool, data: this.#data, port: this.#images, context: projection, policy: row.policy });
+        projection = prepared.context; generation = projection.snapshot.generation;
+        if (!prepared.ready) draft = { shouldReply: false, risks: ['media_uncertain'], alternatives: [], generatorVersion: 'image-preparation-1', timing: 'no_reply' };
+        else draft = await this.#ai.propose(projection, row.policy);
+      } else draft = await this.#ai.propose(projection, row.policy);
+    }
     catch (error) {
+      if (error instanceof Error && ['STALE_CONTEXT', 'CONFLICT_VERSION', 'NOT_FOUND'].includes(error.message)) return;
       if (!(error instanceof Error) || !['MODEL_UNAVAILABLE','SKILL_UNAVAILABLE','INTELLIGENCE_MODEL_UNAVAILABLE'].includes(error.message)) throw error;
       await withTransaction(this.#pool, async tx => {
         await acquireDispatchBoundary(tx);

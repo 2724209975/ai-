@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -19,7 +19,14 @@ import { createFileRawEventStore } from '../../packages/infrastructure/postgres/
 import { setContactScope, withTransaction } from '../../packages/infrastructure/postgres/transaction.mts';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
 import type { MediaAsset } from '../../packages/data/media/file-store.mts';
-import { adaptDataContextProjection } from '../../packages/ai/index.mts';
+import { adaptDataContextProjection, createImageMediaInterpreter, withMediaDailyBudget, type BinaryMediaProvider } from '../../packages/ai/index.mts';
+import { readCoreConfig } from '../../apps/core/config.mts';
+import { createCoreRuntime } from '../../apps/core/runtime.mts';
+import { createJsonLogger, createMemorySink } from '../../packages/infrastructure/observability/logger.mts';
+import type { PersistentIntelligence } from '../../packages/orchestration/postgres/confirmed-service.mts';
+import { PgOwnerDataPort } from '../../packages/data/postgres/owner-data-port.mts';
+import { PgPrivateImageReader } from '../../packages/data/media/pg-private-reader.mts';
+import { contentHash } from '../../packages/orchestration/conversations/engine.mts';
 import { defaultPolicy } from '../../packages/orchestration/policy/evaluate.mts';
 import { newId } from '../../packages/orchestration/postgres/ids.mts';
 import { createWxBridge } from '../../apps/bridge/wechat-bridge.mts';
@@ -32,6 +39,193 @@ import { png } from '../fixtures/media-images.mts';
 const obfuscated = (key: number) => Uint8Array.from(png, byte => byte ^ key);
 /** A 15-digit id: the transport refuses anything a JSON number parser would round (see below). */
 const imageMessageId = '700000000000123';
+
+function syntheticVision(invoke?: BinaryMediaProvider['invoke']): BinaryMediaProvider {
+  return { providerId: 'synthetic', modelId: 'vision', modelVersion: '1', promptVersion: 'image-fixture-1',
+    dataRegion: 'test', retentionPolicy: 'test', supportedMimeTypes: { image: ['image/png'], voice: [] },
+    invoke: invoke ?? (async () => ({ interpretation: { text: '合成图中有三种颜色', completeness: 'complete',
+      uncertainty: '仅为合成测试，不代表真实视觉质量', criticalUnclear: false, visualCoverage: 'full_image' } })) };
+}
+
+async function controlledFixture(provider: BinaryMediaProvider, options: { timeoutMs?: number; write?: (dir: string, id: string) => Promise<void> } = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'wx-controlled-image-'));
+  const helper = await fakeHelper({ dir: root, write: options.write ?? ((dir, id) => writeFile(join(dir, 'wxhelper', 'image', `${id}.dat`), obfuscated(0x47))) });
+  let f: Awaited<ReturnType<typeof fixture>>;
+  try { f = await fixture('enabled', helper, { dataRoot: root, imageUnderstanding: { provider, timeoutMs: options.timeoutMs } }); }
+  catch (error) { await helper.close(); await rm(root, { recursive: true, force: true }); throw error; }
+  return { ...f, helper, cleanup: async () => { await f.cleanup(); await helper.close();
+    assert.ok(resolve(root).startsWith(resolve(join(tmpdir(), 'wx-controlled-image-')))); await rm(root, { recursive: true, force: true }); } };
+}
+
+test('controlled image: receive → full acquisition → persisted interpretation → fresh confirmation snapshot, duplicate and correction are preserved', settings, async () => {
+  let calls = 0;
+  const provider = syntheticVision(async input => { calls++; assert.deepEqual(Buffer.from(input.bytes), png); return syntheticVision().invoke(input); });
+  const f = await controlledFixture(provider);
+  try {
+    assert.equal((await f.send(3)).status, 200);
+    assert.equal(calls, 1); assert.equal(f.helper.calls.length, 1);
+    const state = await f.service.getConversation(f.conversationId), plan = state.plans.at(-1)!;
+    assert.equal(plan.status, 'AWAITING_CONFIRMATION'); assert.equal(plan.alternatives.length, 3);
+    assert.equal(Number((await f.pool.query('SELECT count(*) AS n FROM orch_send_tasks')).rows[0].n), 0);
+    const rows = await withTransaction(f.pool, async tx => { await setContactScope(tx, f.contactId);
+      return { i: (await tx.query('SELECT * FROM data_media_interpretations')).rows,
+        s: (await tx.query('SELECT s.* FROM data_context_snapshots s JOIN orch_plans p ON p.context_snapshot_id=s.id WHERE p.id=$1', [plan.id])).rows[0] }; });
+    assert.equal(rows.i.length, 1); assert.equal(rows.i[0].status, 'valid');
+    assert.equal(rows.s.status, 'valid'); assert.equal(rows.s.message_refs[0].mediaInterpretation.id, rows.i[0].id);
+    assert.equal(rows.s.message_refs[0].version, 2);
+    assert.equal(Number(rows.s.generation), Number((await f.pool.query('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [f.conversationId])).rows[0].generation));
+    assert.equal((await f.send(3)).status, 200); await f.service.recover(); assert.equal(calls, 1); assert.equal(f.helper.calls.length, 1);
+    const mediaId = (await f.assets()).rows[0]!.id;
+    const reader = new PgPrivateImageReader(f.pool, f.mediaRoot);
+    assert.deepEqual((await reader.readPrivate({ callerContactId: f.contactId, contactId: f.contactId, mediaId })).bytes, png);
+    await assert.rejects(reader.readPrivate({ callerContactId: newId(), contactId: f.contactId, mediaId }), /FORBIDDEN/);
+    const stranger = newId(); await assert.rejects(reader.readPrivate({ callerContactId: stranger, contactId: stranger, mediaId }), /MEDIA_UNCERTAIN/);
+    const alternative = plan.alternatives[0]!, parts = alternative.parts.map(p => ({ type: 'text' as const, content: p.content }));
+    await f.service.confirmPlan({ conversationId: f.conversationId, planId: plan.id, planVersion: plan.version,
+      taskVersion: Number(plan.task!.version), alternativeId: alternative.alternativeId, editedParts: parts,
+      contentHash: contentHash(parts), idempotencyKey: 'controlled-image-confirm' });
+    assert.equal((await f.service.getConversation(f.conversationId)).plans.at(-1)!.status, 'APPROVED');
+    assert.equal(f.helper.calls.length, 1, 'confirmation cannot invoke the image helper');
+    await new PgOwnerDataPort(f.pool).changeMediaInterpretation({ contactIds: [f.contactId] },
+      { mediaId, expectedInterpretationVersion: 1, action: 'correct', text: '本人纠正后的合成说明' });
+    await assert.rejects(f.service.dispatchNext(f.conversationId), /STALE_PLAN|STALE_CONTEXT/);
+    assert.equal(f.helper.calls.length, 1);
+    assert.equal((await f.send(1, '700000000000125')).status, 200);
+    assert.equal(calls, 1); assert.equal(f.helper.calls.length, 1, 'existing corrected image is never fetched or interpreted again');
+    assert.equal((await f.service.getConversation(f.conversationId)).plans.at(-1)!.status, 'AWAITING_CONFIRMATION');
+    await withTransaction(f.pool, async tx => { await setContactScope(tx, f.contactId);
+      const latest = (await tx.query("SELECT * FROM data_media_interpretations WHERE status='valid'")).rows[0];
+      assert.equal(latest.text_content, '本人纠正后的合成说明'); assert.equal(latest.corrected_by_owner, true); });
+    await new PgOwnerDataPort(f.pool).changeMediaInterpretation({ contactIds: [f.contactId] }, { mediaId, expectedInterpretationVersion: 2, action: 'delete' });
+    assert.equal((await f.send(1, '700000000000126')).status, 200); assert.equal(calls, 1);
+    assert.equal((await f.service.getConversation(f.conversationId)).control.state, 'PAUSED_MEDIA');
+  } finally { await f.cleanup(); }
+});
+
+test('controlled image failures: uncertain, unavailable, timeout and budget refuse without candidates or send tasks', settings, async () => {
+  for (const kind of ['uncertain', 'exception', 'timeout', 'budget'] as const) {
+    let calls = 0;
+    let provider = syntheticVision(async input => { calls++;
+      if (kind === 'exception') throw new Error('synthetic-unavailable');
+      if (kind === 'timeout') { await sleep(70); return syntheticVision().invoke(input); }
+      const good = await syntheticVision().invoke(input);
+      return { ...good, interpretation: { ...(good.interpretation as object), criticalUnclear: true } };
+    });
+    if (kind === 'budget') provider = withMediaDailyBudget(provider, { maxImageCallsPerDay: 1, maxImageTokensPerDay: 1 });
+    const f = await controlledFixture(provider, { timeoutMs: kind === 'timeout' ? 20 : 500 });
+    try {
+      if (kind === 'budget') await provider.invoke({ mediaType: 'image', mimeType: 'image/png', bytes: png, signal: new AbortController().signal });
+      assert.equal((await f.send(3)).status, 200);
+      const state = await f.service.getConversation(f.conversationId);
+      assert.equal(state.plans.length, 0); assert.equal(state.control.state, 'PAUSED_MEDIA');
+      assert.equal(Number((await f.pool.query('SELECT count(*) AS n FROM orch_send_tasks')).rows[0].n), 0);
+      await withTransaction(f.pool, async tx => { await setContactScope(tx, f.contactId);
+        assert.equal((await tx.query('SELECT * FROM data_media_interpretations')).rows.length, 0); });
+      assert.equal(f.helper.calls.length, 1);
+    } finally { await f.cleanup(); }
+  }
+});
+
+for (const change of ['pause', 'dependency', 'inbound'] as const) test(`controlled image: ${change} during model call refuses late persistence and candidate`, settings, async () => {
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>(r => { release = r; }), started = new Promise<void>(r => { entered = r; });
+  const f = await controlledFixture(syntheticVision(async input => { entered(); await gate; return syntheticVision().invoke(input); }));
+  const pending = f.send(3);
+  try {
+    await started;
+    if (change === 'pause') {
+      const overview = await f.service.ownerOverview();
+      await f.service.pauseAll({ expectedVersion: overview.version, idempotencyKey: 'pause-during-image' });
+    } else if (change === 'dependency') {
+      await withTransaction(f.pool, tx => new PgDataProvider().createFact(tx, f.contactId, {
+        scope: f.contactId, subject: '本人', content: '合成事实', sourceCategory: 'owner-confirmed', evidenceRefs: [], validFrom: '2020-01-01T00:00:00Z' }, newId()));
+    } else {
+      // A newer unsupported message advances the generation and pauses the batch; it cannot use the old image result.
+      assert.equal((await f.send(49, '700000000000124')).status, 200);
+    }
+    release(); assert.equal((await pending).status, 200);
+    assert.equal((await f.service.getConversation(f.conversationId)).plans.length, 0);
+    await withTransaction(f.pool, async tx => { await setContactScope(tx, f.contactId);
+      assert.equal((await tx.query('SELECT * FROM data_media_interpretations')).rows.length, 0); });
+  } finally { release(); await pending; await f.cleanup(); }
+});
+
+test('controlled image: pause during acquisition refuses binding and avoids model call', settings, async () => {
+  let release!: () => void, entered!: () => void, calls = 0;
+  const gate = new Promise<void>(r => { release = r; }), started = new Promise<void>(r => { entered = r; });
+  const f = await controlledFixture(syntheticVision(async input => { calls++; return syntheticVision().invoke(input); }),
+    { write: async (dir, id) => { entered(); await gate; await writeFile(join(dir, 'wxhelper', 'image', `${id}.dat`), obfuscated(0x47)); } });
+  const pending = f.send(3);
+  try {
+    await started; const overview = await f.service.ownerOverview();
+    await f.service.pauseAll({ expectedVersion: overview.version, idempotencyKey: 'pause-during-acquisition' });
+    release(); assert.equal((await pending).status, 200); assert.equal(calls, 0);
+    assert.equal((await f.assets()).rows.length, 0); assert.equal((await f.messages()).rows[0]!.media_id, null);
+    assert.deepEqual(await readdir(f.mediaRoot), [], 'unbound private files are discarded');
+  } finally { release(); await pending; await f.cleanup(); }
+});
+
+test('controlled image: truncated acquired bytes never reach understanding', settings, async () => {
+  let calls = 0;
+  const f = await controlledFixture(syntheticVision(async input => { calls++; return syntheticVision().invoke(input); }),
+    { write: (dir, id) => writeFile(join(dir, 'wxhelper', 'image', `${id}.dat`), obfuscated(0x47).subarray(0, 20)) });
+  try {
+    assert.equal((await f.send(3)).status, 200); assert.equal(calls, 0); assert.equal((await f.assets()).rows.length, 0);
+    assert.equal((await f.service.getConversation(f.conversationId)).control.state, 'PAUSED_MEDIA');
+  } finally { await f.cleanup(); }
+});
+
+for (const mode of ['disabled', 'auto'] as const) test(`controlled image: ${mode} policy incurs zero helper and model calls`, settings, async () => {
+  let calls = 0;
+  const f = await controlledFixture(syntheticVision(async input => { calls++; return syntheticVision().invoke(input); }));
+  try {
+    const contact = (await f.service.ownerContacts()).items[0]!;
+    await f.service.updatePolicy(f.contactId, { expectedVersion: contact.version, idempotencyKey: `policy-${mode}`,
+      policy: mode === 'disabled' ? { agentEnabled: false } : { sendMode: 'auto' } });
+    assert.equal((await f.send(3)).status, 200); assert.equal(calls, 0); assert.equal(f.helper.calls.length, 0);
+    assert.equal((await f.service.getConversation(f.conversationId)).plans.length, 0);
+    assert.equal((await f.assets()).rows.length, 0);
+  } finally { await f.cleanup(); }
+});
+
+test('controlled image: private bytes changed during model call refuse interpretation', settings, async () => {
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>(r => { release = r; }), started = new Promise<void>(r => { entered = r; });
+  const f = await controlledFixture(syntheticVision(async input => { entered(); await gate; return syntheticVision().invoke(input); }));
+  const pending = f.send(3);
+  try {
+    await started; const asset = (await f.assets()).rows[0]!;
+    await writeFile(join(f.mediaRoot, `${asset.id}.bin`), Buffer.from('synthetic-corruption'));
+    release(); assert.equal((await pending).status, 200);
+    assert.equal((await f.service.getConversation(f.conversationId)).control.state, 'PAUSED_MEDIA');
+    assert.equal((await f.service.getConversation(f.conversationId)).plans.length, 0);
+  } finally { release(); await pending; await f.cleanup(); }
+});
+
+test('core recovery consumes a durable image regeneration with persisted interpretation and never dispatches', settings, async () => {
+  let calls = 0;
+  const provider = syntheticVision(async input => { calls++; return syntheticVision().invoke(input); });
+  const f = await controlledFixture(provider);
+  const sessionDir = await mkdtemp(join(tmpdir(), 'image-core-session-'));
+  let runtime: ReturnType<typeof createCoreRuntime> | undefined;
+  try {
+    assert.equal((await f.send(3)).status, 200);
+    const plan = (await f.service.getConversation(f.conversationId)).plans.at(-1)!;
+    await f.service.regenerateTask(plan.task!.id, { expectedVersion: Number(plan.task!.version), idempotencyKey: 'image-core-regenerate' });
+    const config = readCoreConfig({ DATABASE_URL: databaseUrl, OWNER_ID: newId(),
+      OWNER_PASSWORD_HASH: 'scrypt$N=32768,r=8,p=1$Y29yZS1ydW50aW1lLXRlc3Q=$Y29yZS1ydW50aW1lLXRlc3QtaGFzaC12YWx1ZQ==',
+      CORE_PLATFORM: 'wechat', PUBLIC_ORIGIN: 'http://127.0.0.1:8787', SESSION_DIR: sessionDir,
+      START_PAUSED: '0', COLLECTION_ENABLED: '0', MEDIA_VISION_ENABLED: '1', MEDIA_API_KEY: 'synthetic-config-only', MEDIA_PRIVATE_DIR: f.mediaRoot });
+    runtime = createCoreRuntime({ config, pool: f.pool, logger: createJsonLogger({ service: 'core', sink: createMemorySink() }),
+      images: { interpret: createImageMediaInterpreter({ provider, source: new PgPrivateImageReader(f.pool, f.mediaRoot) }) } });
+    await runtime.start();
+    assert.equal(calls, 1, 'persisted image is reused across the second composition root');
+    assert.equal((await runtime.service.getConversation(f.conversationId)).plans.at(-1)!.status, 'AWAITING_CONFIRMATION');
+    assert.equal(Number((await f.pool.query('SELECT count(*) AS n FROM orch_send_tasks')).rows[0].n), 0);
+    assert.equal(f.helper.calls.length, 1);
+  } finally { await runtime?.stop(); await f.cleanup();
+    assert.ok(resolve(sessionDir).startsWith(resolve(join(tmpdir(), 'image-core-session-')))); await rm(sessionDir, { recursive: true, force: true }); }
+});
 
 /** Behaves like `/api/downloadAttach`: answers with a code, optionally writing the `.dat` file. */
 async function fakeHelper(options: { code?: number; write?: (dir: string, msgId: string) => Promise<void>; dir: string }) {
@@ -65,7 +259,7 @@ async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 8_000) {
 
 /** `dataRoot` must be the directory the fake helper writes into; a fresh one is created otherwise. */
 async function fixture(media: 'enabled' | 'disabled', helper: Awaited<ReturnType<typeof fakeHelper>> | undefined,
-  overrides: { maxBytes?: number; dataRoot?: string } = {}) {
+  overrides: { maxBytes?: number; dataRoot?: string; imageUnderstanding?: { provider: BinaryMediaProvider; timeoutMs?: number }; intelligence?: PersistentIntelligence } = {}) {
   if (!databaseUrl) throw new Error('TEST_DATABASE_URL_REQUIRED');
   const { Client, Pool } = await import('pg');
   const suffix = randomBytes(8).toString('hex'), schema = `test_wxmedia_${suffix}`, role = `wxmedia_role_${suffix}`;
@@ -94,6 +288,7 @@ async function fixture(media: 'enabled' | 'disabled', helper: Awaited<ReturnType
     });
     bridge = createWxBridge({ pool, accountId, selfRef: self, ingressToken: 'test-loopback-secret',
       rawStore: createFileRawEventStore(rawRoot, Date.now, 'wechat'), outboxIntervalMs: 600_000, onError: () => {},
+      imageUnderstanding: overrides.imageUnderstanding, intelligence: overrides.intelligence,
       ...(media === 'enabled' && helper ? { media: { transport: new WxhelperLoopbackMediaTransport({ baseUrl: helper.baseUrl }),
         dataPath: dataRoot, mediaRoot, pollMs: 20, pollTimeoutMs: 3_000, ...limits } } : {}) });
     await bridge.start();
@@ -106,10 +301,10 @@ async function fixture(media: 'enabled' | 'disabled', helper: Awaited<ReturnType
     const address = bridge.server.address();
     if (!address || typeof address === 'string') throw new Error('LISTENER_UNAVAILABLE');
     const base = `http://127.0.0.1:${address.port}`;
-    return { pool, admin, schema, accountId, contactId, conversationId, mediaRoot, dataRoot,
+    return { pool, admin, schema, accountId, contactId, conversationId, mediaRoot, dataRoot, service: bridge.service,
       health: () => fetch(`${base}/healthz`).then(response => response.json() as Promise<Record<string, unknown>>),
       send: (type: number, msgId = imageMessageId) => fetch(`${base}/wxhelper/event?token=test-loopback-secret`, {
-        method: 'POST', body: Buffer.from(`{"fromUser":${JSON.stringify(peer)},"toUser":${JSON.stringify(self)},"msgId":${msgId},"msgSequence":1,"createTime":1727100000,"type":${type}}`) }),
+        method: 'POST', body: Buffer.from(`{"fromUser":${JSON.stringify(peer)},"toUser":${JSON.stringify(self)},"msgId":${msgId},"msgSequence":1,"createTime":1727100000,"content":"继续聊聊","type":${type}}`) }),
       messages: () => withTransaction(pool, async tx => { await setContactScope(tx, contactId);
         return tx.query<{ id: string; media_id: string | null; type: string; version: string }>(
           'SELECT id,media_id,type,version FROM data_messages ORDER BY created_at'); }),

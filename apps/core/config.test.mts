@@ -1,6 +1,7 @@
 /** Unit tests for core-runtime configuration: fail-closed defaults and explicit operator choices. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import { isLoopbackHost, readCoreConfig, type EnvLike } from './config.mts';
 
 /** Shape-valid scrypt string: the runtime only re-validates the stored format, so a fixture hash is
@@ -76,7 +77,8 @@ test('media understanding stays off, and a half-configured opt-in fails at start
   assert.throws(() => readCoreConfig({ ...base, MEDIA_VISION_ENABLED: '1', DEEPSEEK_API_KEY: 'unit-test' }), { message: 'MISSING_ENV:MEDIA_API_KEY' });
   assert.throws(() => readCoreConfig({ ...base, MEDIA_VOICE_ENABLED: '1', MEDIA_API_KEY: 'unit-test' }), { message: 'MISSING_ENV:MEDIA_VOICE_ENDPOINT' });
   assert.throws(() => readCoreConfig({ ...base, MEDIA_DAILY_VOICE_CALL_LIMIT: '0' }), { message: 'INVALID_ENV:MEDIA_DAILY_VOICE_CALL_LIMIT' });
-  const images = readCoreConfig({ ...base, MEDIA_VISION_ENABLED: 'on', MEDIA_API_KEY: 'unit-test', MEDIA_VISION_MODEL: 'deepseek-flash' });
+  assert.throws(() => readCoreConfig({ ...base, MEDIA_VISION_ENABLED: 'on', MEDIA_API_KEY: 'unit-test' }), { message: 'INVALID_ENV:MEDIA_PRIVATE_DIR' });
+  const images = readCoreConfig({ ...base, MEDIA_VISION_ENABLED: 'on', MEDIA_API_KEY: 'unit-test', MEDIA_VISION_MODEL: 'deepseek-flash', MEDIA_PRIVATE_DIR: resolve('private-media') });
   assert.equal(images.mediaImageEnabled, true);
   assert.equal(images.mediaVoiceEnabled, false);
   assert.equal(images.mediaVisionModelId, 'deepseek-flash');

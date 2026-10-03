@@ -91,7 +91,7 @@ export async function interpretContextMedia(context: ScopedContext, policy: Poli
   // Refuse the entire batch before any read/call if actor, mode or type is unsupported.
   if (pending.some(m => m.actor === 'unknown')) return failure('MEDIA_UNCERTAIN');
   if (pending.some(m => m.type === 'unsupported' || m.type.startsWith('sticker_'))) return failure('UNSUPPORTED_CAPABILITY');
-  const media = pending.filter(m => m.type !== 'text');
+  const media = pending.filter(m => m.type !== 'text' && m.mediaInterpretation?.status !== 'valid');
   if (media.some(m => m.actor !== 'contact' || !m.mediaId || !['image', 'voice'].includes(m.type)) ||
     new Set(media.map(m => m.mediaId)).size !== media.length || media.length > maxMedia) return failure('MEDIA_UNCERTAIN');
   if (media.some(m => m.mode !== 'live')) return failure('UNSUPPORTED_CAPABILITY');

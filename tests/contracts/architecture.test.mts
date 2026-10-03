@@ -39,7 +39,8 @@ test('the WeChat media path cannot reach the send port', async () => {
   // 01 reads original files and 02 sends; sharing a process must not let one become the other.
   for (const path of ['packages/platform/wechat/wxhelper-media-transport.mts', 'packages/platform/wechat/media-acquisition.mts',
     'packages/platform/wechat/media-dat.mts', 'packages/data/media/image-validation.mts',
-    'packages/data/media/image-validation-worker.mjs', 'packages/data/media/bounded-image-file.mts']) {
+    'packages/data/media/image-validation-worker.mjs', 'packages/data/media/bounded-image-file.mts',
+    'packages/data/media/pg-private-reader.mts', 'packages/orchestration/postgres/media-preparation.mts']) {
     const content = await readFile(resolve(root, path), 'utf8');
     assert.ok(!content.includes('wxhelper-send-port'), `${path} must not import the send port`);
     assert.doesNotMatch(content, /\bsubmitSend\s*\(/, `${path} must not invoke platform sending`);

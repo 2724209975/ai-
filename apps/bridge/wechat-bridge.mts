@@ -8,8 +8,11 @@ import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
-import { FileMediaStore } from '../../packages/data/media/file-store.mts';
-import { createPgPersistentFakeIntelligence } from '../../packages/ai/index.mts';
+import { FileMediaStore, type MediaAsset } from '../../packages/data/media/file-store.mts';
+import { createPgPersistentFakeIntelligence, createImageMediaInterpreter, adaptDataContextProjection, type BinaryMediaProvider, type MediaModelMeasurement } from '../../packages/ai/index.mts';
+import { pendingContactBatch } from '../../packages/ai/strategy/fake-decision.mts';
+import { PgPrivateImageReader } from '../../packages/data/media/pg-private-reader.mts';
+import type { ImagePreparationPort } from '../../packages/orchestration/postgres/media-preparation.mts';
 import { PgConfirmedService, type DispatchPlatform, type PersistentIntelligence } from '../../packages/orchestration/postgres/confirmed-service.mts';
 import { createDispatchWorker } from '../../packages/orchestration/postgres/worker.mts';
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
@@ -47,11 +50,14 @@ export function createWxBridge(options: {
   /** Absent means images keep going to a human exactly as before; nothing is fetched. */
   media?: { transport: WxhelperMediaTransport; dataPath: string; mediaRoot: string;
     maxBytes?: number; pollMs?: number; pollTimeoutMs?: number };
+  /** Explicit opt-in; requires private acquisition and remains confirmation-only. */
+  imageUnderstanding?: { provider: BinaryMediaProvider; timeoutMs?: number; observe?(measurement: MediaModelMeasurement): void };
 }) {
   if (!options.pool || !options.accountId || !options.selfRef || !options.ingressToken || !options.rawStore)
     throw new Error('WX_BRIDGE_CONFIG_INVALID');
   if (options.media && (!options.media.transport || !options.media.dataPath?.trim() || !options.media.mediaRoot?.trim()))
     throw new Error('WX_BRIDGE_CONFIG_INVALID');
+  if (options.imageUnderstanding && !options.media) throw new Error('IMAGE_UNDERSTANDING_REQUIRES_MEDIA_FETCH');
   const mediaStoreFor = (contactId: string) => new FileMediaStore(resolve(options.media!.mediaRoot),
     messageId => withTransaction(options.pool, async tx => {
       await setContactScope(tx, contactId);
@@ -80,9 +86,45 @@ export function createWxBridge(options: {
       return outcome;
     },
   } : refusingPlatform;
+  const images: ImagePreparationPort | undefined = options.imageUnderstanding && options.media ? {
+    discard: async assets => { for (const asset of assets) await mediaStoreFor(asset.contactId).deleteMedia({
+      callerContactId: asset.contactId, contactId: asset.contactId, mediaId: asset.id }); },
+    acquire: async context => {
+      const pending = pendingContactBatch(adaptDataContextProjection(context));
+      if (pending.some(m => !['image', 'text'].includes(m.type) || m.actor !== 'contact' || m.mode !== 'live')) return null;
+      const missing = pending.filter(m => m.type === 'image' && !m.mediaId);
+      if (missing.length > 8) return null;
+      const assets: { asset: MediaAsset; expectedMessageVersion: number }[] = [];
+      try {
+        for (const message of missing) {
+          const source = context.messages.find(m => m.id === message.id)!;
+          const version = context.snapshot.messageRefs.find(r => r.id === message.id)!.version;
+          mediaFetch.attempted++;
+          const acquired = await acquireWxMedia({ observation: { kind: 'incoming', type: 'image', platformMessageId: String(source.platformMessageId) },
+            transport: options.media!.transport, dataPath: options.media!.dataPath, maxBytes: options.media!.maxBytes,
+            pollMs: options.media!.pollMs, pollTimeoutMs: options.media!.pollTimeoutMs });
+          if (acquired.fetchStatus !== 'fetched') { mediaFetch.unavailable++; mediaFetch.lastReason = acquired.reason;
+            for (const item of assets) await mediaStoreFor(item.asset.contactId).deleteMedia({ callerContactId: item.asset.contactId, contactId: item.asset.contactId, mediaId: item.asset.id });
+            return null; }
+          const asset = await mediaStoreFor(context.snapshot.contactId).storeMedia({ callerContactId: context.snapshot.contactId,
+            contactId: context.snapshot.contactId, messageId: message.id, mediaType: 'image', mimeType: acquired.mimeType,
+            bytes: acquired.bytes, completeness: 'complete', platformMetadata: acquired.platformMetadata });
+          if (asset.sha256 !== acquired.sha256) throw new Error('MEDIA_HASH_MISMATCH');
+          assets.push({ asset, expectedMessageVersion: version });
+          mediaFetch.fetched++; mediaFetch.lastReason = null;
+        }
+        return assets;
+      } catch { mediaFetch.unavailable++; mediaFetch.lastReason = 'BIND_FAILED';
+        for (const item of assets) await mediaStoreFor(item.asset.contactId).deleteMedia({ callerContactId: item.asset.contactId, contactId: item.asset.contactId, mediaId: item.asset.id });
+        return null; }
+    },
+    interpret: createImageMediaInterpreter({ provider: options.imageUnderstanding.provider,
+      source: new PgPrivateImageReader(options.pool, resolve(options.media.mediaRoot)), timeoutMs: options.imageUnderstanding.timeoutMs,
+      observe: options.imageUnderstanding.observe }),
+  } : undefined;
   const service = new PgConfirmedService({ pool: options.pool, data,
     intelligence: options.intelligence ?? createPgPersistentFakeIntelligence({ pool: options.pool, data }),
-    platform, authority, aggregationWindowMs: 0 });
+    platform, authority, aggregationWindowMs: 0, images });
   const resolvePeer = async (peerRef: string) => {
     const client = await options.pool.connect();
     try {
@@ -183,7 +225,7 @@ export function createWxBridge(options: {
       // 2) fetch and store the bytes, 3) bind them in a second transaction. Any failure at any step
       // simply leaves `media_id` empty and the image goes to a human; nothing here is ever retried.
       const outcome = await reception.commitReceived(body, observation);
-      if (outcome === 'inserted' && options.media
+      if (outcome === 'inserted' && options.media && !options.imageUnderstanding
         && observation.kind === 'incoming' && observation.type === 'image') {
         try { await fetchAndBindMedia(observation.platformMessageId, observation.peerRef!); }
         catch { mediaFetch.unavailable += 1; mediaFetch.lastReason = 'BIND_FAILED'; }

@@ -23,6 +23,7 @@ import { createPgOwnerPort } from '../web/server/pg-owner-port.mts';
 import { createOwnerApp } from '../web/server/owner-server.mts';
 import type { CoreConfig } from './config.mts';
 import { createHealthHandler, createReadinessProbe, type ReadinessReport } from './health.mts';
+import type { ImagePreparationPort } from '../../packages/orchestration/postgres/media-preparation.mts';
 
 /** Deliberately not a real platform account: no inbound event can ever be accepted by this process. */
 export const CORE_NO_DISPATCH_ACCOUNT = 'core-no-dispatch';
@@ -36,6 +37,7 @@ export type CoreRuntimeOptions = {
   requestId?(request: IncomingMessage): string;
   /** Substituted by the entry point when a real model is configured; defaults to the fake. */
   intelligence?: PersistentIntelligence;
+  images?: ImagePreparationPort;
 };
 
 export type CoreRuntime = {
@@ -65,6 +67,7 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
   const service = new PgConfirmedService({
     pool, data,
     intelligence,
+    images: options.images,
     platform: {
       platform: config.platform,
       accountId: CORE_NO_DISPATCH_ACCOUNT,

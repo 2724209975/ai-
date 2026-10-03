@@ -28,6 +28,7 @@ export { createVoiceMediaProvider, normaliseTranscriptInterpretation, SUPPORTED_
 export type { VoiceProviderOptions } from './understanding/voice-provider.mts';
 export { createMediaUnderstandingFromEnv, readMediaEnv } from './understanding/media-env.mts';
 export type { MediaEnv, MediaProviderSelection } from './understanding/media-env.mts';
+export { createImageMediaInterpreter } from './understanding/persistent-media.mts';
 export { withMediaDailyBudget, mediaBudgetOptionsFromEnv, DEFAULT_MEDIA_DAILY_CALL_LIMIT, DEFAULT_MEDIA_DAILY_TOKEN_LIMIT } from './understanding/media-budget.mts';
 export type { MediaBudgetOptions, MediaRefusal } from './understanding/media-budget.mts';
 export { detectImageFormat, imageFormatMatches, SUPPORTED_IMAGE_FORMATS } from './understanding/image-format.mts';

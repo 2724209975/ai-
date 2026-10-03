@@ -10,6 +10,7 @@ import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv
 import { readCoreConfig } from './config.mts';
 import { conversationSchemaProbe } from './health.mts';
 import { createCoreRuntime, type CoreRuntime } from './runtime.mts';
+import { createCoreImages } from './media-wiring.mts';
 
 let config: ReturnType<typeof readCoreConfig>;
 try {
@@ -53,7 +54,8 @@ try {
           inputTokens: measurement.inputTokens ?? undefined, outputTokens: measurement.outputTokens ?? undefined,
         })); })()
     : undefined;
-  runtime = createCoreRuntime({ config, pool, logger, intelligence });
+  runtime = createCoreRuntime({ config, pool, logger, intelligence,
+    images: createCoreImages(process.env, pool, measurement => logger.info('media_model_call', { ...measurement })) });
   await runtime.start();
   await runtime.listen();
 } catch (error) {
