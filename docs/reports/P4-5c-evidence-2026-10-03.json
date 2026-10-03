@@ -1,0 +1,320 @@
+{
+  "protocol": "p4-5c-disk-db-audit-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "clientBytes": 100449384,
+  "sourceSha256": {
+    "offsets": "f5c78bb0c0bf4362fc86276b206ba7ee29def51fe27218242c8ecb0f2ab4368c",
+    "database": "6c2ee55bf73b4b4faf96004a5a86e69e0bd7b4225df313d1489fff5baafdd055",
+    "sqlite": "91d74e764b03b5f910219dc362b85e0effd9d90bdf7d6b319ce1488453953316"
+  },
+  "versionBranch": "V_3_9_11_25",
+  "sections": [
+    {
+      "name": ".text",
+      "rva": "0x1000",
+      "virtualBytes": 73753374,
+      "rawBytes": 73753600,
+      "executable": true,
+      "writable": false
+    },
+    {
+      "name": "IPPCODE",
+      "rva": "0x4658000",
+      "virtualBytes": 979044,
+      "rawBytes": 979456,
+      "executable": true,
+      "writable": false
+    },
+    {
+      "name": ".rdata",
+      "rva": "0x4748000",
+      "virtualBytes": 16183688,
+      "rawBytes": 16183808,
+      "executable": false,
+      "writable": false
+    },
+    {
+      "name": ".data",
+      "rva": "0x56b8000",
+      "virtualBytes": 2832081,
+      "rawBytes": 1611264,
+      "executable": false,
+      "writable": true
+    },
+    {
+      "name": ".pdata",
+      "rva": "0x596c000",
+      "virtualBytes": 2194716,
+      "rawBytes": 2194944,
+      "executable": false,
+      "writable": false
+    },
+    {
+      "name": "_RDATA",
+      "rva": "0x5b84000",
+      "virtualBytes": 548,
+      "rawBytes": 1024,
+      "executable": false,
+      "writable": false
+    },
+    {
+      "name": "IPPDATA",
+      "rva": "0x5b85000",
+      "virtualBytes": 15680,
+      "rawBytes": 15872,
+      "executable": false,
+      "writable": true
+    },
+    {
+      "name": ".G2?",
+      "rva": "0x5b89000",
+      "virtualBytes": 4996484,
+      "rawBytes": 4996608,
+      "executable": true,
+      "writable": false
+    },
+    {
+      "name": ".reloc",
+      "rva": "0x604d000",
+      "virtualBytes": 699744,
+      "rawBytes": 699904,
+      "executable": false,
+      "writable": false
+    },
+    {
+      "name": ".rsrc",
+      "rva": "0x60f8000",
+      "virtualBytes": 1288,
+      "rawBytes": 1536,
+      "executable": false,
+      "writable": false
+    }
+  ],
+  "exception": {
+    "rva": "0x5e34ed0",
+    "section": ".G2?",
+    "bytes": 2195124,
+    "entries": 182927,
+    "invalidEntries": 0,
+    "usable": true
+  },
+  "targets": [
+    {
+      "name": "k_sqlite3_exec",
+      "rva": "0x3a59b30",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a599c4",
+        "end": "0x3a59c5a"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_prepare",
+      "rva": "0x3a617b0",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a611a0",
+        "end": "0x3a64aec"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_open",
+      "rva": "0x3a98fa0",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a98ad0",
+        "end": "0x3a99175"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_step",
+      "rva": "0x3a1db30",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a1d6e0",
+        "end": "0x3a1dc0f"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_column_count",
+      "rva": "0x3a1e350",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a1e210",
+        "end": "0x3a1e38b"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_column_name",
+      "rva": "0x3a1ed50",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a1e450",
+        "end": "0x3a1ee05"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_column_type",
+      "rva": "0x3a1eba0",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a1e450",
+        "end": "0x3a1ee05"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_column_blob",
+      "rva": "0x3a1e380",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a1e210",
+        "end": "0x3a1e38b"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_column_bytes",
+      "rva": "0x3a1e470",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "interior",
+      "containingRange": {
+        "start": "0x3a1e450",
+        "end": "0x3a1ee05"
+      },
+      "callable": false
+    },
+    {
+      "name": "k_sqlite3_finalize",
+      "rva": "0x3a1cbe0",
+      "kind": "sqlite-function",
+      "section": ".text",
+      "fileBacked": true,
+      "executable": true,
+      "writable": false,
+      "boundary": "structural-entry-only",
+      "containingRange": {
+        "start": "0x3a1cbe0",
+        "end": "0x3a1cccf"
+      },
+      "callable": false
+    },
+    {
+      "name": "kGPInstance",
+      "rva": "0x58dd300",
+      "kind": "global-pointer-slot",
+      "section": ".data",
+      "fileBacked": false,
+      "executable": false,
+      "writable": true,
+      "boundary": "not-a-function",
+      "containingRange": null,
+      "callable": false
+    },
+    {
+      "name": "kMultiDBMgr",
+      "rva": "0x593abf8",
+      "kind": "global-pointer-slot",
+      "section": ".data",
+      "fileBacked": false,
+      "executable": false,
+      "writable": true,
+      "boundary": "not-a-function",
+      "containingRange": null,
+      "callable": false
+    },
+    {
+      "name": "kPublicMsgMgr",
+      "rva": "0x5938198",
+      "kind": "global-pointer-slot",
+      "section": ".data",
+      "fileBacked": false,
+      "executable": false,
+      "writable": true,
+      "boundary": "not-a-function",
+      "containingRange": null,
+      "callable": false
+    },
+    {
+      "name": "kFavoriteStorageMgr",
+      "rva": "0x593b790",
+      "kind": "global-pointer-slot",
+      "section": ".data",
+      "fileBacked": false,
+      "executable": false,
+      "writable": true,
+      "boundary": "not-a-function",
+      "containingRange": null,
+      "callable": false
+    },
+    {
+      "name": "kHardLinkMgr",
+      "rva": "0x593ab28",
+      "kind": "global-pointer-slot",
+      "section": ".data",
+      "fileBacked": false,
+      "executable": false,
+      "writable": true,
+      "boundary": "not-a-function",
+      "containingRange": null,
+      "callable": false
+    }
+  ],
+  "disposition": "NO_GO",
+  "voiceDatabaseReady": false,
+  "reasons": [
+    "runtime-handle-provenance-unverified",
+    "sqlite-entry-semantics-and-abi-unverified",
+    "sqlite-offsets-inside-unwind-ranges"
+  ]
+}
