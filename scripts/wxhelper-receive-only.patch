@@ -1,0 +1,101 @@
+diff --git a/app/wxhelper/CMakeLists.txt b/app/wxhelper/CMakeLists.txt
+index ce7fcb6..d006676 100644
+--- a/app/wxhelper/CMakeLists.txt
++++ b/app/wxhelper/CMakeLists.txt
+@@ -60,3 +60,9 @@ SET_TARGET_PROPERTIES(wxhelper PROPERTIES LINKER_LANGUAGE C
+                       OUTPUT_NAME "wxhelper"
+                       PREFIX "")
+            
++
++option(WXHELPER_P4_RECEIVE_ONLY "Restricted receive experiment" OFF)
++if(WXHELPER_P4_RECEIVE_ONLY)
++  target_compile_definitions(wxhelper PRIVATE WXHELPER_P4_RECEIVE_ONLY=1 WXHELPER_EXPERIMENTAL_VOICE_DB=1)
++  target_compile_definitions(mongoose PRIVATE MG_MAX_RECV_SIZE=4096 MG_ENABLE_LOG=0)
++endif()
+diff --git a/app/wxhelper/src/config.cc b/app/wxhelper/src/config.cc
+index f410da0..74fb657 100644
+--- a/app/wxhelper/src/config.cc
++++ b/app/wxhelper/src/config.cc
+@@ -11,6 +11,16 @@
+ namespace wxhelper {
+
+ void Config::init() {
++#ifdef WXHELPER_P4_RECEIVE_ONLY
++  spdlog::set_level(spdlog::level::off);
++  http_server_host_ = "http://127.0.0.1";
++  http_server_port_ = 19188;
++  hidden_dll_ = 0;
++  recv_message_mode_ = "disabled";
++  recv_tcp_ip_ = "127.0.0.1"; recv_tcp_port_ = 0;
++  recv_http_url_ = ""; recv_http_timeout_ = 0;
++  return;
++#endif
+   // Local change: the original code writes "logs/daily.txt" relative to the process
+   // working directory, which for WeChat is the read-only install directory
+   // (C:\Program Files (x86)\Tencent\WeChat). spdlog then throws and DllMain fails,
+diff --git a/app/wxhelper/src/http_server.cc b/app/wxhelper/src/http_server.cc
+index be20543..2c94460 100644
+--- a/app/wxhelper/src/http_server.cc
++++ b/app/wxhelper/src/http_server.cc
+@@ -1,6 +1,7 @@
+ ﻿#include "http_server.h"
+
+ #include "http_router.h"
++#include "receive_endpoint.h"
+ #include "nlohmann/json.hpp"
+ #include "spdlog/spdlog.h"
+ #include "utils.h"
+@@ -72,6 +73,10 @@ void HttpServer::LaunchServer(HttpServer *server) {
+
+ void HttpServer::EventHandler(struct mg_connection *c, int ev, void *ev_data,
+                               void *fn_data) {
++#ifdef WXHELPER_P4_RECEIVE_ONLY
++  if (ev == MG_EV_HTTP_MSG) p4_receive::Handle(c, static_cast<mg_http_message*>(ev_data));
++  return;
++#endif
+   if (ev == MG_EV_OPEN) {
+   } else if (ev == MG_EV_HTTP_MSG) {
+     struct mg_http_message *hm = (struct mg_http_message *)ev_data;
+diff --git a/app/wxhelper/src/http_router.cc b/app/wxhelper/src/http_router.cc
+index 525197e..94f0f60 100644
+--- a/app/wxhelper/src/http_router.cc
++++ b/app/wxhelper/src/http_router.cc
+@@ -12,6 +12,9 @@ void HttpRouter::AddPathRouting(const std::string &path, HttpHandler handler) {
+ std::string HttpRouter::HandleHttpRequest(const std::string &path,
+                                           const std::string &param) {
+   SPDLOG_INFO("route table size={}", route_table_.size());
++#ifdef WXHELPER_P4_RECEIVE_ONLY
++  return R"({"code":"P4_LEGACY_DISABLED"})";
++#endif
+   auto it = route_table_.find(path);
+   if (it != route_table_.end()) {
+     return it->second(param);
+diff --git a/app/wxhelper/src/sync_msg_hook.cc b/app/wxhelper/src/sync_msg_hook.cc
+index faafcbf..c041e5f 100644
+--- a/app/wxhelper/src/sync_msg_hook.cc
++++ b/app/wxhelper/src/sync_msg_hook.cc
+@@ -1,6 +1,7 @@
+ ﻿#include "sync_msg_hook.h"
+
+ #include "base64.h"
++#include "receive_endpoint.h"
+ #include "receive_diagnostics.h"
+ #include "config.h"
+ #include "nlohmann/json.hpp"
+@@ -22,6 +23,16 @@ void SyncMsgHook::Init() {
+ }
+
+ void SyncMsgHook::HandleSyncMsg(int64_t param1, int64_t param2, int64_t param3) {
++#ifdef WXHELPER_P4_RECEIVE_ONLY
++  try {
++    const auto from = wxutils::ReadSKBuiltinString(*(int64_t*)(param2 + 0x18));
++    const auto type = *(DWORD*)(param2 + 0x24);
++    const auto id = *(uint64_t*)(param2 + 0x60);
++    p4_receive::Observe(from, type, std::to_string(id));
++  } catch (...) {}
++  kDoAddMsg(param1, param2, param3);
++  return;
++#endif
+   auto& diagnostic = ReceiveDiagnostics::Get();
+   ++diagnostic.observed;
+   nlohmann::json msg;

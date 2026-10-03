@@ -7,3 +7,5 @@
 *.gif binary
 *.webp binary
 *.zip binary
+# A unified diff preserves the pinned upstream CMake whitespace as literal context.
+/scripts/wxhelper-receive-only.patch -whitespace
