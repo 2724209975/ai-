@@ -1,0 +1,58 @@
+diff --git a/app/wxhelper/src/wechat_db.cc b/app/wxhelper/src/wechat_db.cc
+index 00f08d2..84e4a25 100644
+--- a/app/wxhelper/src/wechat_db.cc
++++ b/app/wxhelper/src/wechat_db.cc
+@@ -1,6 +1,11 @@
+ ﻿#include "wechat_db.h"
+
+ #include "base64.h"
++#include "voice_candidate.h"
++
++#ifndef WXHELPER_EXPERIMENTAL_VOICE_DB
++#define WXHELPER_EXPERIMENTAL_VOICE_DB 0
++#endif
+ #include "spdlog/spdlog.h"
+ #include "utils.h"
+ #include "wechat_interface.h"
+@@ -273,22 +278,27 @@ std::vector<std::string> WeChatDb::GetChatMsgByMsgId(uint64_t msgid) {
+ }
+
+ std::string WeChatDb::GetVoiceBuffByMsgId(uint64_t msgid) {
+-  char sql[260] = {0};
+-  sprintf_s(sql, "SELECT Buf from Media  WHERE Reserved0=%llu;", msgid);
+-  wchar_t dbname[20] = {0};
+-  for (int i = 0;; i++) {
+-    swprintf_s(dbname, L"MediaMSG%d.db", i);
+-    UINT64 handle = GetDbHandleByDbName(dbname);
+-    if (handle == 0) {
+-      SPDLOG_INFO("Media db handle is null");
+-      return "";
++#if !WXHELPER_EXPERIMENTAL_VOICE_DB
++  (void)msgid;
++  return "";
++#else
++  std::lock_guard<std::recursive_mutex> lock(m);
++  try {
++    // Only use the already registered handle snapshot; no raw offset discovery here.
++    std::vector<uint64_t> handles;
++    for (const auto& entry : dbmap_) {
++      if (!voice_candidate::IsMediaDatabaseName(entry.first)) continue;
++      if (handles.size() == voice_candidate::kMaxDatabases) return "";
++      handles.push_back(entry.second.handle);
+     }
+-    std::vector<std::vector<std::string>> result;
+-    int ret = Select(handle, (const char *)sql, result);
+-    if (result.size() == 0) continue;
+-    return result[1][0];
++    auto result = voice_candidate::Read(func_, handles, std::to_string(msgid));
++    if (result.status != voice_candidate::Status::Ok) return "";
++    return base64_encode(reinterpret_cast<const unsigned char*>(result.bytes.data()),
++                         result.bytes.size());
++  } catch (...) {
++    return "";
+   }
+-  return "";
++#endif
+ }
+
+ std::string WeChatDb::GetPublicMsgCompressContentByMsgId(uint64_t msgid) {

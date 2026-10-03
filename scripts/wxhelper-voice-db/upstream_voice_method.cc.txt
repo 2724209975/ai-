@@ -1,0 +1,44 @@
+﻿#include "wechat_db.h"
+
+#include "base64.h"
+#include "spdlog/spdlog.h"
+#include "utils.h"
+#include "wechat_interface.h"
+#include "wxutils.h"
+
+namespace wechat {
+void FreeResult(std::vector<std::vector<wechat::SqlResult>> &data) {
+  if (data.empty()) {
+    return;
+  }
+  for (auto &row : data) {
+// Unrelated method bodies omitted in this offline patch fixture.
+    return result[1];
+  }
+  return {};
+}
+
+std::string WeChatDb::GetVoiceBuffByMsgId(uint64_t msgid) {
+  char sql[260] = {0};
+  sprintf_s(sql, "SELECT Buf from Media  WHERE Reserved0=%llu;", msgid);
+  wchar_t dbname[20] = {0};
+  for (int i = 0;; i++) {
+    swprintf_s(dbname, L"MediaMSG%d.db", i);
+    UINT64 handle = GetDbHandleByDbName(dbname);
+    if (handle == 0) {
+      SPDLOG_INFO("Media db handle is null");
+      return "";
+    }
+    std::vector<std::vector<std::string>> result;
+    int ret = Select(handle, (const char *)sql, result);
+    if (result.size() == 0) continue;
+    return result[1][0];
+  }
+  return "";
+}
+
+std::string WeChatDb::GetPublicMsgCompressContentByMsgId(uint64_t msgid) {
+  char sql[260] = {0};
+  sprintf_s(sql, "SELECT CompressContent from PublicMsg  WHERE MsgSvrID=%llu;",
+            msgid);
+  wchar_t dbname[20] = {0};
