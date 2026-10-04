@@ -142,6 +142,10 @@ Windows 单独强杀 PostgreSQL 主进程可能留下连接或后台进程，端
 
 ### 完整离线进程演练（P2-x）
 
+QQ 图片默认关闭。配置 `QQ_MEDIA_FETCH=1` 时，缓存目录 `QQ_MEDIA_CACHE_DIR`、私有素材目录 `QQ_MEDIA_DIR` 必须为绝对路径；与 `RAW_EVENT_DIR` 一起设置本人专用 ACL，不放进网页静态目录。媒体与 NapCat 本机缓存必须对桥接可读，不能把另一台机器的路径视为已下载文件。大小上限为 10 MiB，固定 `get_image` 不接受任意 URL、文件标识路径或重定向。
+
+先保持 `QQ_MEDIA_ORIGINAL_VERIFIED=0`、理解与出站关闭；本人安排知情好友发一张测试图，在私有缓存中核对原始文件的尺寸/格式/字节与好友原件一致。核对后本人决定 Q1，记录无身份/正文的结论，再明确当次理解模型预算，才打开原件标志及 `MEDIA_VISION_ENABLED`。下载成功或完整解码都不能单独替代原件核对。QQ 语音与动态表情理解本轮拒绝；任何不确定项仍人工处理。QQ 状态与真机门槛见当前计划。
+
 `tests/integration/postgres-local-stack.test.mts` 新建独立临时集群并实际启动 PostgreSQL、生产核心、模拟桥接及独立模拟 helper，使用持久假模型与合成联系人。它复用 `serve:local` 的进程驱动，生产入口没有 fixture 环境开关，模拟桥接不绕过生产 DLL 守护。
 
 配置 `LOCAL_TEST_PG_BIN` 为包含 initdb/postgres/pg_ctl 的本机原生目录，并配置 `TEST_DATABASE_URL` 后，运行 `node --test tests/integration/postgres-local-stack.test.mts`。新演练不连接该 URL 指向的库；此变量沿用集成门禁开关，新集群使用随机端口。原生 `PG_DUMP_BIN` 所在目录也可作为备选；CI 的容器备份包装脚本不能替代原生数据库目录。完整门禁仍需原有测试库、备份工具、浏览器及网页构建环境。远程 CI 的原生工具准备留到 P6，尚未运行。

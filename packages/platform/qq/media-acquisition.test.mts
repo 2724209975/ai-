@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { decodePrivateEvent, WireError } from './onebot-codec.mts';
 import { acquireQqMedia } from './media-acquisition.mts';
 import type { MediaSource, PrivateMediaStore, MediaReadGate, SourceArtifact } from './media-acquisition.mts';
+import { png, animatedGif, apng } from '../../../tests/fixtures/media-images.mts';
 
 const raw = { post_type: 'message', message_type: 'private', sub_type: 'friend', self_id: 10001, user_id: 10002,
   message_id: 321, time: 1790064000, message: [{ type: 'image', data: { file: 'private-ref' } }] };
@@ -75,4 +76,23 @@ test('only the media segment bound to the raw event may be acquired', async () =
   const changed = structuredClone(message); changed.parts[0] = { ...changed.parts[0], originalEventRef: 'other:event' } as typeof changed.parts[0];
   await assert.rejects(() => acquireQqMedia(changed, 0, h.deps), { message: 'VALIDATION_FAILED' });
   assert.equal(h.reads(), 0);
+});
+
+test('an explicit verified original requires full static decoding before storage', async () => {
+  const good = harness({ bytes: png, representation: 'unknown' });
+  const complete = await acquireQqMedia(message,0,{...good.deps,originalVerified:true});
+  assert.equal(complete.fetchStatus,'fetched');
+  if(complete.fetchStatus!=='fetched')throw new Error('EXPECTED_FETCH');
+  assert.equal(complete.completeness,'complete');assert.equal(complete.animation,'static');assert.equal(good.writes(),1);
+  for(const item of [
+    {bytes:png,representation:'unknown' as const,verified:false},
+    {bytes:png.subarray(0,20),representation:'original' as const,verified:true},
+    {bytes:animatedGif,representation:'original' as const,verified:true},
+    {bytes:apng,representation:'original' as const,verified:true},
+    {bytes:png,representation:'thumbnail' as const,verified:true},
+  ]){
+    const h=harness(item);
+    const result=await acquireQqMedia(message,0,{...h.deps,originalVerified:item.verified});
+    assert.equal(result.fetchStatus,'unavailable');assert.equal(h.writes(),0);
+  }
 });

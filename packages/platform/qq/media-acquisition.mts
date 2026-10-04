@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { WireError } from './onebot-codec.mts';
 import type { WireMessage, WirePart } from './onebot-codec.mts';
+import { validateImageBytes, IMAGE_MAX_BYTES } from '../../data/media/image-validation.mts';
 
 type MediaPart = Extract<WirePart, { kind: 'media' }>;
 export type MediaPointer = {
@@ -27,8 +28,8 @@ export type MediaReadGate = {
   withAuthorizedRead<T>(pointer: MediaPointer, action: () => Promise<T>): Promise<T>;
 };
 export type MediaAcquisitionResult =
-  | { fetchStatus: 'fetched'; completeness: 'unknown' | 'partial'; assetRef: string; sha256: string; byteLength: number;
-      detectedMime: string; animation: 'unknown'; representation: SourceArtifact['representation']; reason?: 'MEDIA_UNCERTAIN' }
+  | { fetchStatus: 'fetched'; completeness: 'unknown' | 'partial' | 'complete'; assetRef: string; sha256: string; byteLength: number;
+      detectedMime: string; animation: 'unknown' | 'static'; representation: SourceArtifact['representation']; reason?: 'MEDIA_UNCERTAIN' }
   | { fetchStatus: 'unavailable'; completeness: 'unknown'; code: 'MEDIA_UNCERTAIN' | 'POLICY_BLOCKED'; retryable: false };
 
 function detectMime(bytes: Uint8Array): string {
@@ -42,9 +43,11 @@ function detectMime(bytes: Uint8Array): string {
   return 'application/octet-stream';
 }
 
-/** This path never asserts complete; a real bridge profile must verify original/animation fidelity first. */
+/** Legacy callers keep uncertain completeness; the explicit original profile adds full decoding. */
 export async function acquireQqMedia(message: WireMessage, segmentIndex: number, deps: {
   source: MediaSource; store: PrivateMediaStore; gate: MediaReadGate; maxBytes: number;
+  /** Explicit profile enables full decoding; only operator-verified originals can become complete. */
+  originalVerified?: boolean;
 }): Promise<MediaAcquisitionResult> {
   if (!Number.isSafeInteger(segmentIndex) || segmentIndex < 0 || !Number.isSafeInteger(deps.maxBytes) || deps.maxBytes < 1) throw new WireError();
   const part = message.parts[segmentIndex];
@@ -61,12 +64,16 @@ export async function acquireQqMedia(message: WireMessage, segmentIndex: number,
       const bytes = new Uint8Array(artifact.bytes);
       const sha256 = createHash('sha256').update(bytes).digest('hex');
       const detectedMime = detectMime(bytes);
+      const checked = deps.originalVerified !== undefined && pointer.mediaKind === 'image';
+      if (checked && (bytes.length > IMAGE_MAX_BYTES || ['thumbnail','single_frame','transcoded'].includes(artifact.representation)
+        || !(await validateImageBytes(bytes, detectedMime)).ok || deps.originalVerified !== true))
+        return { fetchStatus: 'unavailable', completeness: 'unknown', code: 'MEDIA_UNCERTAIN', retryable: false } as const;
       const assetRef = await deps.store.put({ pointer: structuredClone(pointer), bytes, sha256, detectedMime,
         representation: artifact.representation, reportedMime: artifact.reportedMime });
       if (typeof assetRef !== 'string' || !assetRef.trim()) throw new WireError('MEDIA_UNCERTAIN');
       const partial = ['thumbnail', 'single_frame', 'transcoded'].includes(artifact.representation);
-      return { fetchStatus: 'fetched', completeness: partial ? 'partial' : 'unknown', assetRef, sha256,
-        byteLength: bytes.byteLength, detectedMime, animation: 'unknown', representation: artifact.representation,
+      return { fetchStatus: 'fetched', completeness: checked ? 'complete' : partial ? 'partial' : 'unknown', assetRef, sha256,
+        byteLength: bytes.byteLength, detectedMime, animation: checked ? 'static' : 'unknown', representation: artifact.representation,
         ...(partial ? { reason: 'MEDIA_UNCERTAIN' as const } : {}) } as const;
     });
   } catch (error) {

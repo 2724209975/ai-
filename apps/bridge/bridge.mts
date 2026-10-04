@@ -19,6 +19,7 @@ import type { SubmissionTransport } from '../../packages/platform/qq/send-execut
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
 import { createAccountWatchdog, type HealthProbe } from './watchdog.mts';
 import { createQqOutboxPump } from './outbox-pump.mts';
+import { createQqImagePreparation, type QqMediaOptions, type QqImageUnderstanding } from './image-preparation.mts';
 
 export const QQ_BRIDGE_ADAPTER_VERSION = 'qq-onebot-bridge-0.1.0';
 
@@ -34,6 +35,8 @@ export type QqBridgeOptions = {
   rawStore: RawEventStore;
   /** Candidates come from whichever provider the operator names; default stays the fake one. */
   intelligence?: PersistentIntelligence;
+  media?: QqMediaOptions;
+  imageUnderstanding?: QqImageUnderstanding;
   /** Recording this at startup keeps the account paused until an operator resumes it. */
   startPaused?: boolean;
   watchdog?: { probe: HealthProbe; quietMs?: number; intervalMs?: number; timeoutMs?: number; now?: () => number };
@@ -82,10 +85,14 @@ export function createQqBridge(options: QqBridgeOptions) {
     },
   };
   const data = new PgDataProvider();
+  if (options.imageUnderstanding && !options.media) throw new Error('IMAGE_UNDERSTANDING_REQUIRES_MEDIA_FETCH');
+  const imagePreparation = options.media ? createQqImagePreparation({ pool: options.pool, accountId: options.accountId,
+    selfId: options.selfId, media: options.media, understanding: options.imageUnderstanding }) : undefined;
   const echoLedger = createQqSendEchoLedger(options.pool);
   const service = new PgConfirmedService({
     pool: options.pool, data, intelligence: options.intelligence ?? createPgPersistentFakeIntelligence({ pool: options.pool, data }), platform: reportingPlatform, authority, now,
     aggregationWindowMs: options.aggregationWindowMs ?? 0, maxAggregationMs: options.maxAggregationMs ?? 30_000,
+    images: imagePreparation?.port,
   });
   const reception = createPgReceptionPort({
     pool: options.pool, store: options.rawStore, accountId: options.accountId,
@@ -155,6 +162,7 @@ export function createQqBridge(options: QqBridgeOptions) {
       response.end(JSON.stringify({ status: watchdog?.state().status === 'fatal' ? 'fatal' : 'ok', adapter: 'qq-onebot',
         mode: wantsWorker ? 'receive-and-dispatch' : 'receive-only',
         worker: workerEnabled ? 'enabled' : 'disabled',
+        mediaFetch: imagePreparation ? { ...imagePreparation.counters } : { disabled: 1, attempted: 0, fetched: 0, unavailable: 0, lastReason: null },
         ...(watchdog ? { watchdog: watchdog.state() } : {}) }));
       return;
     }

@@ -8,7 +8,9 @@ import { resolve } from 'node:path';
 import { createFileRawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { OneBotHttpTransport } from '../../packages/platform/qq/onebot-http-transport.mts';
 import { createOneBotHealthProbe } from '../../packages/platform/qq/onebot-probe.mts';
-import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv } from '../../packages/ai/index.mts';
+import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv, readMediaEnv, createMediaUnderstandingFromEnv } from '../../packages/ai/index.mts';
+import { createOneBotImageSource, createPgQqRawImageLoader } from '../../packages/platform/qq/onebot-media-source.mts';
+import { readQqMediaConfiguration } from './image-preparation.mts';
 import { createQqBridge } from './bridge.mts';
 import { resolveBridgeRunMode } from './run-mode.mts';
 
@@ -51,6 +53,11 @@ const probe = healthUrl ? createOneBotHealthProbe({ baseUrl: healthUrl, accessTo
 const host = process.env.HOST?.trim() || '127.0.0.1';
 const port = integer('PORT', 8788);
 const rawEventDir = resolve(process.env.RAW_EVENT_DIR?.trim() || '.local-raw-events');
+const mediaOptions = readQqMediaConfiguration(process.env);
+const mediaEnv = readMediaEnv(process.env);
+if (mediaEnv.voiceEnabled) throw new Error('VOICE_RUNTIME_UNSUPPORTED');
+if (mediaEnv.imageEnabled && !mediaOptions) throw new Error('IMAGE_UNDERSTANDING_REQUIRES_MEDIA_FETCH');
+const imageUnderstanding = createMediaUnderstandingFromEnv(process.env);
 // Candidates come from whichever provider the operator names; anything else is refused outright.
 const intelligenceProvider = (process.env.QQ_INTELLIGENCE?.trim() || 'persistent-fake').toLowerCase();
 if (!['persistent-fake', 'deepseek'].includes(intelligenceProvider)) throw new Error('UNSUPPORTED_INTELLIGENCE_PROVIDER');
@@ -87,6 +94,14 @@ const bridge = createQqBridge({
     intervalMs: integer('QQ_WATCHDOG_INTERVAL_MS', 10_000) },
     onWatchdogFatal: () => process.exit(1) } : {}),
   ...(intelligence ? { intelligence } : {}),
+  ...(mediaOptions ? { media: {
+    ...mediaOptions,
+    readRaw: createPgQqRawImageLoader({ pool, accountId, selfId, rawRoot: rawEventDir }),
+    source: createOneBotImageSource({ ...mediaOptions, accessToken: bridgeToken, selfId,
+      readRaw: createPgQqRawImageLoader({ pool, accountId, selfId, rawRoot: rawEventDir }) }),
+  } } : {}),
+  ...(imageUnderstanding ? { imageUnderstanding: { provider: imageUnderstanding.provider, timeoutMs: mediaEnv.timeoutMs,
+    observe: measurement => process.stdout.write(`${JSON.stringify({ at: new Date().toISOString(), event: 'media_model_call', ...measurement })}\n`) } } : {}),
   maxBodyBytes: integer('MAX_BODY_BYTES', 1_048_576),
   requireSelfIdHeader: process.env.QQ_REQUIRE_SELF_ID_HEADER?.trim() === '1',
   aggregationWindowMs: nonNegativeInteger('AGGREGATION_WINDOW_MS', 0),

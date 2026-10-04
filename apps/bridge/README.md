@@ -29,6 +29,16 @@ node apps/bridge/main.mts
 
 路由：`POST /onebot/event`（OneBot 事件推送）、`GET /healthz`。`/healthz` 返回 `{status, adapter, mode, worker, watchdog?}`，**不含 QQ 号、token 或 URL**。鉴权支持两种：**签名路径**（OneBot 惯例，也是 NapCat 实际所用）用配置里的 token 作为 HMAC-SHA1 密钥校验 `x-signature: sha1=...` 并核对 `x-self-id`；**传输层路径**用于其他桥接，要求 `Authorization: Bearer <token>`。
 
+### QQ 图片获取与理解（默认关闭）
+
+`QQ_MEDIA_FETCH=1` 需要 `QQ_ONEBOT_BASE_URL`、绝对路径 `QQ_MEDIA_CACHE_DIR`（NapCat 图片缓存）和 `QQ_MEDIA_DIR`（独立私有素材目录）。`RAW_EVENT_DIR` 指向本桥接已鉴权落盘的原事件。`QQ_MEDIA_MAX_BYTES` 默认/最大 10 MiB，`QQ_MEDIA_TIMEOUT_MS` 默认 8 秒、最大 120 秒。只允许固定 `get_image`，参数来自对应账号、好友、消息与段索引的原事件，不接受 URL 或文件路径作为素材标识；返回路径必须位于缓存目录，realpath 校验链接逃逸，并进行有界读取与完整静态图片解码。
+
+`QQ_MEDIA_ORIGINAL_VERIFIED` 默认 0：取得字节也不能自动认定为原图，继续转人工且不调用理解模型。按 Q1 由本人核对原图后才能设置为 1；这只是操作者声明，不是程序自行验证平台原件语义。静态图片解码、来源和范围检查仍然执行，动态表情拒绝。
+
+理解还需显式 `MEDIA_VISION_ENABLED=1` 和 `MEDIA_*` 模型配置（独立媒体限额）；只开理解不开获取会拒绝启动。`MEDIA_VOICE_ENABLED` 打开时拒绝启动，本卡不取 QQ 语音。只获取、不理解时可绑定经本人核对的完整原图，回复仍交人工。模型调用输出仅版本、耗时、token 等度量。
+
+健康响应增加 `mediaFetch`，只含计数和固定失败码。关闭、未登记、暂停、自动策略以及来源/完整性失败都不会绕过 02 直接理解或发送。图片获取与解释按现有 generation/epoch 边界提交，取图期间暂停会丢弃未绑定素材。
+
 ## 这条路径上做了什么、没做什么
 
 入站顺序固定为：鉴权 → 01 解码 → 已登记事件的原始字节私密落盘 + inbox 去重 + outbox 事件（同一事务）→ 02 业务消费。名单外只写发现元数据与摘要，不留聊天原文、不产生分析、方案或发送。已鉴权但无法确认对端的自身消息按内部 `unmapped_self` 私密留证，并在同一事务内由 02 暂停该账号的已登记会话；它不会冒充公共 `PlatformOwnerMessageObserved` 或联系人入站。图片/语音等非文字消息由 02/04 判为需要人工处理（`PAUSED_MEDIA`），**不会被改写成文字**；混合或空白内容保留为 `unsupported`。
