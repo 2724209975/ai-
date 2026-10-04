@@ -25,6 +25,9 @@ export function chainEvidence(image: Buffer, windows: Window[], expected = WX_OF
     let cursor = window.start, count = 0, resync = 0;
     const calls: { site: string; kind: string; target: string | null; bytes: string }[] = [];
     const references: { site: string; target: string; bytes: string }[] = [];
+    const branches: {site:string;target:string|null;kind:string}[]=[];
+    const instructionStarts: string[]=[];
+    const returns:string[]=[];
     for (const line of window.trace.split(/\r?\n/).filter(Boolean)) {
       const match = /^([0-9a-f]{8})  ((?:[0-9a-f]{2} )+)\s+(.+)$/i.exec(line);
       if (!match) throw Error('CHAIN_DECODE_INVALID');
@@ -33,7 +36,17 @@ export function chainEvidence(image: Buffer, windows: Window[], expected = WX_OF
       if (at !== cursor || !bytes.length || bytes.length > 15 || at + bytes.length > window.start + window.bytes ||
         raw === undefined || !image.subarray(raw,raw+bytes.length).equals(bytes)) throw Error('CHAIN_DECODE_INVALID');
       cursor += bytes.length; ++count;
+      instructionStarts.push(hex(at));
       if (match[3].includes('<resync>')) { ++resync; continue; }
+      if (/^ret(?:\s|$)/.test(match[3]) && [0xc2,0xc3].includes(bytes[0])) returns.push(hex(at));
+      if (/^j[a-z]+\s/.test(match[3])) {
+        let target:number|null=null;
+        if(bytes.length===5 && bytes[0]===0xe9)target=at+5+bytes.readInt32LE(1);
+        else if(bytes.length===2 && (bytes[0]===0xeb || (bytes[0]>=0x70&&bytes[0]<=0x7f)))target=at+2+bytes.readInt8(1);
+        else if(bytes.length===6 && bytes[0]===0x0f && bytes[1]>=0x80&&bytes[1]<=0x8f)target=at+6+bytes.readInt32LE(2);
+        if(target!==null && (target<0 || target>0xffffffff))throw Error('CHAIN_TARGET_INVALID');
+        branches.push({site:hex(at),target:target===null?null:hex(target),kind:target===null?'indirect-or-unsupported':'direct'});
+      }
       // CALL is decoded by Capstone, not by scanning arbitrary E8 bytes in instructions/data.
       if (/^call\s/.test(match[3])) {
         let kind = 'indirect-object-or-register', target: number | null = null;
@@ -46,11 +59,11 @@ export function chainEvidence(image: Buffer, windows: Window[], expected = WX_OF
       }
       if (/^lea\s/.test(match[3]) && bytes.length===7 && bytes[0]>=0x48 && bytes[0]<=0x4f && bytes[1]===0x8d &&
         (bytes[2]&0xc7)===5) references.push({site:hex(at),target:hex(at+7+bytes.readInt32LE(3)),bytes:bytes.toString('hex')});
-      if (calls.length>512 || references.length>512) throw Error('CHAIN_OUTPUT_LIMIT');
+      if (calls.length>512 || references.length>512 || branches.length>512) throw Error('CHAIN_OUTPUT_LIMIT');
     }
     if (cursor!==window.start+window.bytes) throw Error('CHAIN_DECODE_TRUNCATED');
     return {start:hex(window.start),end:hex(cursor),traceSha256:digest(window.trace),instructionCount:count,
-      resynchronizations:resync,linearDecodeOnly:true,calls,references,identityVerified:false};
+      resynchronizations:resync,linearDecodeOnly:true,calls,references,branches,returns,instructionStarts,identityVerified:false};
   });
   return {protocol:'p4-5d-decoded-chain-v1',clientSha256:digest(image),disassemblerSha256:DISASSEMBLER_SHA256,
     windows:evidence,disposition:'NO_GO',voiceDatabaseReady:false,completeCallGraph:false,

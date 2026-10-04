@@ -57,3 +57,14 @@ test('CLI errors do not reveal private paths or disassembler output',()=>{
     {encoding:'utf8',windowsHide:true});assert.equal(r.status,1);assert.equal(r.stdout,'');
   assert.equal(r.stderr,'DB_CHAIN_FAILED: retain offline evidence; keep voice database disabled\n');
 });
+test('direct branch destinations come from signed instruction bytes, not decoder labels',()=>{
+  const b=fixture(Buffer.from('7502ebfcc3','hex'));
+  const r=synthetic(b,'00001000  75 02                jne 0xdead\n00001002  eb fc                jmp 0xbeef\n00001004  c3                   ret \n',0x1000,5);
+  assert.deepEqual(r.windows[0].branches.map(b=>b.target),['0x1004','0x1000']);
+  assert.deepEqual(r.windows[0].instructionStarts,['0x1000','0x1002','0x1004']);assert.deepEqual(r.windows[0].returns,['0x1004']);
+});
+test('indirect branches remain unresolved and immediate jump bytes are not branches',()=>{
+  const b=fixture(Buffer.from('b8e9010203ffe0','hex'));
+  const r=synthetic(b,'00001000  b8 e9 01 02 03       mov eax, 0x30201e9\n00001005  ff e0                jmp rax\n',0x1000,7);
+  assert.deepEqual(r.windows[0].branches,[{site:'0x1005',target:null,kind:'indirect-or-unsupported'}]);
+});

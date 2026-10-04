@@ -1,0 +1,223 @@
+{
+  "protocol": "p4-5e-review-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "upstreamSources": [
+    {
+      "file": "VERSION",
+      "bytes": 7,
+      "sha256": "0caa7a867d0f0c62496ea4b136589c99ce6766e924d60773de64432833e9444a",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/VERSION"
+    },
+    {
+      "file": "src-vdbeapi.c",
+      "bytes": 59919,
+      "sha256": "653d3eaf99dbc10568e5dbc18dd77272cde72af4967fbdcefae6eb3e5e23e8eb",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/vdbeapi.c"
+    },
+    {
+      "file": "src-vdbeInt.h",
+      "bytes": 26449,
+      "sha256": "6ed755b8d30b0939ab4fc64f0fe06284826b6b138611777c8420bc7016809a2d",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/vdbeInt.h"
+    },
+    {
+      "file": "src-prepare.c",
+      "bytes": 31534,
+      "sha256": "64ac8c2263b1ecb87e98962d143b59b7428d05cd79ea1c42994ad34e6296411f",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/prepare.c"
+    },
+    {
+      "file": "src-main.c",
+      "bytes": 142670,
+      "sha256": "36fb77d468a862e959da24ed908aacf21fb708d4c5fc7194c9db1f1e1b66d08b",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/main.c"
+    },
+    {
+      "file": "src-legacy.c",
+      "bytes": 4531,
+      "sha256": "a9491dee918654a10468df6e09f3fa538be888e93450331782812ef277bf1c74",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/legacy.c"
+    }
+  ],
+  "researchTools": [
+    {
+      "file": "scripts/wxhelper-db-entry-unwind.mts",
+      "sha256": "712cafe324b47dfe1254f7e3764f67dc0fba48b0a849f3904e18fa6ab9ad3bc0"
+    },
+    {
+      "file": "scripts/wxhelper-db-entry-chain.mts",
+      "sha256": "4bef3d47364bb9baee05226810c7eebd96f84786392b166e4f625addeb228a99"
+    }
+  ],
+  "documents": [
+    {
+      "url": "https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64?view=msvc-170",
+      "purpose": "chain layout, flags, alignment and bounds; not live object identity"
+    }
+  ],
+  "summary": {
+    "families": 21,
+    "windows": 34,
+    "decodedInstructions": 4253
+  },
+  "selectedInstructions": [
+    {
+      "root": "0x3a5eda0",
+      "traceSha256": "608f2c4e3b01fb4dd1e792770508c4bcb09642db3e46f7a8123abb61bb4afe34",
+      "instructions": [
+        "03a5eda0  4c 89 4c 24 20       mov qword ptr [rsp + 0x20], r9",
+        "03a5eda5  4c 89 44 24 18       mov qword ptr [rsp + 0x18], r8",
+        "03a5eea3  0f 84 e9 0a 00 00    je 0x3a5f992",
+        "03a5eef5  41 b9 80 00 00 00    mov r9d, 0x80",
+        "03a5ef0b  48 89 44 24 28       mov qword ptr [rsp + 0x28], rax",
+        "03a5ef13  4c 89 64 24 20       mov qword ptr [rsp + 0x20], r12",
+        "03a5ef18  e8 e3 70 00 00       call 0x3a66000",
+        "03a5f00f  e8 1c 3b fc ff       call 0x3a22b30",
+        "03a5f443  41 83 fe 64          cmp r14d, 0x64",
+        "03a5f449  41 83 fe 65          cmp r14d, 0x65",
+        "03a5f4b0  45 33 c9             xor r9d, r9d",
+        "03a5f4b3  45 33 c0             xor r8d, r8d",
+        "03a5f4bb  e8 30 4a fc ff       call 0x3a23ef0",
+        "03a5f4f6  ff 94 24 f0 01 00 00  call qword ptr [rsp + 0x1f0]",
+        "03a5f531  e8 9a 01 fc ff       call 0x3a1f6d0",
+        "03a5f53c  e8 df 07 fc ff       call 0x3a1fd20",
+        "03a5f5d5  48 8b 93 a0 00 00 00  mov rdx, qword ptr [rbx + 0xa0]",
+        "03a5f5e1  0f b7 83 c0 00 00 00  movzx eax, word ptr [rbx + 0xc0]",
+        "03a5f5ec  85 ff                test edi, edi",
+        "03a5f5f3  48 6b c8 38          imul rcx, rax, 0x38",
+        "03a5f619  e8 f2 ba fb ff       call 0x3a1b110",
+        "03a5f9c2  48 8b b4 24 00 02 00 00  mov rsi, qword ptr [rsp + 0x200]"
+      ]
+    },
+    {
+      "root": "0x25bf600",
+      "traceSha256": "b384b8dcb6ec64ac0ea9be2c93996beeee78568f1d5be5770be3f23b2eeb23da",
+      "instructions": [
+        "025bf628  ff 50 10             call qword ptr [rax + 0x10]",
+        "025bf62e  48 c7 44 24 20 00 00 00 00  mov qword ptr [rsp + 0x20], 0",
+        "025bf637  48 8b c8             mov rcx, rax",
+        "025bf640  e8 5b f7 49 01       call 0x3a5eda0"
+      ]
+    },
+    {
+      "root": "0x25baf80",
+      "traceSha256": "0b70f04694997cf3fcf203552239570b4e99aa68c154a02dabf7e419df473714",
+      "instructions": [
+        "025baf89  48 8b 49 08          mov rcx, qword ptr [rcx + 8]",
+        "025baf95  ff 50 08             call qword ptr [rax + 8]",
+        "025baf9b  75 04                jne 0x25bafa1",
+        "025baf9d  48 8b 43 50          mov rax, qword ptr [rbx + 0x50]"
+      ]
+    },
+    {
+      "root": "0x25be0a0",
+      "traceSha256": "02069e234254208acfbb44d222069a2c284930f8473a8a037c271c25ec493d2f",
+      "instructions": [
+        "025be0f5  ff 50 10             call qword ptr [rax + 0x10]",
+        "025be238  48 8d 0d 71 2b 37 03  lea rcx, [rip + 0x3372b71] ; ->0x5930db0",
+        "025be23f  e8 5c 70 f7 ff       call 0x25352a0",
+        "025be244  48 89 47 50          mov qword ptr [rdi + 0x50], rax",
+        "025be24e  ff 50 10             call qword ptr [rax + 0x10]",
+        "025be332  ff 50 28             call qword ptr [rax + 0x28]"
+      ]
+    },
+    {
+      "root": "0x2511c30",
+      "traceSha256": "69b11cc86d69a7f12da4e48dbd0bc04a70bc574e63c05df073a15436f2318d5c",
+      "instructions": [
+        "02511c99  e8 32 90 0a 00       call 0x25bacd0",
+        "02511c9f  48 8d 05 d2 ac a4 02  lea rax, [rip + 0x2a4acd2] ; ->0x4f5c978",
+        "02511ca6  49 89 06             mov qword ptr [r14], rax"
+      ]
+    },
+    {
+      "root": "0x2511ec0",
+      "traceSha256": "f71d4498f491ef3b47cfd6fed9a1a1ba317865c4978b83e78aba01b8486be0aa",
+      "instructions": [
+        "02511ed6  48 8d 05 9b aa a4 02  lea rax, [rip + 0x2a4aa9b] ; ->0x4f5c978",
+        "02511edd  48 89 01             mov qword ptr [rcx], rax",
+        "02511ef1  ff 15 71 6a 23 02    call qword ptr [rip + 0x2236a71] ; ->0x4748968",
+        "02511f10  e8 8b a1 63 ff       call 0x1b4c0a0",
+        "02511f32  ff 15 38 6a 23 02    call qword ptr [rip + 0x2236a38] ; ->0x4748970",
+        "02511f44  ff 15 66 6a 23 02    call qword ptr [rip + 0x2236a66] ; ->0x47489b0",
+        "02511f8b  e9 d0 8e 0a 00       jmp 0x25bae60"
+      ]
+    },
+    {
+      "root": "0x25bee50",
+      "traceSha256": "596e82f3741e1bd2ed5bd824c47a41b0663ff74724f32387f013b9c1257bab26",
+      "instructions": [
+        "025bee66  48 8b ca             mov rcx, rdx",
+        "025bee71  e8 2a dd 4d 01       call 0x3a9cba0"
+      ]
+    },
+    {
+      "root": "0x3a9cba0",
+      "traceSha256": "847b2fca9d3981cef57ea878ff412ddb4df63d5476e0c77c09b8ff7e01ca2e8d",
+      "instructions": [
+        "03a9cc0d  80 79 61 00          cmp byte ptr [rcx + 0x61], 0",
+        "03a9cc13  8b 41 50             mov eax, dword ptr [rcx + 0x50]",
+        "03a9cc1b  b8 07 00 00 00       mov eax, 7"
+      ]
+    }
+  ],
+  "confirmedImportMetadata": [
+    {
+      "slot": "0x4748968",
+      "module": "KERNEL32.dll",
+      "name": "EnterCriticalSection"
+    },
+    {
+      "slot": "0x4748970",
+      "module": "KERNEL32.dll",
+      "name": "LeaveCriticalSection"
+    },
+    {
+      "slot": "0x47489b0",
+      "module": "KERNEL32.dll",
+      "name": "DeleteCriticalSection"
+    }
+  ],
+  "interpretations": [
+    {
+      "candidate": "0x3a5eda0",
+      "meaning": "exec semantics with five-argument callback/error-pointer evidence",
+      "readyAsCallableOffset": false
+    },
+    {
+      "candidate": "0x3a66000",
+      "meaning": "sqlite3Prepare-like seven-argument internal helper; public LockAndPrepare wrapper logic appears inlined",
+      "readyAsCallableOffset": false
+    },
+    {
+      "candidate": "0x3a22b30",
+      "meaning": "sqlite3Step-like internal helper; public step wrapper logic appears inlined",
+      "readyAsCallableOffset": false
+    },
+    {
+      "candidate": "0x3a23ef0",
+      "meaning": "four-argument columnName-like metadata helper; not a two-argument blob reader",
+      "readyAsCallableOffset": false
+    },
+    {
+      "candidate": "0x3a1f6d0 / 0x3a1fd20",
+      "meaning": "reset/delete-like internals in an inlined finalize path",
+      "readyAsCallableOffset": false
+    },
+    {
+      "candidate": "0x25bee50 -> 0x3a9cba0",
+      "meaning": "error-code/logging path; no observed database close",
+      "readyAsCallableOffset": false
+    }
+  ],
+  "remaining": [
+    "provider at storage+8 may override cached db at storage+0x50",
+    "manager registry is not connected to the old MultiDBMgr root or MediaMSG live identity",
+    "provider lifetime, db close serialization and lock acquisition order are not established",
+    "public SQLite prepare/step/blob/bytes/finalize wrapper identities and ABI remain unverified",
+    "runtime schema/Buf/codec/ASR are not tested"
+  ],
+  "disposition": "NO_GO",
+  "voiceDatabaseReady": false,
+  "identityVerified": false
+}
