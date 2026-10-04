@@ -1,4 +1,8 @@
-/** Local-only process owner. No test overrides, WeChat startup, login or injection capability. */
+/** Local-only process owner. No test overrides, platform login, injection or sending capability.
+ *
+ * The bridge entry and required variables follow `LOCAL_BRIDGE_PLATFORM` (`wechat` by default, or
+ * `qq`); both stacks stay separately runnable and never run at the same time on one database.
+ */
 import { resolve } from 'node:path';
 import { createLocalStackDriver, readLocalStackConfig } from './local-stack-driver.mts';
 import { superviseLocalStack, rotatingStackLog } from './local-supervisor.mts';

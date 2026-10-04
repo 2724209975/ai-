@@ -9,12 +9,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
 import { PgConfirmedService } from '../../packages/orchestration/postgres/confirmed-service.mts';
 import { createDispatchWorker } from '../../packages/orchestration/postgres/worker.mts';
-import { createPgPersistentFakeIntelligence } from '../../packages/ai/index.mts';
+import { createPgPersistentFakeIntelligence, type PersistentIntelligence } from '../../packages/ai/index.mts';
 import { createPgReceptionPort, type RawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { createQqPlatformPort } from '../../packages/platform/qq/napcat-bridge.mts';
 import { failureResponse, ingestAuthenticatedOneBotEvent, ingestOneBotWebhook } from '../../packages/platform/qq/webhook-ingress.mts';
 import type { SubmissionTransport } from '../../packages/platform/qq/send-executor.mts';
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
+import { createAccountWatchdog, type HealthProbe } from './watchdog.mts';
 import { createQqOutboxPump } from './outbox-pump.mts';
 
 export const QQ_BRIDGE_ADAPTER_VERSION = 'qq-onebot-bridge-0.1.0';
@@ -29,6 +30,17 @@ export type QqBridgeOptions = {
   bridgeToken: string;
   transport: SubmissionTransport;
   rawStore: RawEventStore;
+  /** Candidates come from whichever provider the operator names; default stays the fake one. */
+  intelligence?: PersistentIntelligence;
+  /** Recording this at startup keeps the account paused until an operator resumes it. */
+  startPaused?: boolean;
+  watchdog?: { probe: HealthProbe; quietMs?: number; intervalMs?: number; timeoutMs?: number; now?: () => number };
+  /** Called when the watchdog cannot persist its own state; the entry point exits non-zero. */
+  onWatchdogFatal?(): void;
+  /** Outbound dispatch. Absent means receive-only, and no worker is created at all. */
+  dispatch?: { workerIntervalMs?: number; workerEnabled?: boolean };
+  /** Explicit worker switch when no `dispatch` block is supplied. */
+  workerEnabled?: boolean;
   maxBodyBytes?: number;
   /** Once a bridge is measured to send X-Self-ID, require it as well as the body field. */
   requireSelfIdHeader?: boolean;
@@ -69,7 +81,7 @@ export function createQqBridge(options: QqBridgeOptions) {
   };
   const data = new PgDataProvider();
   const service = new PgConfirmedService({
-    pool: options.pool, data, intelligence: createPgPersistentFakeIntelligence({ pool: options.pool, data }), platform: reportingPlatform, authority, now,
+    pool: options.pool, data, intelligence: options.intelligence ?? createPgPersistentFakeIntelligence({ pool: options.pool, data }), platform: reportingPlatform, authority, now,
     aggregationWindowMs: options.aggregationWindowMs ?? 0, maxAggregationMs: options.maxAggregationMs ?? 30_000,
   });
   const reception = createPgReceptionPort({
@@ -91,8 +103,18 @@ export function createQqBridge(options: QqBridgeOptions) {
     onEvent: event => service.ingestPlatformEvent(event),
     intervalMs: options.outboxIntervalMs ?? 2_000,
     onError: error => report(error, 'outbox'), });
-  const worker = createDispatchWorker({ pool: options.pool, service, intervalMs: options.workerIntervalMs ?? 2_000,
-    onError: (error, phase) => report(error, `worker-${phase}`) });
+  // A worker exists only when outbound is configured. `dispatch` is the explicit form; passing a
+  // worker interval is the older implicit form and keeps working, so existing callers are unaffected.
+  const wantsWorker = Boolean(options.dispatch) || options.workerIntervalMs !== undefined;
+  const worker = wantsWorker
+    ? createDispatchWorker({ pool: options.pool, service,
+        intervalMs: options.dispatch?.workerIntervalMs ?? options.workerIntervalMs ?? 2_000,
+        onError: (error, phase) => report(error, `worker-${phase}`) })
+    : undefined;
+  const workerEnabled = wantsWorker && options.dispatch?.workerEnabled !== false && options.workerEnabled !== false;
+  const watchdog = options.watchdog ? createAccountWatchdog({ ...options.watchdog,
+    record: (healthy, faultCode) => service.recordAccountHealth({ accountId: options.accountId, healthy, faultCode }),
+    onFatal() { report(new Error('watchdog-persistence-failed'), 'watchdog-fatal'); void worker?.stop(); options.onWatchdogFatal?.(); } }) : undefined;
 
   const server = createServer((request, response) => {
     void handle(request, response).catch(error => { report(error, 'ingress'); if (!response.headersSent) response.writeHead(503); response.end(); });
@@ -115,11 +137,17 @@ export function createQqBridge(options: QqBridgeOptions) {
         `ingress ${request.method ?? '?'} ${route} -> ${status}${detail ? ` code=${detail}` : ''} auth=${authScheme}`);
     };
     if (request.method === 'GET' && url.pathname === '/healthz') {
-      response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-      response.end(JSON.stringify({ status: 'ok', adapter: 'qq-onebot' }));
+      // A fatal watchdog means this bridge must not be treated as usable: an operator resolves it.
+      response.writeHead(watchdog?.state().status === 'fatal' ? 503 : 200, { 'content-type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({ status: watchdog?.state().status === 'fatal' ? 'fatal' : 'ok', adapter: 'qq-onebot',
+        mode: wantsWorker ? 'receive-and-dispatch' : 'receive-only',
+        worker: workerEnabled ? 'enabled' : 'disabled',
+        ...(watchdog ? { watchdog: watchdog.state() } : {}) }));
       return;
     }
     if (!(request.method === 'POST' && url.pathname === '/onebot/event')) { response.writeHead(404); response.end(); record(404); return; }
+    // Refuse work while the account is known-faulted, exactly as the WeChat bridge does.
+    if (watchdog?.state().status === 'fatal') { response.writeHead(503); response.end(); record(503, 'WATCHDOG_FATAL'); return; }
     const chunks: Buffer[] = []; let length = 0;
     for await (const chunk of request) {
       const buffer = chunk as Buffer;
@@ -158,15 +186,26 @@ export function createQqBridge(options: QqBridgeOptions) {
   }
 
   return {
-    server, service, worker, platform, outbox,
+    server, service, worker, watchdog, platform, outbox,
     async start(): Promise<void> {
+      // A restart (or an explicit paused start) must not let a queued send out before an operator
+      // has seen the account state; the watchdog records the first health row itself.
+      if (options.startPaused || watchdog) await service.recordAccountHealth({ accountId: options.accountId, healthy: false, faultCode: 'BRIDGE_RESTARTED' });
+      // Recovery first: no new send may happen before ambiguous attempts are reconciled.
       await service.recover();
+      if (watchdog) {
+        await watchdog.tick();
+        if (watchdog.state().status === 'fatal') throw new Error('WATCHDOG_PERSISTENCE_FAILED');
+        watchdog.start();
+      }
       await outbox.tick();
       outbox.start();
+      if (workerEnabled) worker?.start();
     },
     async stop(): Promise<void> {
+      await watchdog?.stop();
       await new Promise<void>(done => server.close(() => done()));
-      await worker.stop();
+      await worker?.stop();
       await outbox.stop();
     },
   };

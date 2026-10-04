@@ -11,12 +11,23 @@ $env:QQ_SELF_ID='<QQ 号>'
 $env:QQ_BRIDGE_TOKEN='<与 NapCat 配置一致的 token>'
 $env:QQ_ENABLE_OUTBOUND='0' # 只接收；默认值也是 0
 $env:WORKER_ENABLED='0'
+$env:QQ_INTELLIGENCE='persistent-fake' # 或 deepseek；其他值启动失败
 node apps/bridge/main.mts
 ```
 
-可配置项：`HOST`、`PORT`（默认 8788）、`RAW_EVENT_DIR`、`MAX_BODY_BYTES`、`QQ_REQUIRE_SELF_ID_HEADER`、`AGGREGATION_WINDOW_MS`、`MAX_AGGREGATION_MS`、`WORKER_INTERVAL_MS`、`QQ_ENABLE_OUTBOUND`、`WORKER_ENABLED`、`PG_POOL_MAX`。默认**只接收**；只有明确设置 `QQ_ENABLE_OUTBOUND=1` 才要求 `QQ_ONEBOT_BASE_URL` 并创建真实发送传输，worker 也只会在该模式启动。单独设置 `WORKER_ENABLED=1` 而未启用出站会拒绝启动。真实出站需另有经本人批准的测试会话、消息内容与次数，且只能由 02 租约执行。
+可配置项：`HOST`、`PORT`（默认 8788）、`RAW_EVENT_DIR`、`MAX_BODY_BYTES`、`QQ_REQUIRE_SELF_ID_HEADER`、`AGGREGATION_WINDOW_MS`、`MAX_AGGREGATION_MS`、`WORKER_INTERVAL_MS`、`QQ_ENABLE_OUTBOUND`、`WORKER_ENABLED`、`PG_POOL_MAX`、`QQ_INTELLIGENCE`、`QQ_ONEBOT_HEALTH_URL`、`QQ_PROCESS_ID`、`QQ_QUIET_MS`、`QQ_WATCHDOG_INTERVAL_MS`。默认**只接收**；只有明确设置 `QQ_ENABLE_OUTBOUND=1` 才要求 `QQ_ONEBOT_BASE_URL` 并创建真实发送传输。**没有出站配置时不创建派发 worker**（`/healthz` 报 `worker=disabled`）。单独设置 `WORKER_ENABLED=1` 而未启用出站会拒绝启动。真实出站需另有经本人批准的测试会话、消息内容与次数，且只能由 02 租约执行。
 
-路由：`POST /onebot/event`（OneBot 事件推送）、`GET /healthz`。鉴权支持两种：**签名路径**（OneBot 惯例，也是 NapCat 实际所用）用配置里的 token 作为 HMAC-SHA1 密钥校验 `x-signature: sha1=...` 并核对 `x-self-id`；**传输层路径**用于其他桥接，要求 `Authorization: Bearer <token>`。
+### 模型 provider
+
+`QQ_INTELLIGENCE` 默认 `persistent-fake`，与本机演练保持一致；设为 `deepseek` 时装配真实文本模型（复用微信侧同一套 `readDeepSeekEnv`/`createTextModelIntelligence`，按密钥与模型名读取 `DEEPSEEK_*`），其他值一律 `UNSUPPORTED_INTELLIGENCE_PROVIDER` 启动失败。启动时会打印一行脱敏的 provider 描述；每次调用只输出一条 `model_call` 的度量（版本、延迟、token），**不含提示词与回复正文**。
+
+### 启动即暂停与看门狗
+
+进程**始终**以暂停态启动：`start()` 先写一条 `BRIDGE_RESTARTED` 健康记录并执行恢复，因此重启的桥接不会自己恢复发送，只有本人手动恢复。
+
+配置了 `QQ_ONEBOT_HEALTH_URL`（默认取 `QQ_ONEBOT_BASE_URL`）时启用看门狗：它只调用 **`get_login_info` 这一个动作**，把返回的 `user_id` 与 `QQ_SELF_ID` 比较，并复用 0012 已有的故障码（`PROCESS_EXITED`、`HELPER_UNRESPONSIVE`、`HOOK_LOGIN_ABNORMAL`），不新增迁移。正常回包但**账号不符**算明确的“未登录为该账号”，超时/非 JSON/超大回包/重定向一律算不可用。只给 `QQ_PROCESS_ID` 时才检查进程存活；不给就视为存活（NapCat 可能不由本栈托管）。看门狗无法写入自身状态时视为致命：`/healthz` 与 `POST /onebot/event` 都返回 503，进程以退出码 1 结束。
+
+路由：`POST /onebot/event`（OneBot 事件推送）、`GET /healthz`。`/healthz` 返回 `{status, adapter, mode, worker, watchdog?}`，**不含 QQ 号、token 或 URL**。鉴权支持两种：**签名路径**（OneBot 惯例，也是 NapCat 实际所用）用配置里的 token 作为 HMAC-SHA1 密钥校验 `x-signature: sha1=...` 并核对 `x-self-id`；**传输层路径**用于其他桥接，要求 `Authorization: Bearer <token>`。
 
 ## 这条路径上做了什么、没做什么
 

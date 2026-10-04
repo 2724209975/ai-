@@ -216,6 +216,43 @@ test('native driver refuses occupied ports and an external cluster on a differen
   }
 });
 
+test('the stack config switches bridge entry and required variables per platform', settings, async () => {
+  const setup = await environment();
+  try {
+    // Default stays WeChat so existing operators are unaffected by the platform switch.
+    const wechat = await readLocalStackConfig(setup.env);
+    assert.equal(wechat.platform, 'wechat');
+    assert.match(wechat.bridgeEntry, /wechat-main\.mts$/);
+    assert.equal(wechat.env.CORE_PLATFORM, 'wechat');
+
+    const qqEnv = { ...setup.env, LOCAL_BRIDGE_PLATFORM: 'qq', QQ_ACCOUNT_ID: randomUUID(), QQ_SELF_ID: '10001',
+      QQ_BRIDGE_TOKEN: randomBytes(32).toString('hex') };
+    const qq = await readLocalStackConfig(qqEnv);
+    assert.equal(qq.platform, 'qq');
+    assert.match(qq.bridgeEntry, /apps[\\/]bridge[\\/]main\.mts$/);
+    assert.equal(qq.env.CORE_PLATFORM, 'qq');
+    assert.equal(qq.env.START_PAUSED, '1');
+    assert.equal(qq.env.HOST, '127.0.0.1');
+
+    // The core config must accept the QQ platform, so a bad value has to be rejected there too.
+    for (const name of ['QQ_ACCOUNT_ID', 'QQ_SELF_ID', 'QQ_BRIDGE_TOKEN']) {
+      const missing = { ...qqEnv } as Record<string, string | undefined>;
+      delete missing[name];
+      await assert.rejects(readLocalStackConfig(missing), { message: `MISSING_ENV:${name}` });
+    }
+    await assert.rejects(readLocalStackConfig({ ...qqEnv, LOCAL_BRIDGE_PLATFORM: 'telegram' }),
+      { message: 'LOCAL_BRIDGE_PLATFORM_INVALID' });
+    // Outbound needs its endpoint; asking for it without one is a configuration mistake.
+    await assert.rejects(readLocalStackConfig({ ...qqEnv, QQ_ENABLE_OUTBOUND: '1' }),
+      { message: 'MISSING_ENV:QQ_ONEBOT_BASE_URL' });
+    // The WeChat branch keeps its own required set even when QQ variables are absent.
+    await assert.rejects(readLocalStackConfig({ ...setup.env, WECHAT_INGRESS_TOKEN: '' }),
+      { message: 'MISSING_ENV:WECHAT_INGRESS_TOKEN' });
+  } finally {
+    await cleanupRoot(setup.root);
+  }
+});
+
 test('native driver cancels and reaps a pending migration before stopping its database', settings, async () => {
   const setup = await environment(), config = await readLocalStackConfig(setup.env), commands: ChildProcess[] = [], children: ChildProcess[] = [];
   const driver = createLocalStackDriver({ config, signal: new AbortController().signal, log: async () => {}, startupMs: 5000,

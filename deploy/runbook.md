@@ -113,7 +113,14 @@ P4-4c 已装配图片确认模式的受控流程：消息提交后，锁外获�
 
 本节只用于当前 Windows 本机开发；不代表 P5 宿主、开机自启或真实平台故障验收。便携检测逻辑在 `apps/bridge/watchdog.mts`，可供后续宿主复用。
 
-准备好现有 PostgreSQL 集群、已构建网页与私有配置后，运行 `npm run serve:local`。新增必填 `LOCAL_PG_BIN`（含 postgres.exe/pg_ctl.exe 的绝对目录）、`LOCAL_PG_DATA`（既有集群绝对目录，含 PG_VERSION）；数据库必须是 `postgres://...@127.0.0.1:<port>/<database>`，PUBLIC_ORIGIN 必须为 `http://127.0.0.1:<core-port>`。核心和微信桥接的其余必填配置沿用各自 README；桥接另需本人提供 `WECHAT_PROCESS_ID`、已通过哈希守护的两个 DLL 路径。默认桥接端口 19099，可用 `LOCAL_BRIDGE_PORT` 调整，三个端口必须不同。私有原始事件、会话和集群不要放入仓库。
+准备好现有 PostgreSQL 集群、已构建网页与私有配置后，运行 `npm run serve:local`。新增必填 `LOCAL_PG_BIN`（含 postgres.exe/pg_ctl.exe 的绝对目录）、`LOCAL_PG_DATA`（既有集群绝对目录，含 PG_VERSION）；数据库必须是 `postgres://...@127.0.0.1:<port>/<database>`，PUBLIC_ORIGIN 必须为 `http://127.0.0.1:<core-port>`。默认桥接端口 19099，可用 `LOCAL_BRIDGE_PORT` 调整，三个端口必须不同。私有原始事件、会话和集群不要放入仓库。
+
+**平台由 `LOCAL_BRIDGE_PLATFORM` 选择（默认 `wechat`，只接受 `wechat` 或 `qq`，其他值拒绝启动）**，它同时决定桥接入口与必填变量，并且 `CORE_PLATFORM` 跟随该值：
+
+- `wechat`：入口 `apps/bridge/wechat-main.mts`；必填 `WECHAT_ACCOUNT_ID`、`WECHAT_SELF_REF`、`WECHAT_INGRESS_TOKEN`、`WECHAT_PROCESS_ID`，以及已通过哈希守护的两个 DLL 路径。
+- `qq`：入口 `apps/bridge/main.mts`；必填 `QQ_ACCOUNT_ID`、`QQ_SELF_ID`、`QQ_BRIDGE_TOKEN`。出站由 `QQ_ENABLE_OUTBOUND=1` 开启，此时另需 `QQ_ONEBOT_BASE_URL`；只接收模式不需要 OneBot 地址，也不需要 `QQ_PROCESS_ID`（未给就视为进程存活）。QQ 看门狗另可用 `QQ_ONEBOT_HEALTH_URL`、`QQ_QUIET_MS`、`QQ_WATCHDOG_INTERVAL_MS`。
+
+两个平台不要在同一数据库上同时跑常驻栈：核心的 `CORE_PLATFORM` 只服务一个平台账号。切换平台前先按 Ctrl+C 停整组，再改 `LOCAL_BRIDGE_PLATFORM`。
 
 脚本不初始化数据库，也不启动微信、helper、登录或注入。集群必须已经停止：即使配置端口空闲，只要启动前仍有 postmaster.pid，也拒绝接管，不能把外部运行在另一端口的集群当作本轮所有。无法确认是否陈旧时由本人核查，不自动删除 PID 文件。已运行的外部数据库/核心/桥接占用端口同样拒绝接管；请本人先停对应外部进程。本人按既有受控清单完成微信操作后再运行常驻入口。未配置出站开关时依旧只接收；真实发送授权沿用 P1，不因常驻改变。
 

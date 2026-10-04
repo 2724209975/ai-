@@ -19,6 +19,8 @@ import { newId } from '../../packages/orchestration/postgres/ids.mts';
 import { contentHash } from '../../packages/orchestration/conversations/engine.mts';
 import { createQqBridge } from '../../apps/bridge/bridge.mts';
 import { createQqOutboxPump } from '../../apps/bridge/outbox-pump.mts';
+import { createTextModelIntelligence } from '../../packages/ai/index.mts';
+import { createDeepSeekTextProvider } from '../../packages/ai/generation/deepseek-provider.mts';
 import { collectSpikeEvidence } from '../../packages/platform/qq/spike-evidence.mts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -42,7 +44,7 @@ function oneBotEvent(text: string, messageId: number, userId = 20002) {
     user_id: userId, message_id: messageId, time: Math.floor(Date.now() / 1000), message: [{ type: 'text', data: { text } }] });
 }
 
-async function setup() {
+async function setup(options: { intelligence?: Parameters<typeof createQqBridge>[0]['intelligence'] } = {}) {
   if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required in CI');
   const { Client, Pool } = await import('pg');
   const schema = `test_bridge_${randomBytes(8).toString('hex')}`;
@@ -84,6 +86,7 @@ async function setup() {
     pool, accountId, selfId: SELF_ID, bridgeToken: TOKEN, rawStore: createFileRawEventStore(rawRoot),
     transport: new OneBotHttpTransport({ baseUrl: `http://127.0.0.1:${onebotPort}/`, accessToken: TOKEN }),
     workerIntervalMs: 600_000, outboxIntervalMs: 600_000,
+    ...(options.intelligence ? { intelligence: options.intelligence } : {}),
     onError: (error, phase) => failures.push(`${phase}:${error instanceof Error ? error.message : 'unknown'}`),
   });
   await bridge.start();
@@ -459,6 +462,38 @@ test('real PostgreSQL + fake OneBot: a signed push is accepted and a tampered on
 /** QQ reports message times in whole seconds, so a platform timestamp can lead our own clock by up
  * to a second. Using only "now" as the decision cutoff made buildContext reject the trigger message
  * as NOT_FOUND, which surfaced as HTTP 503 and produced no candidate at all. */
+/** The card's first requirement: with a real provider named, the QQ path must produce a candidate
+ * through the real generation and validation pipeline. The endpoint is synthetic, so nothing is
+ * billed and no real model is contacted. */
+test('real PostgreSQL + fake OneBot: a real text provider produces the confirmation candidate', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
+  const modelRequests: string[] = [];
+  const measurements: unknown[] = [];
+  const fixture = await setup({ intelligence: createTextModelIntelligence(createDeepSeekTextProvider({
+    apiKey: 'fixture-key', modelId: 'fixture-model', promptVersion: 'reply-candidates-1', dataRegion: 'test', retentionPolicy: 'test',
+    fetchImpl: async (_url, init) => {
+      modelRequests.push(String(init?.body));
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        alternatives: [{ summary: '普通回应', parts: ['第一条', '第二条'] }],
+      }) } }], usage: { prompt_tokens: 100, completion_tokens: 20 } }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  }), measurement => measurements.push(measurement)) });
+  try {
+    assert.equal((await fixture.post(oneBotEvent('真实模型路径', 80001))).status, 204,
+      `ingress must accept the event: ${fixture.failures.join(' | ')}`);
+    const tasks = await fixture.bridge.service.ownerTasks();
+    assert.equal(tasks.items.length, 1, `the real provider path must yield one task: ${fixture.failures.join(' | ')}`);
+    assert.deepEqual(tasks.items[0]!.alternatives[0]!.parts.map(part => part.content), ['第一条', '第二条']);
+    assert.equal(modelRequests.length, 1, 'exactly one model request for one inbound message');
+    assert.equal(measurements.length, 1, 'one measurement line per call');
+    // Only versions, latency and tokens may reach the log sink - never the prompt or the answer.
+    const logged = JSON.stringify(measurements[0]);
+    assert.ok(!logged.includes('真实模型路径'), 'the inbound text must not appear in model telemetry');
+    assert.ok(!logged.includes('第一条'), 'the generated text must not appear in model telemetry');
+    assert.equal(fixture.received.length, 0, 'producing a candidate must not send anything');
+  } finally { await fixture.cleanup(); }
+});
+
 test('real PostgreSQL + fake OneBot: a platform time slightly ahead of our clock still yields a candidate', { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL to an isolated PostgreSQL test database' }, async () => {
   const fixture = await setup();
   try {

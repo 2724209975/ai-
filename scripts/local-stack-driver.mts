@@ -10,8 +10,19 @@ import type { ManagedProcess } from './local-supervisor.mts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const pgExecutable = (bin: string, name: string) => join(bin, `${name}${process.platform === 'win32' ? '.exe' : ''}`);
-export type LocalStackConfig = { bin: string; data: string; databaseUrl: string; pgPort: number; corePort: number; bridgePort: number; env: EnvLike };
+export type LocalStackPlatform = 'wechat' | 'qq';
+export type LocalStackConfig = { platform: LocalStackPlatform; bridgeEntry: string; bin: string; data: string;
+  databaseUrl: string; pgPort: number; corePort: number; bridgePort: number; env: EnvLike };
 function required(env: EnvLike, name: string) { const value = env[name]?.trim(); if (!value) throw new Error(`MISSING_ENV:${name}`); return value; }
+/** The bridge entry and required variables differ per platform; both stacks stay separately runnable. */
+function platformSelection(platform: LocalStackPlatform) {
+  if (platform === 'qq') return {
+    entry: join(root, 'apps/bridge/main.mts'),
+    required: ['QQ_ACCOUNT_ID', 'QQ_SELF_ID', 'QQ_BRIDGE_TOKEN'], outboundVar: 'QQ_ENABLE_OUTBOUND', outboundRequires: ['QQ_ONEBOT_BASE_URL'] };
+  return { entry: join(root, 'apps/bridge/wechat-main.mts'),
+    required: ['WECHAT_ACCOUNT_ID', 'WECHAT_SELF_REF', 'WECHAT_INGRESS_TOKEN', 'WECHAT_PROCESS_ID'],
+    outboundVar: 'WECHAT_ENABLE_OUTBOUND', outboundRequires: ['WECHAT_WXHELPER_BASE_URL'] };
+}
 async function clusterPid(data: string): Promise<number | undefined> {
   try {
     const value = Number((await readFile(join(data, 'postmaster.pid'), 'utf8')).split(/\r?\n/)[0]);
@@ -30,10 +41,16 @@ export async function readLocalStackConfig(input: EnvLike): Promise<LocalStackCo
   if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== '/') throw new Error('LOCAL_ORIGIN_REQUIRED');
   const corePort = Number(origin.port || '80'), bridgePort = Number(input.LOCAL_BRIDGE_PORT || '19099');
   if (!Number.isSafeInteger(bridgePort) || bridgePort < 1 || bridgePort > 65535 || new Set([pgPort, corePort, bridgePort]).size !== 3) throw new Error('LOCAL_PORTS_INVALID');
-  const env = { ...input, HOST: '127.0.0.1', START_PAUSED: '1', CORE_PLATFORM: 'wechat' };
+  const platformInput = input.LOCAL_BRIDGE_PLATFORM?.trim() || 'wechat';
+  if (platformInput !== 'wechat' && platformInput !== 'qq') throw new Error('LOCAL_BRIDGE_PLATFORM_INVALID');
+  const platform: LocalStackPlatform = platformInput;
+  const selection = platformSelection(platform);
+  const env = { ...input, HOST: '127.0.0.1', START_PAUSED: '1', CORE_PLATFORM: platform };
   readCoreConfig({ ...env, PORT: String(corePort) });
-  for (const name of ['WECHAT_ACCOUNT_ID', 'WECHAT_SELF_REF', 'WECHAT_INGRESS_TOKEN', 'WECHAT_PROCESS_ID']) required(input, name);
-  return { bin, data, databaseUrl, pgPort, corePort, bridgePort, env };
+  for (const name of selection.required) required(input, name);
+  // Outbound needs its endpoint; asking for outbound without one is a configuration mistake.
+  if (input[selection.outboundVar]?.trim() === '1') for (const name of selection.outboundRequires) required(input, name);
+  return { platform, bridgeEntry: selection.entry, bin, data, databaseUrl, pgPort, corePort, bridgePort, env };
 }
 
 async function freePort(port: number) {
@@ -78,7 +95,7 @@ export function createLocalStackDriver(options: { config: LocalStackConfig; sign
     const lifecycle = new AbortController();
     const child = name === 'postgres'
       ? spawn(pgExecutable(config.bin, 'postgres'), ['-D', config.data, '-p', String(port), '-c', 'listen_addresses=127.0.0.1', '-c', 'logging_collector=off', '-c', 'log_statement=none', '-c', 'log_min_error_statement=panic'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: config.env, cwd: root })
-      : spawn(process.execPath, [name === 'core' ? options.entries?.core ?? join(root, 'apps/core/main.mts') : options.entries?.bridge ?? join(root, 'apps/bridge/wechat-main.mts')], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...config.env, PORT: String(port) }, cwd: root });
+      : spawn(process.execPath, [name === 'core' ? options.entries?.core ?? join(root, 'apps/core/main.mts') : options.entries?.bridge ?? config.bridgeEntry], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...config.env, PORT: String(port) }, cwd: root });
     const ownership = name === 'postgres' && child.pid ? { pid: child.pid, exited: false } : undefined;
     let finished = false, failedLog = false, readyPromise: Promise<void> | undefined, stopPromise: Promise<void> | undefined;
     const exited = new Promise<void>(done => {
