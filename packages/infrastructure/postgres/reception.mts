@@ -14,7 +14,7 @@ import { newId } from '../../orchestration/postgres/ids.mts';
 import { normalizeObservation } from '../../platform/qq/normalize.mts';
 import { WireError } from '../../platform/qq/onebot-codec.mts';
 import type { AtomicReceptionPort } from '../../platform/qq/webhook-ingress.mts';
-import type { WireObservation } from '../../platform/qq/onebot-codec.mts';
+import type { WireObservation, WireMessage } from '../../platform/qq/onebot-codec.mts';
 
 export type RawEventStore = {
   /** Bytes are private (owner-only), written atomically, and never logged. */
@@ -80,6 +80,8 @@ export type PgReceptionOptions = {
   onEvent(event: ReceivedEvent['event'], outcome: 'inserted'): Promise<void>;
   /** 02 pauses this entire account inside the receiving transaction; no peer may be guessed. */
   onUnmappedSelf?(tx: PgClient, input: { accountId: string; rawEventRef: string; correlationId: string }): Promise<void>;
+  /** Optional private echo classification, in the inbox transaction. Omission preserves legacy delivery. */
+  classifySelf?(tx: PgClient, observation: WireMessage): Promise<'echo' | 'unmapped'>;
   now?: () => number;
 };
 
@@ -89,14 +91,17 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
     platform: 'qq',
     async commitReceived({ dedupeKey, rawBytes, observation }: { dedupeKey: string; rawBytes: Uint8Array; observation: WireObservation }) {
       if (!dedupeKey || dedupeKey !== observation.dedupeKey) throw new Error('VALIDATION_FAILED');
+      const classifiedSelf = Boolean(options.classifySelf) && observation.kind === 'message'
+        && observation.direction === 'self' && observation.actor === 'unknown';
+      const privateSelf = classifiedSelf || observation.kind === 'unmapped_self';
       const unmappedSelf = observation.kind === 'unmapped_self';
       const peer = unmappedSelf ? undefined : observation.externalContactRef;
       const conversationId = peer ? await options.resolveConversation(peer) : undefined;
-      const inboxScope = conversationId ?? (unmappedSelf ? 'unmapped:self' : `unmapped:${peer}`);
+      let inboxScope = conversationId ?? (unmappedSelf ? 'unmapped:self' : `unmapped:${peer}`);
       const receivedAt = new Date(now()).toISOString();
       const sha256 = createHash('sha256').update(rawBytes).digest('hex');
       let event: ReceivedEvent['event'] | undefined;
-      if (conversationId) {
+      if (conversationId && !privateSelf) {
         event = normalizeObservation(observation, {
           accountId: options.accountId, externalAccountRef: observation.externalAccountRef, conversationId,
           eventId: newId(now()), correlationId: newId(now()), causationId: observation.dedupeKey,
@@ -106,18 +111,36 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
       const inserted = await withTransaction(options.pool, async tx => {
         // Serialize one platform event key before touching the filesystem. A conflicting replay
         // cannot write a second unreferenced raw file while the first transaction is committing.
-        await tx.query('SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))', [`qq:${options.accountId}:${inboxScope}`, dedupeKey]);
-        const prior = await tx.query<{ payload_sha256: string }>(`SELECT payload_sha256 FROM platform_inbox_raw
-          WHERE platform='qq' AND account_id=$1 AND conversation_id=$2 AND event_key=$3`, [options.accountId, inboxScope, dedupeKey]);
+        const stableSelf = Boolean(options.classifySelf) && privateSelf;
+        await tx.query('SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))',
+          [stableSelf ? `qq:${options.accountId}:self` : `qq:${options.accountId}:${inboxScope}`, dedupeKey]);
+        // Check a self key across both verdict scopes before consulting today's ledger. A replay
+        // cannot turn a previously quarantined early echo into another accepted inbox row.
+        const prior = await tx.query<{ payload_sha256: string }>(stableSelf
+          ? `SELECT payload_sha256 FROM platform_inbox_raw WHERE platform='qq' AND account_id=$1
+              AND conversation_id IN ('agent-echo','unmapped:self') AND event_key=$2`
+          : `SELECT payload_sha256 FROM platform_inbox_raw WHERE platform='qq' AND account_id=$1
+              AND conversation_id=$2 AND event_key=$3`,
+          stableSelf ? [options.accountId, dedupeKey] : [options.accountId, inboxScope, dedupeKey]);
         if (prior.rows[0]) {
-          // Same platform event key with different bytes is a conflict, not a duplicate: answering
-          // 409 tells the bridge that retrying cannot help, instead of an opaque 503 loop.
           if (prior.rows[0].payload_sha256 !== sha256) throw new WireError('CONFLICT_VERSION');
           return false;
         }
+        let echo = false;
+        if (classifiedSelf && observation.kind === 'message') {
+          // Locks from an unsuccessful match must not survive into 02's pause/dispatch boundary.
+          // Otherwise an ongoing dispatch could hold its lease while waiting on our read lock.
+          await tx.query('SAVEPOINT qq_self_origin');
+          echo = observation.echoCandidateTarget !== undefined
+            && observation.echoCandidateTarget === observation.externalContactRef
+            && await options.classifySelf!(tx, observation) === 'echo';
+          if (!echo) await tx.query('ROLLBACK TO SAVEPOINT qq_self_origin');
+          await tx.query('RELEASE SAVEPOINT qq_self_origin');
+          inboxScope = echo ? 'agent-echo' : 'unmapped:self';
+        }
         // Discovery for non-enrolled peers retains only scoped IDs, event key, timestamp and
         // digest in the private database. Own-account ambiguity retains restricted raw evidence.
-        const payloadRef = conversationId || unmappedSelf
+        const payloadRef = conversationId || privateSelf
           ? await options.store.put({ accountId: options.accountId, receivedAt, sha256, bytes: rawBytes })
           : 'discovery:metadata-only';
         const rows = await tx.query<{ id: string }>(`INSERT INTO platform_inbox_raw(id,platform,account_id,conversation_id,event_key,payload_ref,payload_sha256)
@@ -125,7 +148,7 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
           [newId(now()), options.accountId, inboxScope, dedupeKey, payloadRef, sha256]);
         if (!rows.rows.length) throw new WireError('CONFLICT_VERSION');
         if (event) await appendOutbox(tx, event);
-        if (unmappedSelf) {
+        if (privateSelf && !echo) {
           if (!options.onUnmappedSelf) throw new Error('UNMAPPED_SELF_PAUSE_UNAVAILABLE');
           await options.onUnmappedSelf(tx, { accountId: options.accountId, rawEventRef: observation.rawEventRef, correlationId: newId(now()) });
         }

@@ -43,6 +43,16 @@ dedupeKey 当前按平台/账号/联系人/消息 ID/事件种类生成；桥接
 
 公共 schema、02 dispatch 租约/epoch、持久发送账本和桥接组合根已落地；真实桥接媒体完整性、自身来源与恢复覆盖仍须逐项验证，账号实测与 outbox 接线证据见计划。OneBot `get_image`/`get_record` 标准响应是桥接本机路径，跨容器/机器不可直接假定可读；后续需固定安全传输与原件/转码语义。不得将编码结果直接送到平台绕开 02。本次没有创建通用任意 action 调用器。
 
+## 持久账本回显（P4-6b）
+
+QQ 桥接只对带实际 `target_id` 的 `message_sent` 查询持久发送账本：平台消息 ID、内部账号、目标好友都须精确匹配，attempt 状态只接受 `SUBMITTED` / `DELIVERED`。正文、时间、`message_sent_type`、mapper 和事件自称的 actor 都不是回显证明。不接 owner verifier，`owner_message_signal` 仍是 unknown。
+
+确认的系统回显只保存私有原始证据和 scope=`agent-echo` 的 inbox 行，不创建公共事件或消息，不暂停，也不改变送达状态。其余自身事件由 02 暂停整个账号，保留 `OWNER_ORIGIN_UNMAPPED`。早于 HTTP 结果提交的回显不等待新证明、不重试；之后相同字节重投也保留首次隔离结果。相同事件键更换字节返回 409。
+
+自发事件的去重锁按账号和事件键串行，判定前跨回显/隔离两个 scope 检查已有记录。账本读取与证据提交同事务，对匹配行采用非等待读锁；结果写入中或被锁的记录保守视为证据不足。失败匹配的读锁在调用 02 暂停前释放，避免与派发租约产生锁顺序冲突。暂停仍经过 02 的既有提交边界，可能等待正在结束的派发；这不会重新判定回显，也不会重发。
+
+`createPgReceptionPort` 的分类钩子为可选，不传时保留原来的消息消费与 outbox 行为。无迁移、索引或公共契约新增。假 HTTP / 真实隔离 PostgreSQL 的通过结果见 [交付报告](../../../docs/reports/P4-6b-2026-10-04.md)；真实 NapCat 的事件顺序、账号和回显字段仍由本人验收。
+
 ## 查证来源（2026-09-22）
 
 - [OneBot 私聊事件](https://github.com/botuniverse/onebot-11/blob/master/event/message.md)：身份、时间、消息字段。

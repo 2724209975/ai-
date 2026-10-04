@@ -45,14 +45,25 @@ test('same ID in different peer conversation does not collapse', async () => {
   await ingestOneBotWebhook(request(), deps); await ingestOneBotWebhook(request({ ...event, user_id: 10003 }), deps);
   assert.equal(rows.size, 2);
 });
-test('authenticated self event without verified peer is persisted as private unmapped evidence, never contact inbound', async () => {
+test('an own-account event never becomes contact inbound; a peer-naming event stays unproven', async () => {
   const { deps, rows } = setup();
+  // `target_id` is only a *candidate* peer: taking it lets the durable ledger judge the event, but
+  // it must not upgrade the actor. Whether this is our echo is decided in the receiving transaction,
+  // never here.
   const self = { ...event, post_type: 'message_sent', user_id: 10001, target_id: 10002, actor: 'owner' };
   const result = await ingestOneBotWebhook(request(self), deps);
   assert.equal(result.status, 204);
-  const saved = [...rows.values()][0] as { observation: { kind: string; externalContactRef?: string } };
-  assert.equal(saved.observation.kind, 'unmapped_self');
-  assert.equal(saved.observation.externalContactRef, undefined);
+  const saved = [...rows.values()][0] as { observation: { kind: string; direction?: string; actor?: string; externalContactRef?: string } };
+  assert.equal(saved.observation.kind, 'message');
+  assert.equal(saved.observation.direction, 'self');
+  assert.equal(saved.observation.actor, 'unknown', 'a claimed actor in the body is never trusted');
+  assert.equal(saved.observation.externalContactRef, '10002');
+  // An own-account event with no target and no mapper is still quarantined at the account level.
+  const anonymous = { ...event, post_type: 'message_sent', user_id: 10001, message_id: 43 };
+  assert.equal((await ingestOneBotWebhook(request(anonymous), deps)).status, 204);
+  const quarantined = [...rows.values()].at(-1) as { observation: { kind: string; externalContactRef?: string } };
+  assert.equal(quarantined.observation.kind, 'unmapped_self');
+  assert.equal(quarantined.observation.externalContactRef, undefined);
 });
 test('replay after handler recreation relies on shared store; signature alone is not freshness', async () => {
   const { deps } = setup(); await ingestOneBotWebhook(request(), deps);

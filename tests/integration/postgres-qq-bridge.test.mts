@@ -22,11 +22,168 @@ import { createQqOutboxPump } from '../../apps/bridge/outbox-pump.mts';
 import { createTextModelIntelligence } from '../../packages/ai/index.mts';
 import { createDeepSeekTextProvider } from '../../packages/ai/generation/deepseek-provider.mts';
 import { collectSpikeEvidence } from '../../packages/platform/qq/spike-evidence.mts';
+import { createQqSendEchoLedger } from '../../packages/platform/qq/pg-echo-ledger.mts';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const TOKEN = 'fixture-bridge-token';
 const SELF_ID = '10001';
+
+function selfEcho(messageId = 90001, overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({ post_type: 'message_sent', message_type: 'private', sub_type: 'friend',
+    self_id: Number(SELF_ID), user_id: Number(SELF_ID), target_id: 20002, message_id: messageId,
+    time: Math.floor(Date.now() / 1000), message: [{ type: 'text', data: { text: '任意合成回显正文' } }], ...overrides });
+}
+
+async function approveEchoSend(fixture: Awaited<ReturnType<typeof setup>>) {
+  assert.equal((await fixture.post(oneBotEvent('合成来信', 81001))).status, 204);
+  const task = (await fixture.bridge.service.ownerTasks()).items[0]!;
+  const editedParts = [{ type: 'text' as const, content: '合成确认回复' }];
+  await fixture.bridge.service.confirmTask(task.id, { taskVersion: task.taskVersion, planVersion: task.planVersion,
+    alternativeId: task.alternatives[0]!.alternativeId, editedParts, contentHash: contentHash(editedParts), idempotencyKey: randomUUID() });
+}
+
+const echoSettings = { skip: !databaseUrl && !process.env.CI && 'set TEST_DATABASE_URL' };
+
+test('QQ ledger echo is private, inert and idempotent for SUBMITTED and DELIVERED', echoSettings, async t => {
+  for (const status of ['SUBMITTED', 'DELIVERED']) await t.test(status, async () => {
+    const fixture = await setup();
+    try {
+      await approveEchoSend(fixture);
+      assert.equal((await fixture.bridge.worker!.runOnce()).dispatched, 1);
+      if (status === 'DELIVERED') await fixture.pool.query("UPDATE dispatch_attempts SET status='DELIVERED'");
+      const beforeOutbox = (await fixture.pool.query('SELECT count(*)::int AS n FROM event_outbox')).rows[0]!.n;
+      const beforeMessages = (await fixture.pool.query('SELECT count(*)::int AS n FROM data_messages')).rows[0]!.n;
+      const body = selfEcho();
+      assert.deepEqual((await Promise.all([fixture.post(body), fixture.post(body)])).map(r => r.status), [204, 204]);
+      const echo = (await fixture.pool.query("SELECT payload_ref FROM platform_inbox_raw WHERE conversation_id='agent-echo'")).rows;
+      assert.equal(echo.length, 1);
+      assert.equal(await readFile(join(fixture.rawRoot, echo[0]!.payload_ref), 'utf8'), body);
+      assert.equal((await fixture.conversation()).pause_reasons.includes('OWNER_ORIGIN_UNMAPPED'), false);
+      assert.equal((await fixture.pool.query('SELECT count(*)::int AS n FROM event_outbox')).rows[0]!.n, beforeOutbox);
+      assert.equal((await fixture.pool.query('SELECT count(*)::int AS n FROM data_messages')).rows[0]!.n, beforeMessages);
+      assert.equal(fixture.received.length, 1);
+      assert.equal((await fixture.post(selfEcho(90001, { time: 1 }))).status, 409);
+    } finally { await fixture.cleanup(); }
+  });
+});
+
+test('QQ self events without all four ledger conditions keep account quarantine', echoSettings, async t => {
+  const cases = [
+    { name: 'wrong peer', event: { target_id: 20003 } },
+    { name: 'target is the account itself', event: { target_id: Number(SELF_ID) } },
+    { name: 'wrong internal account', sql: "UPDATE dispatch_attempts SET account_id='fixture-other-account'" },
+    { name: 'RESULT_UNKNOWN', sql: "UPDATE dispatch_attempts SET status='RESULT_UNKNOWN'" },
+    { name: 'SUBMITTING', sql: "UPDATE dispatch_attempts SET status='SUBMITTING'" },
+    { name: 'FAILED_DEFINITE', sql: "UPDATE dispatch_attempts SET status='FAILED_DEFINITE'" },
+    { name: 'no target_id', event: { target_id: undefined } },
+    { name: 'no ledger ID', id: 90002 },
+    { name: 'manual self event with matching ID and target', event: { post_type: 'message' } },
+    { name: 'manual send absent from ledger', id: 99999 },
+  ];
+  for (const item of cases) await t.test(item.name, async () => {
+    const fixture = await setup();
+    try {
+      await approveEchoSend(fixture); await fixture.bridge.worker!.runOnce();
+      if (item.sql) await fixture.pool.query(item.sql);
+      const body = selfEcho(item.id ?? 90001, item.event);
+      assert.equal((await fixture.post(body)).status, 204, fixture.failures.join(' | '));
+      assert.ok((await fixture.conversation()).pause_reasons.includes('OWNER_ORIGIN_UNMAPPED'));
+      assert.equal((await fixture.pool.query('SELECT paused FROM dispatch_control')).rows[0]!.paused, true);
+      assert.equal((await fixture.pool.query("SELECT count(*)::int AS n FROM platform_inbox_raw WHERE conversation_id='agent-echo'")).rows[0]!.n, 0);
+      const raw = (await fixture.pool.query("SELECT payload_ref FROM platform_inbox_raw WHERE conversation_id='unmapped:self'")).rows;
+      assert.equal(raw.length, 1);
+      assert.equal(await readFile(join(fixture.rawRoot, raw[0]!.payload_ref), 'utf8'), body);
+    } finally { await fixture.cleanup(); }
+  });
+});
+
+test('QQ echo before HTTP result stays quarantined on replay after the ledger catches up', echoSettings, async () => {
+  let reply!: () => void;
+  const waiting = new Promise<void>(resolve => { reply = resolve; });
+  const fixture = await setup({ beforeReply: () => waiting });
+  try {
+    await approveEchoSend(fixture);
+    const send = fixture.bridge.worker!.runOnce();
+    for (let n=0; !fixture.received.length && n<200; n++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(fixture.received.length, 1);
+    const body = selfEcho(); const echo = fixture.post(body);
+    for (let n=0; !fixture.failures.some(x => x.includes('self-origin') && x.includes('NO_PROOF')) && n<200; n++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.ok(fixture.failures.some(x => x.includes('NO_PROOF')), 'classify once against the committed SUBMITTING intent, without waiting for the response');
+    reply();
+    assert.equal((await send).dispatched, 1);
+    assert.equal((await echo).status, 204);
+    assert.equal((await fixture.pool.query('SELECT status FROM dispatch_attempts')).rows[0]!.status, 'SUBMITTED');
+    assert.equal((await fixture.post(body)).status, 204);
+    assert.ok((await fixture.conversation()).pause_reasons.includes('OWNER_ORIGIN_UNMAPPED'));
+    assert.equal((await fixture.pool.query("SELECT count(*)::int AS n FROM platform_inbox_raw WHERE conversation_id IN ('unmapped:self','agent-echo')")).rows[0]!.n, 1);
+    assert.equal((await fixture.pool.query("SELECT count(*)::int AS n FROM platform_inbox_raw WHERE conversation_id='agent-echo'")).rows[0]!.n, 0);
+  } finally { reply(); await fixture.cleanup(); }
+});
+
+test('QQ reception without the classification hook preserves mapped self event delivery', echoSettings, async () => {
+  const fixture = await setup();
+  try {
+    const events: unknown[] = [];
+    const observation = decodePrivateEvent(JSON.parse(selfEcho(92001, { target_id: undefined })),
+      { expectedSelfId: SELF_ID, rawEventRef: 'fixture:legacy-self', selfMessagePeer: '20002' });
+    const port = createPgReceptionPort({ pool: fixture.pool, accountId: fixture.accountId, adapterVersion: 'fixture-legacy',
+      store: createFileRawEventStore(fixture.rawRoot), resolveConversation: async () => fixture.conversationId,
+      onEvent: async event => { events.push(event); } });
+    assert.equal(await port.commitReceived({ dedupeKey: observation.dedupeKey, rawBytes: Buffer.from(selfEcho(92001)), observation }), 'inserted');
+    assert.equal(events.length, 1);
+    assert.equal((events[0] as { eventType: string }).eventType, 'PlatformSelfMessageUnattributed');
+    assert.ok((await fixture.pool.query('SELECT published_at FROM event_outbox')).rows[0]!.published_at);
+  } finally { await fixture.cleanup(); }
+});
+
+test('QQ ledger skips an in-flight result transaction instead of waiting for new proof', echoSettings, async () => {
+  const fixture = await setup();
+  try {
+    await approveEchoSend(fixture); await fixture.bridge.worker!.runOnce();
+    await fixture.admin.query('BEGIN');
+    await fixture.admin.query("UPDATE dispatch_attempts SET status='RESULT_UNKNOWN'");
+    const ledger = createQqSendEchoLedger(fixture.pool);
+    await withTransaction(fixture.pool, async tx => {
+      await tx.query("SET LOCAL statement_timeout='1000ms'");
+      assert.equal(await ledger.findByPlatformMessageId(fixture.accountId, '90001', tx), undefined,
+        'a locked result is no evidence, even if the previous committed version was SUBMITTED');
+    });
+    await fixture.admin.query('ROLLBACK');
+    assert.equal((await ledger.findByPlatformMessageId(fixture.accountId, '90001'))?.peer, '20002');
+  } finally { await fixture.admin.query('ROLLBACK'); await fixture.cleanup(); }
+});
+
+test('QQ unmatched classification releases its read locks before the account pause boundary', echoSettings, async () => {
+  const fixture = await setup();
+  try {
+    await approveEchoSend(fixture); await fixture.bridge.worker!.runOnce();
+    const ledger = createQqSendEchoLedger(fixture.pool);
+    const bytes = Buffer.from(selfEcho(90001, { target_id: 20003 }));
+    const observation = decodePrivateEvent(JSON.parse(bytes.toString()), { expectedSelfId: SELF_ID, rawEventRef: 'fixture:lock-order' });
+    let pauses = 0;
+    const port = createPgReceptionPort({ pool: fixture.pool, accountId: fixture.accountId, adapterVersion: 'fixture-lock-order',
+      store: createFileRawEventStore(fixture.rawRoot), resolveConversation: async () => undefined,
+      onEvent: async () => { throw new Error('SELF_EVENT_FORBIDDEN'); },
+      classifySelf: async (tx, message) => {
+        const match = await ledger.findByPlatformMessageId(fixture.accountId, message.platformMessageId, tx);
+        assert.ok(match);
+        assert.notEqual(match.peer, message.externalContactRef);
+        return 'unmapped';
+      },
+      onUnmappedSelf: async () => {
+        pauses++;
+        // Another result writer can proceed once a failed candidate's row locks are released.
+        // This models the writer holding 02's dispatch lease before our pause acquires it.
+        await fixture.admin.query("SET statement_timeout='1000ms'");
+        await fixture.admin.query("UPDATE dispatch_attempts SET updated_at=now()");
+        await fixture.admin.query('UPDATE orch_conversations SET updated_at=now()');
+      } });
+    assert.equal(await port.commitReceived({ dedupeKey: observation.dedupeKey, rawBytes: bytes, observation }), 'inserted');
+    assert.equal(pauses, 1);
+    assert.equal((await fixture.pool.query("SELECT payload_ref FROM platform_inbox_raw WHERE conversation_id='unmapped:self'")).rows.length, 1);
+  } finally { await fixture.cleanup(); }
+});
 
 function listen(server: Server): Promise<number> {
   return new Promise((ready, failed) => {
@@ -44,7 +201,7 @@ function oneBotEvent(text: string, messageId: number, userId = 20002) {
     user_id: userId, message_id: messageId, time: Math.floor(Date.now() / 1000), message: [{ type: 'text', data: { text } }] });
 }
 
-async function setup(options: { intelligence?: Parameters<typeof createQqBridge>[0]['intelligence'] } = {}) {
+async function setup(options: { intelligence?: Parameters<typeof createQqBridge>[0]['intelligence']; beforeReply?: () => Promise<void> } = {}) {
   if (!databaseUrl) throw new Error('TEST_DATABASE_URL is required in CI');
   const { Client, Pool } = await import('pg');
   const schema = `test_bridge_${randomBytes(8).toString('hex')}`;
@@ -68,10 +225,11 @@ async function setup(options: { intelligence?: Parameters<typeof createQqBridge>
   const onebot = createServer((request, response) => {
     let text = '';
     request.on('data', chunk => { text += chunk.toString(); });
-    request.on('end', () => {
+    request.on('end', async () => {
       const parsed = JSON.parse(text) as Record<string, unknown>;
       received.push({ path: request.url ?? '', authorization: request.headers.authorization, body: parsed, echo: parsed.echo });
       if (outcome === 'disconnect') { response.destroy(); return; }
+      await options.beforeReply?.();
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(outcome === 'ok'
         ? { status: 'ok', retcode: 0, data: { message_id: 90001 }, echo: parsed.echo }
@@ -101,6 +259,7 @@ async function setup(options: { intelligence?: Parameters<typeof createQqBridge>
     pool, admin, schema, bridge, received, conversation, contactId, conversationId, accountId, rawRoot, onebotPort, base, post, failures,
     setOutcome(value: 'ok' | 'failed' | 'disconnect') { outcome = value; },
     async cleanup() {
+      await bridge.worker?.stop();
       await bridge.outbox.stop();
       await close(bridge.server);
       await close(onebot);

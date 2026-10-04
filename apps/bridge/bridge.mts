@@ -12,6 +12,8 @@ import { createDispatchWorker } from '../../packages/orchestration/postgres/work
 import { createPgPersistentFakeIntelligence, type PersistentIntelligence } from '../../packages/ai/index.mts';
 import { createPgReceptionPort, type RawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
 import { createQqPlatformPort } from '../../packages/platform/qq/napcat-bridge.mts';
+import { createQqSendEchoLedger } from '../../packages/platform/qq/pg-echo-ledger.mts';
+import { classifyQqSelfMessage } from '../../packages/platform/qq/self-origin.mts';
 import { failureResponse, ingestAuthenticatedOneBotEvent, ingestOneBotWebhook } from '../../packages/platform/qq/webhook-ingress.mts';
 import type { SubmissionTransport } from '../../packages/platform/qq/send-executor.mts';
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
@@ -80,6 +82,7 @@ export function createQqBridge(options: QqBridgeOptions) {
     },
   };
   const data = new PgDataProvider();
+  const echoLedger = createQqSendEchoLedger(options.pool);
   const service = new PgConfirmedService({
     pool: options.pool, data, intelligence: options.intelligence ?? createPgPersistentFakeIntelligence({ pool: options.pool, data }), platform: reportingPlatform, authority, now,
     aggregationWindowMs: options.aggregationWindowMs ?? 0, maxAggregationMs: options.maxAggregationMs ?? 30_000,
@@ -98,6 +101,16 @@ export function createQqBridge(options: QqBridgeOptions) {
     // Raw evidence and the outbox row are committed before any business consumer runs.
     async onEvent(event) { await service.ingestPlatformEvent(event); },
     async onUnmappedSelf(tx, input) { await service.pauseAccountForUnmappedSelf(tx, input.accountId, input); },
+    // Same transaction as the inbox row: a proven own-send echo records private evidence and a
+    // dedupe row, then stays inert instead of pausing the account. No verifier is wired here, so an
+    // unproven self message still falls back to the account pause.
+    classifySelf: async (tx, observation) => {
+      const origin = await classifyQqSelfMessage({ ...observation, externalAccountRef: options.accountId },
+        { ledger: echoLedger, tx });
+      const echo = origin.actor === 'agent' && origin.evidence === 'durable_platform_id_match';
+      report(new Error(`self-origin ${echo ? origin.evidence : origin.actor === 'unknown' ? origin.reason : 'owner'}`), 'self-origin');
+      return echo ? 'echo' : 'unmapped';
+    },
   });
   const outbox = createQqOutboxPump({ pool: options.pool, accountId: options.accountId,
     onEvent: event => service.ingestPlatformEvent(event),

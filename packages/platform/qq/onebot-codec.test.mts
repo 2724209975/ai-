@@ -40,6 +40,44 @@ test('message_sent never automatically becomes owner; peer mapping is mandatory'
   if (e.kind !== 'message') throw new Error('expected message');
   assert.equal(e.actor, 'unknown'); assert.equal(e.direction, 'self');
 });
+test('message_sent uses its own target_id, and the mapper stays a fallback', () => {
+  // The event names the conversation it belongs to, so it is a candidate peer rather than a
+  // quarantine. It still must not claim to be owner or agent: the ledger decides that later.
+  const declared = decodePrivateEvent({ ...base, post_type: 'message_sent', user_id: 10001, target_id: 30003 }, context);
+  assert.equal(declared.kind, 'message');
+  if (declared.kind !== 'message') return;
+  assert.equal(declared.externalContactRef, '30003');
+  assert.equal(declared.direction, 'self');
+  assert.equal(declared.actor, 'unknown');
+  assert.equal(declared.requiresReview, true);
+  // The bridge-supplied mapper is only consulted when the event names no target.
+  const mapped = decodePrivateEvent({ ...base, post_type: 'message_sent', user_id: 10001 }, { ...context, selfMessagePeer: '10002' });
+  if (mapped.kind !== 'message') throw new Error('expected message');
+  assert.equal(mapped.externalContactRef, '10002');
+  // A declared target wins over a stale mapper value, so a wrong mapping cannot redirect the echo.
+  const both = decodePrivateEvent({ ...base, post_type: 'message_sent', user_id: 10001, target_id: 30003 }, { ...context, selfMessagePeer: '10002' });
+  if (both.kind !== 'message') throw new Error('expected message');
+  assert.equal(both.externalContactRef, '30003');
+  // Neither present still quarantines the account rather than guessing a peer.
+  assert.equal(decodePrivateEvent({ ...base, post_type: 'message_sent', user_id: 10001 }, context).kind, 'unmapped_self');
+  // A self-addressed target is not a conversation.
+  assert.equal(decodePrivateEvent({ ...base, post_type: 'message_sent', user_id: 10001, target_id: 10001 }, context).kind,
+    'unmapped_self');
+});
+test('only an explicit message_sent target carries echo eligibility; mapper or self actor alone do not', () => {
+  for (const input of [
+    { ...base, post_type: 'message_sent', user_id: 10001 },
+    { ...base, user_id: 10001, target_id: 10002 },
+  ]) {
+    const result = decodePrivateEvent(input, { ...context, selfMessagePeer: '10002' });
+    assert.equal(result.kind, 'message');
+    if (result.kind !== 'message') throw new Error('EXPECTED_MESSAGE');
+    assert.equal(result.echoCandidateTarget, undefined);
+  }
+  const result = decodePrivateEvent({ ...base, post_type: 'message_sent', user_id: 10001, target_id: 10002 }, context);
+  if (result.kind !== 'message') throw new Error('EXPECTED_MESSAGE');
+  assert.equal(result.echoCandidateTarget, '10002');
+});
 test('wrong account, groups and temporary chats are rejected', () => {
   assert.throws(() => decodePrivateEvent({ ...base, self_id: 99999 }, context), { message: 'FORBIDDEN' });
   for (const patch of [{ message_type: 'group' }, { sub_type: 'group' }, { sub_type: 'other' }]) assert.throws(() => decodePrivateEvent({ ...base, ...patch }, context), { message: 'UNSUPPORTED_CAPABILITY' });

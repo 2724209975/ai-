@@ -1,10 +1,11 @@
 /** Classification of a QQ self-message after raw-event persistence, before public event emission. */
 import { WireError } from './onebot-codec.mts';
+import type { PgClient } from '../../infrastructure/postgres/transaction.mts';
 import type { WireMessage } from './onebot-codec.mts';
 
 export type SendEchoLedger = {
   /** Must search durable platform-message-ID evidence, never content/time similarity. */
-  findByPlatformMessageId(account: string, platformMessageId: string): Promise<{
+  findByPlatformMessageId(account: string, platformMessageId: string, tx?: PgClient): Promise<{
     account: string; peer: string; platformMessageId: string; sendTaskId: string; sendKey: string;
   } | undefined>;
 };
@@ -18,11 +19,11 @@ export type SelfOrigin =
   | { actor: 'unknown'; reason: 'NO_PROOF' | 'LEDGER_SCOPE_CONFLICT' | 'EVIDENCE_UNAVAILABLE' };
 
 export async function classifyQqSelfMessage(message: WireMessage, deps: {
-  ledger: SendEchoLedger; ownerVerifier?: IndependentOwnerVerifier;
+  ledger: SendEchoLedger; ownerVerifier?: IndependentOwnerVerifier; tx?: PgClient;
 }): Promise<SelfOrigin> {
   if (message.direction !== 'self' || message.actor !== 'unknown') throw new WireError('VALIDATION_FAILED');
   let match: Awaited<ReturnType<SendEchoLedger['findByPlatformMessageId']>>;
-  try { match = await deps.ledger.findByPlatformMessageId(message.externalAccountRef, message.platformMessageId); }
+  try { match = await deps.ledger.findByPlatformMessageId(message.externalAccountRef, message.platformMessageId, deps.tx); }
   catch { return { actor: 'unknown', reason: 'EVIDENCE_UNAVAILABLE' }; }
   if (match) {
     if (match.account !== message.externalAccountRef || match.peer !== message.externalContactRef || match.platformMessageId !== message.platformMessageId

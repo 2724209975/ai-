@@ -38,6 +38,8 @@ export type WireMessage = {
   kind: 'message'; platform: 'qq'; externalAccountRef: string; externalContactRef: string;
   platformMessageId: string; sentAt: string; rawEventRef: string;
   direction: 'incoming' | 'self'; actor: 'contact' | 'unknown';
+  /** Only an actual message_sent target_id may be checked against the durable send ledger. */
+  echoCandidateTarget?: string;
   parts: WirePart[]; dedupeKey: string; requiresReview: boolean;
 };
 export type WireObservation = WireMessage | {
@@ -69,12 +71,17 @@ export function decodePrivateEvent(input: unknown, context: {
   const self = x.post_type === 'message_sent' || sender === account;
   if (!Array.isArray(x.message)) throw new WireError('UNSUPPORTED_CAPABILITY');
   if (x.message.length === 0 || x.message.length > 256) throw new WireError();
-  if (self && !context.selfMessagePeer) {
+  // A `message_sent` event names the conversation it belongs to. Take that as the candidate peer and
+  // keep the bridge-supplied mapper as a fallback, so an event that names its own target is no
+  // longer quarantined as `unmapped_self`. The value is still only a *candidate*: whether it proves
+  // a system echo is decided by the durable ledger, never by this field.
+  const declaredTarget = x.post_type === 'message_sent' && x.target_id !== undefined ? externalId(x.target_id) : undefined;
+  const peer = self ? (declaredTarget ?? (context.selfMessagePeer !== undefined ? externalId(context.selfMessagePeer) : undefined)) : sender;
+  if (self && (peer === undefined || (declaredTarget !== undefined && peer === account))) {
     return { kind: 'unmapped_self', platform: 'qq', externalAccountRef: account,
       platformMessageId: message, sentAt, rawEventRef,
       dedupeKey: JSON.stringify(['qq', account, 'unmapped-self', message, 'message']) };
   }
-  const peer = self ? externalId(context.selfMessagePeer) : sender;
   if (peer === account) throw new WireError('UNSUPPORTED_CAPABILITY');
   const parts: WirePart[] = x.message.map((v, index) => {
     const s = obj(v); const d = obj(s.data); const segmentType = str(s.type);
@@ -98,7 +105,10 @@ export function decodePrivateEvent(input: unknown, context: {
   });
   return { kind: 'message', platform: 'qq', externalAccountRef: account, externalContactRef: peer,
     platformMessageId: message, sentAt, rawEventRef, direction: self ? 'self' : 'incoming', actor: self ? 'unknown' : 'contact',
-    parts, dedupeKey: JSON.stringify(['qq', account, peer, message, 'message']),
+    ...(declaredTarget ? { echoCandidateTarget: declaredTarget } : {}),
+    parts, dedupeKey: declaredTarget
+      ? JSON.stringify(['qq', account, 'unmapped-self', message, 'message'])
+      : JSON.stringify(['qq', account, peer, message, 'message']),
     requiresReview: self || parts.some(p => p.kind !== 'text' && p.kind !== 'reply') };
 }
 
