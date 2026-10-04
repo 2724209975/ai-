@@ -34,6 +34,12 @@
 
 | A26 | Accepted 2026-10-04（本人批准 P4-6b 语义） | QQ 系统回显只认 `message_sent` 的持久精确匹配：平台消息 ID、`dispatch_attempts.account_id`、事件实际 `target_id` 与 attempt 会话的外部好友 ID 全部相等，attempt 状态限 `SUBMITTED` / `DELIVERED`。匹配后只保存私有原始证据和 scope=`agent-echo` 的 inbox 去重行，无公共事件、消息或暂停；不更新送达状态 | 其他自身事件均由 02 暂停整个账号（`OWNER_ORIGIN_UNMAPPED`）。不以正文、时间、mapper 或 `message_sent_type` 证明身份，不接 owner verifier。早到回显不等待新账本证据、不重试；相同字节重投保留首次判定，变化字节为 409。事务读取对匹配行非等待加锁，失败匹配先释放读锁再进入 02 暂停边界；后者仍可能等正在结束的派发。无新增迁移、公共事件或 02 修改；`owner_message_signal` 仍 unknown，AC16 不因本卡通过。证据见 [P4-6b](reports/P4-6b-2026-10-04.md)，真实平台顺序待本人核对 |
 
+## 阶段范围决定
+
+| ID | 状态 | 本人决定 | 影响 |
+| --- | --- | --- | --- |
+| Q2 / P4-6d | Deferred 2026-10-04 | 暂时不做表情发送；现有提案未批准 | P4-6d 搁置，迁移 0013 未应用；QQ 当前推进 P4-6a～c 的文字和图片验收，表情发送不作为本轮前置条件。恢复时更新提案并重新审定 Q2 |
+
 ## PRD D01–D13
 
 | ID | 状态 | 推荐方案 | 需要本人/实测决定 | 阻塞影响 |
