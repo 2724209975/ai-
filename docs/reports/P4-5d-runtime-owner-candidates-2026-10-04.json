@@ -1,0 +1,453 @@
+{
+  "protocol": "p4-5d-decoded-chain-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "disassemblerSha256": "3c39d1ef5fe2bd56e303941771e01cad5781743425d39ebd416dbf08266042ea",
+  "windows": [
+    {
+      "start": "0x25bf600",
+      "end": "0x25bf7fe",
+      "traceSha256": "b384b8dcb6ec64ac0ea9be2c93996beeee78568f1d5be5770be3f23b2eeb23da",
+      "instructionCount": 107,
+      "resynchronizations": 0,
+      "linearDecodeOnly": true,
+      "calls": [
+        {
+          "site": "0x25bf628",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "ff5010"
+        },
+        {
+          "site": "0x25bf640",
+          "kind": "direct",
+          "target": "0x3a5eda0",
+          "bytes": "e85bf74901"
+        },
+        {
+          "site": "0x25bf65c",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "41ff9098000000"
+        },
+        {
+          "site": "0x25bf688",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "ff90c8000000"
+        },
+        {
+          "site": "0x25bf694",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "ff90a8000000"
+        },
+        {
+          "site": "0x25bf6a4",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "ff5010"
+        },
+        {
+          "site": "0x25bf6bc",
+          "kind": "direct",
+          "target": "0x3a5eda0",
+          "bytes": "e8dff64901"
+        },
+        {
+          "site": "0x25bf7cb",
+          "kind": "direct",
+          "target": "0x2613d20",
+          "bytes": "e850450500"
+        }
+      ],
+      "references": [
+        {
+          "site": "0x25bf6e4",
+          "target": "0x4e0efac",
+          "bytes": "488d05c1f88402"
+        },
+        {
+          "site": "0x25bf704",
+          "target": "0x4e0efac",
+          "bytes": "488d05a1f88402"
+        },
+        {
+          "site": "0x25bf717",
+          "target": "0x4f70948",
+          "bytes": "4c8d0d2a129b02"
+        },
+        {
+          "site": "0x25bf730",
+          "target": "0x4f6ffc0",
+          "bytes": "488d1589089b02"
+        },
+        {
+          "site": "0x25bf792",
+          "target": "0x4f70910",
+          "bytes": "488d0577119b02"
+        },
+        {
+          "site": "0x25bf79e",
+          "target": "0x4f6ff90",
+          "bytes": "488d05eb079b02"
+        }
+      ],
+      "identityVerified": false
+    },
+    {
+      "start": "0x3a5eda0",
+      "end": "0x3a5ee41",
+      "traceSha256": "147fd2655b1909f4b7bbc596e11ecf4324776dbc6ece519f0bd53c04f516df8b",
+      "instructionCount": 38,
+      "resynchronizations": 0,
+      "linearDecodeOnly": true,
+      "calls": [
+        {
+          "site": "0x3a5eddc",
+          "kind": "direct",
+          "target": "0x39f2970",
+          "bytes": "e88f3bf9ff"
+        },
+        {
+          "site": "0x3a5edf8",
+          "kind": "direct",
+          "target": "0x39f0cc0",
+          "bytes": "e8c31ef9ff"
+        },
+        {
+          "site": "0x3a5ee22",
+          "kind": "direct",
+          "target": "0x39f0cc0",
+          "bytes": "e8991ef9ff"
+        }
+      ],
+      "references": [
+        {
+          "site": "0x3a5edca",
+          "target": "0x51035dc",
+          "bytes": "4c8d050b486a01"
+        },
+        {
+          "site": "0x3a5ede5",
+          "target": "0x519bca0",
+          "bytes": "4c8d05b4ce7301"
+        },
+        {
+          "site": "0x3a5edec",
+          "target": "0x519bcb0",
+          "bytes": "488d15bdce7301"
+        },
+        {
+          "site": "0x3a5edfd",
+          "target": "0x51a4ef4",
+          "bytes": "488d05f0607401"
+        },
+        {
+          "site": "0x3a5ee0a",
+          "target": "0x51a2f1c",
+          "bytes": "4c8d050b417401"
+        },
+        {
+          "site": "0x3a5ee16",
+          "target": "0x51a2b68",
+          "bytes": "488d154b3d7401"
+        }
+      ],
+      "identityVerified": false
+    },
+    {
+      "start": "0x3a5ee41",
+      "end": "0x3a5ee59",
+      "traceSha256": "e1e59d0c36a303088b10f448e6179329dd002b22f4745ceb54d172ca13b9b1ae",
+      "instructionCount": 3,
+      "resynchronizations": 0,
+      "linearDecodeOnly": true,
+      "calls": [],
+      "references": [],
+      "identityVerified": false
+    },
+    {
+      "start": "0x3a9c8d0",
+      "end": "0x3a9c9f7",
+      "traceSha256": "ae9dc1576034cd3079c89f9c55c7f7fb9d3b542ecd67bfc797182bd9b2ff1729",
+      "instructionCount": 80,
+      "resynchronizations": 0,
+      "linearDecodeOnly": true,
+      "calls": [
+        {
+          "site": "0x3a9c91f",
+          "kind": "direct",
+          "target": "0x39f0cc0",
+          "bytes": "e89c43f5ff"
+        },
+        {
+          "site": "0x3a9c949",
+          "kind": "direct",
+          "target": "0x39f0cc0",
+          "bytes": "e87243f5ff"
+        },
+        {
+          "site": "0x3a9c969",
+          "kind": "indirect-slot",
+          "target": "0x56e39d0",
+          "bytes": "ff156170c401"
+        },
+        {
+          "site": "0x3a9c9c2",
+          "kind": "direct",
+          "target": "0x3a1b060",
+          "bytes": "e899e6f7ff"
+        },
+        {
+          "site": "0x3a9c9d2",
+          "kind": "direct",
+          "target": "0x3a9b600",
+          "bytes": "e829ecffff"
+        },
+        {
+          "site": "0x3a9c9e3",
+          "kind": "indirect-slot",
+          "target": "0x56e39e0",
+          "bytes": "ff15f76fc401"
+        }
+      ],
+      "references": [
+        {
+          "site": "0x3a9c8e2",
+          "target": "0x4f765b8",
+          "bytes": "488d05cf9c4d01"
+        },
+        {
+          "site": "0x3a9c90c",
+          "target": "0x518dd40",
+          "bytes": "4c8d052d146f01"
+        },
+        {
+          "site": "0x3a9c918",
+          "target": "0x519bcb0",
+          "bytes": "488d1591f36f01"
+        },
+        {
+          "site": "0x3a9c924",
+          "target": "0x51a4ef4",
+          "bytes": "488d05c9857001"
+        },
+        {
+          "site": "0x3a9c931",
+          "target": "0x51a2f1c",
+          "bytes": "4c8d05e4657001"
+        },
+        {
+          "site": "0x3a9c93d",
+          "target": "0x51a2b68",
+          "bytes": "488d1524627001"
+        },
+        {
+          "site": "0x3a9c94e",
+          "target": "0x51a1ef0",
+          "bytes": "488d059b557001"
+        },
+        {
+          "site": "0x3a9c975",
+          "target": "0x4f765b8",
+          "bytes": "488d1d3c9c4d01"
+        }
+      ],
+      "identityVerified": false
+    },
+    {
+      "start": "0x2516610",
+      "end": "0x25169f2",
+      "traceSha256": "80840ddb3d43cc06b876b1d04e8ffc1005742cb661c8a67ba27ce648c2f13a25",
+      "instructionCount": 244,
+      "resynchronizations": 0,
+      "linearDecodeOnly": true,
+      "calls": [
+        {
+          "site": "0x251663a",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "ff90a8000000"
+        },
+        {
+          "site": "0x251667e",
+          "kind": "direct",
+          "target": "0x261b610",
+          "bytes": "e88d4f1000"
+        },
+        {
+          "site": "0x25166eb",
+          "kind": "indirect-slot",
+          "target": "0x4748ab0",
+          "bytes": "ff15bf232302"
+        },
+        {
+          "site": "0x25166fb",
+          "kind": "direct",
+          "target": "0x2613020",
+          "bytes": "e820c90f00"
+        },
+        {
+          "site": "0x2516726",
+          "kind": "indirect-slot",
+          "target": "0x4748ab0",
+          "bytes": "ff1584232302"
+        },
+        {
+          "site": "0x251676d",
+          "kind": "direct",
+          "target": "0x25bc0f0",
+          "bytes": "e87e590a00"
+        },
+        {
+          "site": "0x25167bb",
+          "kind": "indirect-slot",
+          "target": "0x4748ab0",
+          "bytes": "ff15ef222302"
+        },
+        {
+          "site": "0x25167cb",
+          "kind": "direct",
+          "target": "0x2613020",
+          "bytes": "e850c80f00"
+        },
+        {
+          "site": "0x25167f6",
+          "kind": "indirect-slot",
+          "target": "0x4748ab0",
+          "bytes": "ff15b4222302"
+        },
+        {
+          "site": "0x2516820",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "41ffd6"
+        },
+        {
+          "site": "0x25168b1",
+          "kind": "direct",
+          "target": "0x2613d20",
+          "bytes": "e86ad40f00"
+        },
+        {
+          "site": "0x25168c9",
+          "kind": "direct",
+          "target": "0x25bdd90",
+          "bytes": "e8c2740a00"
+        },
+        {
+          "site": "0x25168e8",
+          "kind": "direct",
+          "target": "0x3a9c8d0",
+          "bytes": "e8e35f5801"
+        },
+        {
+          "site": "0x25168fe",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "ff5020"
+        },
+        {
+          "site": "0x2516994",
+          "kind": "direct",
+          "target": "0x2613d20",
+          "bytes": "e887d30f00"
+        },
+        {
+          "site": "0x25169a4",
+          "kind": "indirect-object-or-register",
+          "target": null,
+          "bytes": "ff5040"
+        },
+        {
+          "site": "0x25169af",
+          "kind": "direct",
+          "target": "0x25bd090",
+          "bytes": "e8dc660a00"
+        },
+        {
+          "site": "0x25169bd",
+          "kind": "direct",
+          "target": "0x4366bf4",
+          "bytes": "e83202e501"
+        },
+        {
+          "site": "0x25169ca",
+          "kind": "direct",
+          "target": "0x4366bf4",
+          "bytes": "e82502e501"
+        }
+      ],
+      "references": [
+        {
+          "site": "0x251666c",
+          "target": "0x4e0efac",
+          "bytes": "4c8d0539898f02"
+        },
+        {
+          "site": "0x2516673",
+          "target": "0x4f5a420",
+          "bytes": "488d15a63da402"
+        },
+        {
+          "site": "0x2516683",
+          "target": "0x4f5c3f0",
+          "bytes": "488d05665da402"
+        },
+        {
+          "site": "0x2516696",
+          "target": "0x4e11830",
+          "bytes": "4c8d2d93b18f02"
+        },
+        {
+          "site": "0x2516880",
+          "target": "0x4f5c698",
+          "bytes": "488d05115ea402"
+        },
+        {
+          "site": "0x251688c",
+          "target": "0x4f5c4c8",
+          "bytes": "488d05355ca402"
+        },
+        {
+          "site": "0x2516898",
+          "target": "0x4f5c4f8",
+          "bytes": "4c8d0d595ca402"
+        },
+        {
+          "site": "0x25168a5",
+          "target": "0x4f5c3f0",
+          "bytes": "488d15445ba402"
+        },
+        {
+          "site": "0x2516963",
+          "target": "0x4f55530",
+          "bytes": "488d05c6eba302"
+        },
+        {
+          "site": "0x251696f",
+          "target": "0x4f5c4c8",
+          "bytes": "488d05525ba402"
+        },
+        {
+          "site": "0x251697b",
+          "target": "0x4f5c4f8",
+          "bytes": "4c8d0d765ba402"
+        },
+        {
+          "site": "0x2516988",
+          "target": "0x4f5c3f0",
+          "bytes": "488d15615aa402"
+        }
+      ],
+      "identityVerified": false
+    }
+  ],
+  "disposition": "NO_GO",
+  "voiceDatabaseReady": false,
+  "completeCallGraph": false,
+  "reasons": [
+    "linear-decoding-does-not-prove-reachability-or-abi",
+    "runtime-object-ownership-and-lifetime-unverified"
+  ]
+}

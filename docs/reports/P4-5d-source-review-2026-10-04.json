@@ -1,0 +1,488 @@
+{
+  "protocol": "p4-5d-source-review-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "clientBytes": 100449384,
+  "upstreamSources": [
+    {
+      "file": "VERSION",
+      "bytes": 7,
+      "sha256": "0caa7a867d0f0c62496ea4b136589c99ce6766e924d60773de64432833e9444a",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/VERSION"
+    },
+    {
+      "file": "src-vdbeapi.c",
+      "bytes": 59919,
+      "sha256": "653d3eaf99dbc10568e5dbc18dd77272cde72af4967fbdcefae6eb3e5e23e8eb",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/vdbeapi.c"
+    },
+    {
+      "file": "src-vdbeInt.h",
+      "bytes": 26449,
+      "sha256": "6ed755b8d30b0939ab4fc64f0fe06284826b6b138611777c8420bc7016809a2d",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/vdbeInt.h"
+    },
+    {
+      "file": "src-prepare.c",
+      "bytes": 31534,
+      "sha256": "64ac8c2263b1ecb87e98962d143b59b7428d05cd79ea1c42994ad34e6296411f",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/prepare.c"
+    },
+    {
+      "file": "src-main.c",
+      "bytes": 142670,
+      "sha256": "36fb77d468a862e959da24ed908aacf21fb708d4c5fc7194c9db1f1e1b66d08b",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/main.c"
+    },
+    {
+      "file": "src-legacy.c",
+      "bytes": 4531,
+      "sha256": "a9491dee918654a10468df6e09f3fa538be888e93450331782812ef277bf1c74",
+      "url": "https://raw.githubusercontent.com/sqlcipher/sqlcipher/v4.2.0/src/legacy.c"
+    }
+  ],
+  "sqliteVersionEvidence": {
+    "version": "3.28.0",
+    "major": 3,
+    "minor": 28,
+    "patch": 0,
+    "versionNumber": 3028000,
+    "stringRva": "0x4d9bc54",
+    "pointerReturners": [
+      {
+        "rva": "0x3a99930",
+        "bytes": "488d051d233001c3"
+      }
+    ],
+    "numberReturners": [
+      {
+        "rva": "0x3a99940",
+        "bytes": "b820342e00c3",
+        "immediate": 3028000
+      }
+    ]
+  },
+  "sqlcipherVersionVerified": false,
+  "anchors": [
+    {
+      "name": "MediaMSG_Multi.db",
+      "occurrences": [
+        {
+          "rva": "0x4f710d8",
+          "encoding": "utf16le",
+          "literal": "MediaMSG_Multi.db",
+          "bytePatternReferenceCount": 1,
+          "sites": [
+            {
+              "site": "0x25c9994",
+              "kind": "lea",
+              "bytes": "488d153d779a02488b4dc7e8e00edb01"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MediaMSG",
+      "occurrences": [
+        {
+          "rva": "0x4f71088",
+          "encoding": "utf16le",
+          "literal": "MediaMSG",
+          "bytePatternReferenceCount": 1,
+          "sites": [
+            {
+              "site": "0x25cb477",
+              "kind": "lea",
+              "bytes": "488d150a5c9a02488b4dc0e8fdf3da01"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f710d8",
+          "encoding": "utf16le",
+          "literal": "MediaMSG_Multi.db",
+          "bytePatternReferenceCount": 1,
+          "sites": [
+            {
+              "site": "0x25c9994",
+              "kind": "lea",
+              "bytes": "488d153d779a02488b4dc7e8e00edb01"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "BufInfoStorage",
+      "occurrences": [
+        {
+          "rva": "0x4f5c268",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::getByKey",
+          "bytePatternReferenceCount": 3,
+          "sites": [
+            {
+              "site": "0x2513937",
+              "kind": "lea",
+              "bytes": "4c8d0d2a89a4024c894d9f0f10056fac"
+            },
+            {
+              "site": "0x2513c37",
+              "kind": "lea",
+              "bytes": "4c8d0d2a86a40241b81e010000488d15"
+            },
+            {
+              "site": "0x25140d2",
+              "kind": "lea",
+              "bytes": "4c8d0d8f81a402488d151083a402e83b"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c310",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::getList",
+          "bytePatternReferenceCount": 2,
+          "sites": [
+            {
+              "site": "0x2513194",
+              "kind": "lea",
+              "bytes": "4c8d0d7591a40241b8ca000000488d15"
+            },
+            {
+              "site": "0x251383b",
+              "kind": "lea",
+              "bytes": "4c8d0dce8aa40241b8dc000000488d15"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c328",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::loadCacheList",
+          "bytePatternReferenceCount": 3,
+          "sites": [
+            {
+              "site": "0x2512566",
+              "kind": "lea",
+              "bytes": "4c8d0dbb9da40241b88c000000488d15"
+            },
+            {
+              "site": "0x2512878",
+              "kind": "lea",
+              "bytes": "4c8d0da99aa40241b89e000000488d15"
+            },
+            {
+              "site": "0x2512de4",
+              "kind": "lea",
+              "bytes": "4c8d0d3d95a40241b8b1000000488d15"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c3d0",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::bind",
+          "bytePatternReferenceCount": 4,
+          "sites": [
+            {
+              "site": "0x251505e",
+              "kind": "lea",
+              "bytes": "4c8d0d6b73a402488d158473a402b904"
+            },
+            {
+              "site": "0x25155ee",
+              "kind": "lea",
+              "bytes": "4c8d0ddb6da402e93c01000041837d10"
+            },
+            {
+              "site": "0x2515644",
+              "kind": "lea",
+              "bytes": "4c8d0d856da402e9e6000000498b4d08"
+            },
+            {
+              "site": "0x2515bb8",
+              "kind": "lea",
+              "bytes": "4c8d0d1168a402448d4749488d152668"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c4c8",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage",
+          "bytePatternReferenceCount": 23,
+          "sites": [
+            {
+              "site": "0x251255a",
+              "kind": "lea",
+              "bytes": "488d05679fa40248894424204c8d0dbb"
+            },
+            {
+              "site": "0x251286c",
+              "kind": "lea",
+              "bytes": "488d05559ca40248894424204c8d0da9"
+            },
+            {
+              "site": "0x2512dd8",
+              "kind": "lea",
+              "bytes": "488d05e996a40248894424204c8d0d3d"
+            },
+            {
+              "site": "0x2513188",
+              "kind": "lea",
+              "bytes": "488d053993a40248894424204c8d0d75"
+            },
+            {
+              "site": "0x251382f",
+              "kind": "lea",
+              "bytes": "488d05928ca40248894424204c8d0dce"
+            },
+            {
+              "site": "0x25139ad",
+              "kind": "lea",
+              "bytes": "488d05148ba402488944242041b81401"
+            },
+            {
+              "site": "0x2513c2b",
+              "kind": "lea",
+              "bytes": "488d059688a40248894424204c8d0d2a"
+            },
+            {
+              "site": "0x25140c6",
+              "kind": "lea",
+              "bytes": "488d05fb83a40248894424204c8d0d8f"
+            },
+            {
+              "site": "0x25147db",
+              "kind": "lea",
+              "bytes": "488d05e67ca40248894424204c8d0d22"
+            },
+            {
+              "site": "0x2514903",
+              "kind": "lea",
+              "bytes": "488d05be7ba40248894424204c8d0dfa"
+            },
+            {
+              "site": "0x2514f56",
+              "kind": "lea",
+              "bytes": "488d1d6b75a40248895c24204c8d0d57"
+            },
+            {
+              "site": "0x2515033",
+              "kind": "lea",
+              "bytes": "488d1d8e74a4020f100577958f024889"
+            },
+            {
+              "site": "0x2515240",
+              "kind": "lea",
+              "bytes": "488d1d8172a40248895c24204c8d0d6d"
+            },
+            {
+              "site": "0x2515565",
+              "kind": "lea",
+              "bytes": "488d055c6fa40248894424204c8d0d88"
+            },
+            {
+              "site": "0x2515746",
+              "kind": "lea",
+              "bytes": "488d057b6da40248894424200f2945e7"
+            },
+            {
+              "site": "0x2515ad2",
+              "kind": "lea",
+              "bytes": "488d05ef69a40248894424204c8d0d3b"
+            },
+            {
+              "site": "0x2515b14",
+              "kind": "lea",
+              "bytes": "488d35ad69a402493b5c24080f84b204"
+            },
+            {
+              "site": "0x2515e3f",
+              "kind": "lea",
+              "bytes": "488d058266a40248894424204c8d0dce"
+            },
+            {
+              "site": "0x2515fab",
+              "kind": "lea",
+              "bytes": "488d351665a402488d0df764a402488b"
+            },
+            {
+              "site": "0x251688c",
+              "kind": "lea",
+              "bytes": "488d05355ca40248894424204c8d0d59"
+            },
+            {
+              "site": "0x251696f",
+              "kind": "lea",
+              "bytes": "488d05525ba40248894424204c8d0d76"
+            },
+            {
+              "site": "0x2516ac1",
+              "kind": "lea",
+              "bytes": "488d05005aa40248894424204c8d0d3c"
+            },
+            {
+              "site": "0x2516c96",
+              "kind": "lea",
+              "bytes": "488d052b58a40248894424204c8d0d67"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c4f8",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::clear",
+          "bytePatternReferenceCount": 2,
+          "sites": [
+            {
+              "site": "0x2516898",
+              "kind": "lea",
+              "bytes": "4c8d0d595ca40241b857020000488d15"
+            },
+            {
+              "site": "0x251697b",
+              "kind": "lea",
+              "bytes": "4c8d0d765ba40241b85d020000488d15"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c510",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::init",
+          "bytePatternReferenceCount": 2,
+          "sites": [
+            {
+              "site": "0x2516acd",
+              "kind": "lea",
+              "bytes": "4c8d0d3c5aa40241b881020000488d15"
+            },
+            {
+              "site": "0x2516ca2",
+              "kind": "lea",
+              "bytes": "4c8d0d6758a40241b893020000488d15"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c620",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::addOrUpdateList",
+          "bytePatternReferenceCount": 3,
+          "sites": [
+            {
+              "site": "0x2515ade",
+              "kind": "lea",
+              "bytes": "4c8d0d3b6ba40241b8ff010000488d15"
+            },
+            {
+              "site": "0x2515e4b",
+              "kind": "lea",
+              "bytes": "4c8d0dce67a40241b811020000488d15"
+            },
+            {
+              "site": "0x2516060",
+              "kind": "lea",
+              "bytes": "4c8d0db965a40241b81e020000488d15"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c700",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::add",
+          "bytePatternReferenceCount": 2,
+          "sites": [
+            {
+              "site": "0x2515571",
+              "kind": "lea",
+              "bytes": "4c8d0d8871a40241b8d0010000488d15"
+            },
+            {
+              "site": "0x2515729",
+              "kind": "lea",
+              "bytes": "4c8d0dd06fa40241b8dc0100000f1005"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c7c0",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::addOrUpdate",
+          "bytePatternReferenceCount": 3,
+          "sites": [
+            {
+              "site": "0x2514f62",
+              "kind": "lea",
+              "bytes": "4c8d0d5778a40241b8a7010000488d15"
+            },
+            {
+              "site": "0x2515086",
+              "kind": "lea",
+              "bytes": "4c8d0d3377a4024c894daf0f10052095"
+            },
+            {
+              "site": "0x251524c",
+              "kind": "lea",
+              "bytes": "4c8d0d6d75a40241b8b4010000488d15"
+            }
+          ]
+        },
+        {
+          "rva": "0x4f5c810",
+          "encoding": "ascii",
+          "literal": "BufInfoStorage::delByKey",
+          "bytePatternReferenceCount": 2,
+          "sites": [
+            {
+              "site": "0x25147e7",
+              "kind": "lea",
+              "bytes": "4c8d0d2280a40241b84d010000488d15"
+            },
+            {
+              "site": "0x251490f",
+              "kind": "lea",
+              "bytes": "4c8d0dfa7ea40241b855010000488d15"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "correctedCandidates": [
+    {
+      "rva": "0x3a24060",
+      "semanticCandidate": "vdbeUnbind",
+      "columnReaderVerified": false,
+      "reason": "one-based nVar check and value reset, compatible with binding guard"
+    },
+    {
+      "rva": "0x3a24620",
+      "semanticCandidate": "sqlite3_bind_null(stmt,index)",
+      "exactIdentityVerified": false,
+      "reason": "forwards index without spilling it; success unlocks and returns guard status"
+    },
+    {
+      "rva": "0x3a5eda0",
+      "semanticCandidate": "sqlite3_exec(db,sql,callback,data,errorOut)",
+      "exactIdentityVerified": false,
+      "sourceCaller": "0x25bf640"
+    },
+    {
+      "rva": "0x3a9c8d0",
+      "semanticCandidate": "sqlite3_errmsg(db)",
+      "exactIdentityVerified": false,
+      "sourceCaller": "0x2516c12"
+    }
+  ],
+  "disposition": "NO_GO",
+  "voiceDatabaseReady": false,
+  "remaining": [
+    "complete SQLite function semantics and ABI",
+    "MediaMSG manager to BufInfoStorage ownership",
+    "database close and lock/lifetime proof",
+    "actual schema and Buf acceptance by owner"
+  ]
+}

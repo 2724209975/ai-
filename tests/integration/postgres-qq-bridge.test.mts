@@ -206,11 +206,29 @@ test('real PostgreSQL + fake OneBot: committed outbox survives consumer crash an
     assert.equal(pending.rows.length, 1);
     assert.equal(pending.rows[0]!.published_at, null, 'the failed consumer must leave durable outbox pending');
     assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 0, 'business handling did not complete before the crash');
-    const secondPump = createQqOutboxPump({ pool: fixture.pool, accountId: fixture.accountId,
-      onEvent: event => fixture.bridge.service.ingestPlatformEvent(event) });
-    const delivered = await Promise.all([fixture.bridge.outbox.tick(), secondPump.tick()]);
-    assert.equal(delivered.reduce((sum, value) => sum + value, 0), 1,
-      'two concurrent pumps must claim the committed event once');
+    // Outbox commits its row selection before delivery and promises at-least-once. Hold both
+    // callbacks until each pump has selected this pending event, making the duplicate window
+    // deterministic instead of asserting exactly-once by scheduling accident.
+    let releaseDelivery!: () => void;
+    const bothSelected = new Promise<void>((resolve,reject) => {
+      const deadline = setTimeout(() => reject(new Error('SECOND_OUTBOX_DELIVERY_NOT_OBSERVED')), 5000);
+      deadline.unref();
+      releaseDelivery = () => { clearTimeout(deadline); resolve(); };
+    });
+    const selectedIds: string[] = [];
+    const pumpOptions = { pool: fixture.pool, accountId: fixture.accountId,
+      onEvent: async (event: Parameters<typeof fixture.bridge.service.ingestPlatformEvent>[0]) => {
+        selectedIds.push(event.eventId);
+        if (selectedIds.length === 2) releaseDelivery();
+        await bothSelected;
+        await fixture.bridge.service.ingestPlatformEvent(event);
+      } };
+    const firstPump = createQqOutboxPump(pumpOptions), secondPump = createQqOutboxPump(pumpOptions);
+    const delivered = await Promise.all([firstPump.tick(), secondPump.tick()]);
+    assert.equal(delivered.reduce((sum, value) => sum + value, 0), 2, 'exercise two actual outbox deliveries');
+    assert.deepEqual(selectedIds, [pending.rows[0]!.id, pending.rows[0]!.id], 'both deliveries carry the same durable event');
+    const inbox = await fixture.pool.query<{ count: string }>('SELECT count(*)::text AS count FROM event_inbox WHERE event_id=$1', [pending.rows[0]!.id]);
+    assert.equal(inbox.rows[0]!.count, '1', 'duplicate outbox deliveries commit one consumer inbox record');
     assert.equal((await fixture.bridge.service.ownerTasks()).items.length, 1);
     assert.ok((await fixture.pool.query('SELECT published_at FROM event_outbox WHERE id=$1', [pending.rows[0]!.id])).rows[0]?.published_at);
     assert.equal(await reception.commitReceived({ dedupeKey: observation.dedupeKey, rawBytes: bytes, observation }), 'duplicate');
