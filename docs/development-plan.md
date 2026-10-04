@@ -8,7 +8,7 @@
 
 | 项 | 状态 | 证据 |
 | --- | --- | --- |
-| 本机完整门禁 | 最近一次（P4-6c）760 pass / 0 fail / 0 skip | [P4-6c](reports/P4-6c-2026-10-04.md) |
+| 本机完整门禁 | 最近一次（P4-6e）770 pass / 0 fail / 0 skip | [P4-6e](reports/P4-6e-2026-10-04.md) |
 | 确认主线（P1） | **本人 2026-10-02 判通过**：微信真实来信 → DeepSeek 候选 → 确认 → 发送 → 人工核对 → 恢复，同次闭环 | [P1 报告](reports/p1-real-mainline-2026-10-02.md) |
 | 微信接收 | 文字/图片/语音真实实测通过，带平台消息 ID；只绑定客户端 3.9.11.25（`WeChatWin.dll` 前缀 `2058A926`） | [A21](decisions.md)、[接收接入](reports/wechat-receive-bridge-2026-09-24.md) |
 | 微信发送 | 人工核对送达；**无回显、无平台消息 ID**，每次都记 `RESULT_UNKNOWN` 并暂停该联系人 | [真机发送](reports/wechat-real-send-2026-09-26.md)、[W01](reports/wechat-w01-2026-09-26.md) |
@@ -28,7 +28,7 @@
 | P4-6b QQ 系统回显识别 | 已交付；真机待本人执行 | [报告](reports/P4-6b-2026-10-04.md)、A26 |
 | P4-6c QQ 图片原件获取与受控理解 | 已交付，默认关闭；Q1 真机核对待本人 | [报告](reports/P4-6c-2026-10-04.md) |
 | P4-6d QQ 已批准表情发送 | **暂时搁置（本人 2026-10-04），不实现发送** | [未批准提案](reports/P4-6d-proposal-2026-10-04.md)留存；迁移 0013 未应用，恢复前重新审定 Q2 |
-| QQ 真机验收 | 每张卡交付后由本人执行 | 见 §4.2 末尾清单 |
+| P4-6e QQ 真机验收准备 | 已交付；本轮真机尚未开始 | [分步清单](platforms/qq-mainline-checklist.md)、[报告](reports/P4-6e-2026-10-04.md)；下一步由本人准备 QQ 测试号、好友与当次预算 |
 | P4-5f 微信语音 provider 复核 | **搁置**（本人 2026-10-04） | 见 §4.3 |
 | P2-6 本机试用 | 未开始，需 D06 预算 | — |
 | P3-1 真实验证、P3-2～4 | 未开始 | 依赖 P2 结论与 D03/D04 |
@@ -275,6 +275,14 @@ P0–P4 全部在本人电脑上运行：电脑开着才收信、出候选和发
   - 批准存储有两套且不一致：`data_media_assets`（owner API 写）与文件元数据 `approveSticker`。需要统一以数据库为准，供 `napcat-bridge.mts` 的 `loadApprovedSticker` 使用；
   - QQ 发送端口目前对表情返回 `UNSUPPORTED_CAPABILITY`（`napcat-bridge.mts:62`）；编码侧 `onebot-codec.mts:116-143` 已就绪。
 - 验收（提案中细化）：每条发送前复核批准状态、平台、版本和字节摘要；撤销批准后旧方案不能派发；未批准或不支持的格式拒绝；完整门禁 0 fail、0 skip。
+
+**P4-6e QQ 真机验收准备**
+- 状态：已交付；770 pass / 0 fail / 0 skip。见[报告](reports/P4-6e-2026-10-04.md)和[清单](platforms/qq-mainline-checklist.md)。本轮真实平台、付费模型与人工核对尚未执行。
+- 模块：07+总控｜可改：新增 `scripts/qq-mainline-audit.mts` 及测试、`scripts/local-supervisor.mts`、`scripts/local-stack-driver.mts` 及测试、新增 `tests/fixtures/qq-audit-log-child.mts`、`tests/integration/postgres-qq-mainline-audit.test.mts`、`docs/platforms/qq-mainline-checklist.md`、本卡报告与本计划。
+- 依赖：P4-6a～c；P4-6d 搁置，不作为前置条件。
+- 要做：按显式账号、联系人、带时区的时间窗口只读核对入站、系统回显、暂停、发送账本和媒体解释；本机栈保留脱敏的图片模型调用度量；准备文字闭环、Q1 原图核对和图片理解三段操作步骤。
+- 验收：真实隔离 PostgreSQL 验证账号/联系人/窗口隔离、只读及无敏感输出，日志缺失/重复/冲突不能被当作单次真实模型调用；完整门禁 0 fail / 0 skip。
+- 边界：不连接真实 NapCat，不读真实聊天、配置或原始事件；不登录、不发送、不调用付费模型。工具不自动判通过、不推断回显时序或送达，不修改暂停和账本；无新依赖、契约或迁移。
 
 **QQ 真机验收清单（本人执行；每张卡交付后由总控准备具体步骤）**
 1. P4-6a 后：QQ 本机常驻栈启动即暂停；看门狗正常；人工恢复后，DeepSeek 在预算内产出候选。

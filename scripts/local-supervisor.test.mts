@@ -69,6 +69,22 @@ test('one stop failure still stops other owned dependencies and prevents every r
   assert.ok(!events.includes('stack_restart'));
 });
 
+test('media model observations survive the local stack log without identity, body or provider metadata', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'stack-media-log-'));
+  try {
+    const log = rotatingStackLog(directory);
+    await log('media_model_call', 'bridge', { callId: '00000000-0000-4000-8000-000000000001',
+      contextSnapshotId: '00000000-0000-4000-8000-000000000002', mediaType: 'image',
+      outcome: 'uncertain', inputTokens: 12, outputTokens: null, elapsedMs: 23,
+      providerId: 'PRIVATE_PROVIDER', modelId: 'PRIVATE_MODEL', text: 'PRIVATE_BODY', secret: 'PRIVATE_SECRET' });
+    const row = JSON.parse((await readFile(join(directory, 'stack.jsonl'), 'utf8')).trim());
+    assert.equal(row.event, 'media_model_call'); assert.equal(row.mediaType, 'image');
+    assert.equal(row.outcome, 'uncertain'); assert.equal(row.inputTokens, 12);
+    assert.equal(row.callId, '00000000-0000-4000-8000-000000000001');
+    assert.equal(row.outputTokens, undefined); assert.ok(!JSON.stringify(row).includes('PRIVATE'));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('rotating logs stay bounded and reject arbitrary output or identities', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'stack-log-'));
   try {

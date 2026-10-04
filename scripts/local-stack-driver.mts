@@ -115,7 +115,7 @@ export function createLocalStackDriver(options: { config: LocalStackConfig; sign
         if (event !== 'process_output' || name === 'postgres') return;
         for (const character of chunk.toString('utf8')) {
           if (character === '\n') {
-            if (!dropping) { try { const row = JSON.parse(buffer); if (row?.event === 'model_call') write('model_call', row); } catch {} }
+            if (!dropping) { try { const row = JSON.parse(buffer); if (row?.event === 'model_call' || row?.event === 'media_model_call') write(row.event, row); } catch {} }
             buffer = ''; dropping = false;
           } else if (!dropping) {
             if (buffer.length >= 4096) { buffer = ''; dropping = true; } else buffer += character;

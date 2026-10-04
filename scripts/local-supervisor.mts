@@ -65,15 +65,19 @@ export function rotatingStackLog(directory: string, maxBytes = 1_048_576, archiv
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 128 || !Number.isSafeInteger(archives) || archives < 1 || archives > 20) throw new Error('LOG_CONFIG_INVALID');
   let chain = Promise.resolve();
   return (event: string, service?: string, measurement?: Record<string, unknown>): Promise<void> => {
-    if (!['service_ready', 'service_stopped', 'stack_ready', 'stack_fault', 'stack_restart', 'stack_stopped', 'process_output', 'process_error', 'model_call'].includes(event)
+    if (!['service_ready', 'service_stopped', 'stack_ready', 'stack_fault', 'stack_restart', 'stack_stopped', 'process_output', 'process_error', 'model_call', 'media_model_call'].includes(event)
       || (service !== undefined && !['postgres', 'core', 'bridge'].includes(service))) return Promise.reject(new Error('LOG_EVENT_INVALID'));
     const metrics: Record<string, unknown> = {};
-    if (event === 'model_call' && measurement) {
-      for (const name of ['callId', 'contextSnapshotId']) if (typeof measurement[name] === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(measurement[name] as string)) metrics[name] = measurement[name];
+    if ((event === 'model_call' || event === 'media_model_call') && measurement) {
+      for (const name of ['callId', 'contextSnapshotId']) if (typeof measurement[name] === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(measurement[name] as string)) metrics[name] = measurement[name];
       for (const name of ['inputTokens', 'outputTokens', 'elapsedMs']) if (typeof measurement[name] === 'number' && Number.isFinite(measurement[name]) && (measurement[name] as number) >= 0) metrics[name] = measurement[name];
-      metrics.outcome = measurement.outcome === 'ok' ? 'ok' : 'error';
-      if (['reply-candidates-1', 'reply-candidates-2'].includes(String(measurement.promptVersion))) metrics.promptVersion = measurement.promptVersion;
-      if (['deepseek-flash', 'deepseek-v4-pro'].includes(String(measurement.modelId))) metrics.modelId = measurement.modelId;
+      metrics.outcome = measurement.outcome === 'ok' ? 'ok' : event === 'media_model_call' && measurement.outcome === 'uncertain' ? 'uncertain' : 'error';
+      if (event === 'media_model_call') {
+        if (measurement.mediaType === 'image' || measurement.mediaType === 'voice') metrics.mediaType = measurement.mediaType;
+      } else {
+        if (['reply-candidates-1', 'reply-candidates-2'].includes(String(measurement.promptVersion))) metrics.promptVersion = measurement.promptVersion;
+        if (['deepseek-flash', 'deepseek-v4-pro'].includes(String(measurement.modelId))) metrics.modelId = measurement.modelId;
+      }
     }
     const line = JSON.stringify({ at: new Date().toISOString(), event, ...(service ? { service } : {}), ...metrics }) + '\n';
     if (Buffer.byteLength(line) > maxBytes) return Promise.reject(new Error('LOG_RECORD_TOO_LARGE'));
