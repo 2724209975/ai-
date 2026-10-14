@@ -1,0 +1,1652 @@
+{
+  "protocol": "p4-5d-string-map-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "range": {
+    "from": "0x3a20000",
+    "to": "0x3a40000"
+  },
+  "distinctStrings": 141,
+  "uses": [
+    {
+      "text": "%s at line %d of [%.10s]",
+      "rva": "0x51a2b68",
+      "count": 12,
+      "sites": [
+        "0x3a20c9b",
+        "0x3a21389",
+        "0x3a21690",
+        "0x3a218eb"
+      ],
+      "containingRanges": [
+        "0x3a20ae0",
+        "0x3a21369",
+        "0x3a215d0",
+        "0x3a21720"
+      ]
+    },
+    {
+      "text": "sqlite_master",
+      "rva": "0x519f020",
+      "count": 9,
+      "sites": [
+        "0x3a29614",
+        "0x3a3ccb2",
+        "0x3a3ccde",
+        "0x3a3cfe5"
+      ],
+      "containingRanges": [
+        "0x3a25810",
+        "0x3a3cca0",
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "Expression tree is too large (maximum depth %d)",
+      "rva": "0x519e4b8",
+      "count": 9,
+      "sites": [
+        "0x3a32f88",
+        "0x3a33274",
+        "0x3a3341e",
+        "0x3a33cf9"
+      ],
+      "containingRanges": [
+        "0x3a324f0",
+        "0x3a331e0",
+        "0x3a332e0",
+        "0x3a33cab"
+      ]
+    },
+    {
+      "text": "database corruption",
+      "rva": "0x51a2b50",
+      "count": 6,
+      "sites": [
+        "0x3a20c8f",
+        "0x3a2137d",
+        "0x3a21684",
+        "0x3a218df"
+      ],
+      "containingRanges": [
+        "0x3a20ae0",
+        "0x3a21369",
+        "0x3a215d0",
+        "0x3a21720"
+      ]
+    },
+    {
+      "text": "misuse",
+      "rva": "0x51a2f1c",
+      "count": 6,
+      "sites": [
+        "0x3a21e9f",
+        "0x3a22de7",
+        "0x3a241e5",
+        "0x3a2b7ab"
+      ],
+      "containingRanges": [
+        "0x3a21e50",
+        "0x3a22da0",
+        "0x3a24060",
+        "0x3a2b660"
+      ]
+    },
+    {
+      "text": "row value misused",
+      "rva": "0x519f4c0",
+      "count": 5,
+      "sites": [
+        "0x3a31312",
+        "0x3a31faf",
+        "0x3a33e4b",
+        "0x3a384d5"
+      ],
+      "containingRanges": [
+        "0x3a30790",
+        "0x3a31e12",
+        "0x3a33db0",
+        "0x3a38430"
+      ]
+    },
+    {
+      "text": "%r %s BY term out of range - should be between 1 and %d",
+      "rva": "0x519e200",
+      "count": 5,
+      "sites": [
+        "0x3a32225",
+        "0x3a324d4",
+        "0x3a32c03",
+        "0x3a32c2c"
+      ],
+      "containingRanges": [
+        "0x3a32150",
+        "0x3a324c7",
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "ORDER",
+      "rva": "0x519e1d0",
+      "count": 5,
+      "sites": [
+        "0x3a329ae",
+        "0x3a32bfc",
+        "0x3a32c25",
+        "0x3a32c42"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "API called with finalized prepared statement",
+      "rva": "0x519eed0",
+      "count": 4,
+      "sites": [
+        "0x3a21e83",
+        "0x3a22dc9",
+        "0x3a2408c",
+        "0x3a2b790"
+      ],
+      "containingRanges": [
+        "0x3a21e50",
+        "0x3a22da0",
+        "0x3a24060",
+        "0x3a2b660"
+      ]
+    },
+    {
+      "text": "index expressions",
+      "rva": "0x519f410",
+      "count": 4,
+      "sites": [
+        "0x3a3173d",
+        "0x3a31b27",
+        "0x3a31e39",
+        "0x3a31ea5"
+      ],
+      "containingRanges": [
+        "0x3a316d0",
+        "0x3a31af0",
+        "0x3a31e12"
+      ]
+    },
+    {
+      "text": "%s prohibited in %s",
+      "rva": "0x519f3e0",
+      "count": 4,
+      "sites": [
+        "0x3a3174e",
+        "0x3a31b48",
+        "0x3a31e5a",
+        "0x3a31ec6"
+      ],
+      "containingRanges": [
+        "0x3a316d0",
+        "0x3a31af0",
+        "0x3a31e12"
+      ]
+    },
+    {
+      "text": "SELECTs to the left and right of %s do not have the same number of result columns",
+      "rva": "0x51a0fc0",
+      "count": 4,
+      "sites": [
+        "0x3a32cbf",
+        "0x3a32cdf",
+        "0x3a32cff",
+        "0x3a32d1f"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "partial index WHERE clauses",
+      "rva": "0x519f428",
+      "count": 3,
+      "sites": [
+        "0x3a31b1b",
+        "0x3a31e2d",
+        "0x3a31e99"
+      ],
+      "containingRanges": [
+        "0x3a31af0",
+        "0x3a31e12"
+      ]
+    },
+    {
+      "text": "CHECK constraints",
+      "rva": "0x519f3f8",
+      "count": 3,
+      "sites": [
+        "0x3a31b33",
+        "0x3a31e45",
+        "0x3a31eb1"
+      ],
+      "containingRanges": [
+        "0x3a31af0",
+        "0x3a31e12"
+      ]
+    },
+    {
+      "text": "sub-select returns %d columns - expected %d",
+      "rva": "0x519e378",
+      "count": 3,
+      "sites": [
+        "0x3a38483",
+        "0x3a384b0",
+        "0x3a3abe8"
+      ],
+      "containingRanges": [
+        "0x3a38430",
+        "0x3a39f80"
+      ]
+    },
+    {
+      "text": "string or blob too big",
+      "rva": "0x519ee90",
+      "count": 2,
+      "sites": [
+        "0x3a22a79",
+        "0x3a2b025"
+      ],
+      "containingRanges": [
+        "0x3a22a50",
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "API called with NULL prepared statement",
+      "rva": "0x519eea8",
+      "count": 2,
+      "sites": [
+        "0x3a22dbb",
+        "0x3a2407d"
+      ],
+      "containingRanges": [
+        "0x3a22da0",
+        "0x3a24060"
+      ]
+    },
+    {
+      "text": "no such column: \"%s\"",
+      "rva": "0x519f230",
+      "count": 2,
+      "sites": [
+        "0x3a2bf55",
+        "0x3a3db7e"
+      ],
+      "containingRanges": [
+        "0x3a2b8b0",
+        "0x3a3d970"
+      ]
+    },
+    {
+      "text": "ROWID",
+      "rva": "0x519e3fc",
+      "count": 2,
+      "sites": [
+        "0x3a315ac",
+        "0x3a36a31"
+      ],
+      "containingRanges": [
+        "0x3a30790",
+        "0x3a369c0"
+      ]
+    },
+    {
+      "text": "too many terms in %s BY clause",
+      "rva": "0x519e170",
+      "count": 2,
+      "sites": [
+        "0x3a32193",
+        "0x3a32c4c"
+      ],
+      "containingRanges": [
+        "0x3a32150",
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "%d columns assigned %d values",
+      "rva": "0x519e428",
+      "count": 2,
+      "sites": [
+        "0x3a35f91",
+        "0x3a3ac43"
+      ],
+      "containingRanges": [
+        "0x3a35f00",
+        "0x3a39f80"
+      ]
+    },
+    {
+      "text": "CORRELATED ",
+      "rva": "0x519e350",
+      "count": 2,
+      "sites": [
+        "0x3a37af6",
+        "0x3a38126"
+      ],
+      "containingRanges": [
+        "0x3a37a12",
+        "0x3a38080"
+      ]
+    },
+    {
+      "text": "non-deterministic function in index expression or CHECK constraint",
+      "rva": "0x519ef00",
+      "count": 1,
+      "sites": [
+        "0x3a21bce"
+      ],
+      "containingRanges": [
+        "0x3a21ba6"
+      ]
+    },
+    {
+      "text": "unknown error",
+      "rva": "0x4f33098",
+      "count": 1,
+      "sites": [
+        "0x3a229ce"
+      ],
+      "containingRanges": [
+        "0x3a2299f"
+      ]
+    },
+    {
+      "text": "abort due to ROLLBACK",
+      "rva": "0x51a1e60",
+      "count": 1,
+      "sites": [
+        "0x3a229d7"
+      ],
+      "containingRanges": [
+        "0x3a2299f"
+      ]
+    },
+    {
+      "text": "no more rows available",
+      "rva": "0x51a1e30",
+      "count": 1,
+      "sites": [
+        "0x3a229e0"
+      ],
+      "containingRanges": [
+        "0x3a2299f"
+      ]
+    },
+    {
+      "text": "another row available",
+      "rva": "0x51a1e48",
+      "count": 1,
+      "sites": [
+        "0x3a229e9"
+      ],
+      "containingRanges": [
+        "0x3a2299f"
+      ]
+    },
+    {
+      "text": "bind on a busy prepared statement: [%s]",
+      "rva": "0x519ee68",
+      "count": 1,
+      "sites": [
+        "0x3a241c2"
+      ],
+      "containingRanges": [
+        "0x3a24060"
+      ]
+    },
+    {
+      "text": "NULL",
+      "rva": "0x51035dc",
+      "count": 1,
+      "sites": [
+        "0x3a250be"
+      ],
+      "containingRanges": [
+        "0x3a24fb5"
+      ]
+    },
+    {
+      "text": "%lld",
+      "rva": "0x4f4ba54",
+      "count": 1,
+      "sites": [
+        "0x3a250f5"
+      ],
+      "containingRanges": [
+        "0x3a24fb5"
+      ]
+    },
+    {
+      "text": "%!.15g",
+      "rva": "0x519d714",
+      "count": 1,
+      "sites": [
+        "0x3a25113"
+      ],
+      "containingRanges": [
+        "0x3a24fb5"
+      ]
+    },
+    {
+      "text": "'%.*q'",
+      "rva": "0x519ee58",
+      "count": 1,
+      "sites": [
+        "0x3a251af"
+      ],
+      "containingRanges": [
+        "0x3a24fb5"
+      ]
+    },
+    {
+      "text": "zeroblob(%d)",
+      "rva": "0x519ee48",
+      "count": 1,
+      "sites": [
+        "0x3a251fe"
+      ],
+      "containingRanges": [
+        "0x3a24fb5"
+      ]
+    },
+    {
+      "text": "%02x",
+      "rva": "0x4f79038",
+      "count": 1,
+      "sites": [
+        "0x3a25264"
+      ],
+      "containingRanges": [
+        "0x3a24fb5"
+      ]
+    },
+    {
+      "text": "out of memory",
+      "rva": "0x4f765b8",
+      "count": 1,
+      "sites": [
+        "0x3a27659"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "no such savepoint: %s",
+      "rva": "0x519f150",
+      "count": 1,
+      "sites": [
+        "0x3a279e2"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "statement aborts at %d: [%s] %s",
+      "rva": "0x519f2e8",
+      "count": 1,
+      "sites": [
+        "0x3a27c97"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "SELECT name, rootpage, sql FROM '%q'.%s WHERE %s ORDER BY rowid",
+      "rva": "0x519efe0",
+      "count": 1,
+      "sites": [
+        "0x3a2961f"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "database table is locked: %s",
+      "rva": "0x519f310",
+      "count": 1,
+      "sites": [
+        "0x3a2a314"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "-- %s",
+      "rva": "0x519f308",
+      "count": 1,
+      "sites": [
+        "0x3a2abac"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "%s constraint failed",
+      "rva": "0x519f1c0",
+      "count": 1,
+      "sites": [
+        "0x3a2acf2"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "%z: %s",
+      "rva": "0x519f1b8",
+      "count": 1,
+      "sites": [
+        "0x3a2ad22"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "abort at %d in [%s]: %s",
+      "rva": "0x519f1a0",
+      "count": 1,
+      "sites": [
+        "0x3a2ad51"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "cannot open savepoint - SQL statements in progress",
+      "rva": "0x519f168",
+      "count": 1,
+      "sites": [
+        "0x3a2adfd"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "cannot release savepoint - SQL statements in progress",
+      "rva": "0x519f118",
+      "count": 1,
+      "sites": [
+        "0x3a2ae16"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "database schema has changed",
+      "rva": "0x519f030",
+      "count": 1,
+      "sites": [
+        "0x3a2aee1"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "too many levels of trigger recursion",
+      "rva": "0x519efb0",
+      "count": 1,
+      "sites": [
+        "0x3a2af63"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "out of",
+      "rva": "0x519f364",
+      "count": 1,
+      "sites": [
+        "0x3a2afa5"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "cannot change %s wal mode from within a transaction",
+      "rva": "0x519f330",
+      "count": 1,
+      "sites": [
+        "0x3a2afb0"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "into",
+      "rva": "0x519f36c",
+      "count": 1,
+      "sites": [
+        "0x3a2afba"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "cannot commit transaction - SQL statements in progress",
+      "rva": "0x519f0e0",
+      "count": 1,
+      "sites": [
+        "0x3a2b19d"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "cannot start a transaction within a transaction",
+      "rva": "0x519f0b0",
+      "count": 1,
+      "sites": [
+        "0x3a2b259"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "cannot rollback - no transaction is active",
+      "rva": "0x519f080",
+      "count": 1,
+      "sites": [
+        "0x3a2b264"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "cannot commit - no transaction is active",
+      "rva": "0x519f050",
+      "count": 1,
+      "sites": [
+        "0x3a2b26b"
+      ],
+      "containingRanges": [
+        "0x3a25810"
+      ]
+    },
+    {
+      "text": "real",
+      "rva": "0x519f2e0",
+      "count": 1,
+      "sites": [
+        "0x3a2b6e6"
+      ],
+      "containingRanges": [
+        "0x3a2b660"
+      ]
+    },
+    {
+      "text": "integer",
+      "rva": "0x5101040",
+      "count": 1,
+      "sites": [
+        "0x3a2b6ed"
+      ],
+      "containingRanges": [
+        "0x3a2b660"
+      ]
+    },
+    {
+      "text": "null",
+      "rva": "0x4f04324",
+      "count": 1,
+      "sites": [
+        "0x3a2b746"
+      ],
+      "containingRanges": [
+        "0x3a2b660"
+      ]
+    },
+    {
+      "text": "cannot open value of type %s",
+      "rva": "0x519f2c0",
+      "count": 1,
+      "sites": [
+        "0x3a2b751"
+      ],
+      "containingRanges": [
+        "0x3a2b660"
+      ]
+    },
+    {
+      "text": "no such rowid: %lld",
+      "rva": "0x519f2a8",
+      "count": 1,
+      "sites": [
+        "0x3a2b876"
+      ],
+      "containingRanges": [
+        "0x3a2b660"
+      ]
+    },
+    {
+      "text": "foreign key",
+      "rva": "0x519f220",
+      "count": 1,
+      "sites": [
+        "0x3a2bba3"
+      ],
+      "containingRanges": [
+        "0x3a2b8b0"
+      ]
+    },
+    {
+      "text": "indexed",
+      "rva": "0x519f218",
+      "count": 1,
+      "sites": [
+        "0x3a2bbf0"
+      ],
+      "containingRanges": [
+        "0x3a2b8b0"
+      ]
+    },
+    {
+      "text": "cannot open %s column for writing",
+      "rva": "0x519f1f0",
+      "count": 1,
+      "sites": [
+        "0x3a2bf25"
+      ],
+      "containingRanges": [
+        "0x3a2b8b0"
+      ]
+    },
+    {
+      "text": "cannot open view: %s",
+      "rva": "0x519f248",
+      "count": 1,
+      "sites": [
+        "0x3a2bf66"
+      ],
+      "containingRanges": [
+        "0x3a2b8b0"
+      ]
+    },
+    {
+      "text": "cannot open table without rowid: %s",
+      "rva": "0x519f260",
+      "count": 1,
+      "sites": [
+        "0x3a2bf6f"
+      ],
+      "containingRanges": [
+        "0x3a2b8b0"
+      ]
+    },
+    {
+      "text": "cannot open virtual table: %s",
+      "rva": "0x519f288",
+      "count": 1,
+      "sites": [
+        "0x3a2bf78"
+      ],
+      "containingRanges": [
+        "0x3a2b8b0"
+      ]
+    },
+    {
+      "text": "excluded",
+      "rva": "0x519f520",
+      "count": 1,
+      "sites": [
+        "0x3a30f31"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "misuse of aliased aggregate %s",
+      "rva": "0x519f500",
+      "count": 1,
+      "sites": [
+        "0x3a31295"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "misuse of aliased window function %s",
+      "rva": "0x519f4d8",
+      "count": 1,
+      "sites": [
+        "0x3a312dc"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "double-quoted string literal: \"%w\"",
+      "rva": "0x519f498",
+      "count": 1,
+      "sites": [
+        "0x3a313ff"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "no such column",
+      "rva": "0x519f488",
+      "count": 1,
+      "sites": [
+        "0x3a31447"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "ambiguous column name",
+      "rva": "0x519f470",
+      "count": 1,
+      "sites": [
+        "0x3a31450"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "%s: %s.%s.%s",
+      "rva": "0x519f460",
+      "count": 1,
+      "sites": [
+        "0x3a31470"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "%s: %s.%s",
+      "rva": "0x519f450",
+      "count": 1,
+      "sites": [
+        "0x3a31493"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "%s: %s",
+      "rva": "0x519f444",
+      "count": 1,
+      "sites": [
+        "0x3a314a4"
+      ],
+      "containingRanges": [
+        "0x3a30790"
+      ]
+    },
+    {
+      "text": "the \".\" operator",
+      "rva": "0x519f3c8",
+      "count": 1,
+      "sites": [
+        "0x3a31747"
+      ],
+      "containingRanges": [
+        "0x3a316d0"
+      ]
+    },
+    {
+      "text": "second argument to likelihood() must be a constant between 0.0 and 1.0",
+      "rva": "0x519f380",
+      "count": 1,
+      "sites": [
+        "0x3a31a57"
+      ],
+      "containingRanges": [
+        "0x3a317f0"
+      ]
+    },
+    {
+      "text": "not authorized to use function: %s",
+      "rva": "0x519e328",
+      "count": 1,
+      "sites": [
+        "0x3a31aaf"
+      ],
+      "containingRanges": [
+        "0x3a317f0"
+      ]
+    },
+    {
+      "text": "non-deterministic functions",
+      "rva": "0x519e308",
+      "count": 1,
+      "sites": [
+        "0x3a31b3e"
+      ],
+      "containingRanges": [
+        "0x3a31af0"
+      ]
+    },
+    {
+      "text": "%.*s() may not be used as a window function",
+      "rva": "0x519e2d8",
+      "count": 1,
+      "sites": [
+        "0x3a31ba9"
+      ],
+      "containingRanges": [
+        "0x3a31af0"
+      ]
+    },
+    {
+      "text": "aggregate",
+      "rva": "0x519e2c0",
+      "count": 1,
+      "sites": [
+        "0x3a31bf0"
+      ],
+      "containingRanges": [
+        "0x3a31af0"
+      ]
+    },
+    {
+      "text": "window",
+      "rva": "0x519e2cc",
+      "count": 1,
+      "sites": [
+        "0x3a31bfd"
+      ],
+      "containingRanges": [
+        "0x3a31af0"
+      ]
+    },
+    {
+      "text": "misuse of %s function %.*s()",
+      "rva": "0x519e2a0",
+      "count": 1,
+      "sites": [
+        "0x3a31c09"
+      ],
+      "containingRanges": [
+        "0x3a31af0"
+      ]
+    },
+    {
+      "text": "no such function: %.*s",
+      "rva": "0x519e288",
+      "count": 1,
+      "sites": [
+        "0x3a31c46"
+      ],
+      "containingRanges": [
+        "0x3a31af0"
+      ]
+    },
+    {
+      "text": "wrong number of arguments to function %.*s()",
+      "rva": "0x519e258",
+      "count": 1,
+      "sites": [
+        "0x3a31c53"
+      ],
+      "containingRanges": [
+        "0x3a31af0"
+      ]
+    },
+    {
+      "text": "subqueries",
+      "rva": "0x519e248",
+      "count": 1,
+      "sites": [
+        "0x3a31e50"
+      ],
+      "containingRanges": [
+        "0x3a31e12"
+      ]
+    },
+    {
+      "text": "parameters",
+      "rva": "0x519e238",
+      "count": 1,
+      "sites": [
+        "0x3a31ebc"
+      ],
+      "containingRanges": [
+        "0x3a31e12"
+      ]
+    },
+    {
+      "text": "GROUP",
+      "rva": "0x519e524",
+      "count": 1,
+      "sites": [
+        "0x3a32a0a"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "too many terms in ORDER BY clause",
+      "rva": "0x519e1d8",
+      "count": 1,
+      "sites": [
+        "0x3a32b17"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "a GROUP BY clause is required before HAVING",
+      "rva": "0x519e140",
+      "count": 1,
+      "sites": [
+        "0x3a32bd7"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "aggregate functions are not allowed in the GROUP BY clause",
+      "rva": "0x519e4e8",
+      "count": 1,
+      "sites": [
+        "0x3a32c67"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "all VALUES must have the same number of terms",
+      "rva": "0x51a1018",
+      "count": 1,
+      "sites": [
+        "0x3a32c86"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "UNION",
+      "rva": "0x51a0e28",
+      "count": 1,
+      "sites": [
+        "0x3a32cb5"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "INTERSECT",
+      "rva": "0x51a0e38",
+      "count": 1,
+      "sites": [
+        "0x3a32cd5"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "EXCEPT",
+      "rva": "0x51a0e30",
+      "count": 1,
+      "sites": [
+        "0x3a32cf5"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "UNION ALL",
+      "rva": "0x51a0e48",
+      "count": 1,
+      "sites": [
+        "0x3a32d15"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "%r ORDER BY term does not match any column in the result set",
+      "rva": "0x519e190",
+      "count": 1,
+      "sites": [
+        "0x3a331bd"
+      ],
+      "containingRanges": [
+        "0x3a324f0"
+      ]
+    },
+    {
+      "text": "too many arguments on function %T",
+      "rva": "0x519e490",
+      "count": 1,
+      "sites": [
+        "0x3a34c3b"
+      ],
+      "containingRanges": [
+        "0x3a34bd0"
+      ]
+    },
+    {
+      "text": "variable number must be between ?1 and ?%d",
+      "rva": "0x519e460",
+      "count": 1,
+      "sites": [
+        "0x3a34da3"
+      ],
+      "containingRanges": [
+        "0x3a34ccc"
+      ]
+    },
+    {
+      "text": "too many SQL variables",
+      "rva": "0x519e448",
+      "count": 1,
+      "sites": [
+        "0x3a34eb7"
+      ],
+      "containingRanges": [
+        "0x3a34ea2"
+      ]
+    },
+    {
+      "text": "true",
+      "rva": "0x4e1cb60",
+      "count": 1,
+      "sites": [
+        "0x3a36538"
+      ],
+      "containingRanges": [
+        "0x3a36500"
+      ]
+    },
+    {
+      "text": "false",
+      "rva": "0x4e1cb58",
+      "count": 1,
+      "sites": [
+        "0x3a36582"
+      ],
+      "containingRanges": [
+        "0x3a36500"
+      ]
+    },
+    {
+      "text": "_ROWID_",
+      "rva": "0x519e408",
+      "count": 1,
+      "sites": [
+        "0x3a369e5"
+      ],
+      "containingRanges": [
+        "0x3a369c0"
+      ]
+    },
+    {
+      "text": "USING ROWID SEARCH ON TABLE %s FOR IN-OPERATOR",
+      "rva": "0x519e3c8",
+      "count": 1,
+      "sites": [
+        "0x3a36ed5"
+      ],
+      "containingRanges": [
+        "0x3a36c93"
+      ]
+    },
+    {
+      "text": "USING INDEX %s FOR IN-OPERATOR",
+      "rva": "0x519e3a8",
+      "count": 1,
+      "sites": [
+        "0x3a37283"
+      ],
+      "containingRanges": [
+        "0x3a36c93"
+      ]
+    },
+    {
+      "text": "REUSE LIST SUBQUERY %d",
+      "rva": "0x519e360",
+      "count": 1,
+      "sites": [
+        "0x3a3793a"
+      ],
+      "containingRanges": [
+        "0x3a378d0"
+      ]
+    },
+    {
+      "text": "%sLIST SUBQUERY %d",
+      "rva": "0x519e9b0",
+      "count": 1,
+      "sites": [
+        "0x3a37b00"
+      ],
+      "containingRanges": [
+        "0x3a37a12"
+      ]
+    },
+    {
+      "text": "REUSE SUBQUERY %d",
+      "rva": "0x519e998",
+      "count": 1,
+      "sites": [
+        "0x3a380b7"
+      ],
+      "containingRanges": [
+        "0x3a38080"
+      ]
+    },
+    {
+      "text": "%sSCALAR SUBQUERY %d",
+      "rva": "0x519e980",
+      "count": 1,
+      "sites": [
+        "0x3a38138"
+      ],
+      "containingRanges": [
+        "0x3a38130"
+      ]
+    },
+    {
+      "text": "hex literal too big: %s%s",
+      "rva": "0x519e960",
+      "count": 1,
+      "sites": [
+        "0x3a3997a"
+      ],
+      "containingRanges": [
+        "0x3a39880"
+      ]
+    },
+    {
+      "text": "misuse of aggregate: %s()",
+      "rva": "0x519e940",
+      "count": 1,
+      "sites": [
+        "0x3a3a6ae"
+      ],
+      "containingRanges": [
+        "0x3a39f80"
+      ]
+    },
+    {
+      "text": "unknown function: %s()",
+      "rva": "0x519e928",
+      "count": 1,
+      "sites": [
+        "0x3a3abb5"
+      ],
+      "containingRanges": [
+        "0x3a39f80"
+      ]
+    },
+    {
+      "text": "RAISE() may only be used within a trigger-program",
+      "rva": "0x519e8f0",
+      "count": 1,
+      "sites": [
+        "0x3a3ada9"
+      ],
+      "containingRanges": [
+        "0x3a39f80"
+      ]
+    },
+    {
+      "text": "sqlite_",
+      "rva": "0x4f70808",
+      "count": 1,
+      "sites": [
+        "0x3a3cbf6"
+      ],
+      "containingRanges": [
+        "0x3a3cbd0"
+      ]
+    },
+    {
+      "text": "table %s may not be altered",
+      "rva": "0x519e8d0",
+      "count": 1,
+      "sites": [
+        "0x3a3cc65"
+      ],
+      "containingRanges": [
+        "0x3a3cbd0"
+      ]
+    },
+    {
+      "text": "SELECT 1 FROM \"%w\".%s WHERE name NOT LIKE 'sqlite_%%' AND sql NOT LIKE 'create virtual%%' AND sqlite_rename_test(%Q, sql",
+      "rva": "0x519e840",
+      "count": 1,
+      "sites": [
+        "0x3a3ccc8"
+      ],
+      "containingRanges": [
+        "0x3a3cca0"
+      ]
+    },
+    {
+      "text": "SELECT 1 FROM temp.%s WHERE name NOT LIKE 'sqlite_%%' AND sql NOT LIKE 'create virtual%%' AND sqlite_rename_test(%Q, sql",
+      "rva": "0x519e7b0",
+      "count": 1,
+      "sites": [
+        "0x3a3cce5"
+      ],
+      "containingRanges": [
+        "0x3a3cca0"
+      ]
+    },
+    {
+      "text": "view %s may not be altered",
+      "rva": "0x519e748",
+      "count": 1,
+      "sites": [
+        "0x3a3cebe"
+      ],
+      "containingRanges": [
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "UPDATE \"%w\".%s SET sql = sqlite_rename_table(%Q, type, name, sql, %Q, %Q, %d) WHERE (type!='index' OR tbl_name=%Q COLLAT",
+      "rva": "0x519e6a0",
+      "count": 1,
+      "sites": [
+        "0x3a3cfec"
+      ],
+      "containingRanges": [
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "UPDATE %Q.%s SET tbl_name = %Q, name = CASE WHEN type='table' THEN %Q WHEN name LIKE 'sqlite_autoindex%%' AND type='inde",
+      "rva": "0x519e580",
+      "count": 1,
+      "sites": [
+        "0x3a3d031"
+      ],
+      "containingRanges": [
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "sqlite_sequence",
+      "rva": "0x519e570",
+      "count": 1,
+      "sites": [
+        "0x3a3d05e"
+      ],
+      "containingRanges": [
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "UPDATE \"%w\".sqlite_sequence set name = %Q WHERE name = %Q",
+      "rva": "0x519e530",
+      "count": 1,
+      "sites": [
+        "0x3a3d076"
+      ],
+      "containingRanges": [
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "UPDATE sqlite_temp_master SET sql = sqlite_rename_table(%Q, type, name, sql, %Q, %Q, 1), tbl_name = CASE WHEN tbl_name=%",
+      "rva": "0x519ed30",
+      "count": 1,
+      "sites": [
+        "0x3a3d0a6"
+      ],
+      "containingRanges": [
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "there is already another table or index with this name: %s",
+      "rva": "0x519e768",
+      "count": 1,
+      "sites": [
+        "0x3a3d1cc"
+      ],
+      "containingRanges": [
+        "0x3a3cd60"
+      ]
+    },
+    {
+      "text": "Cannot add a PRIMARY KEY column",
+      "rva": "0x519ed08",
+      "count": 1,
+      "sites": [
+        "0x3a3d327"
+      ],
+      "containingRanges": [
+        "0x3a3d258"
+      ]
+    },
+    {
+      "text": "Cannot add a UNIQUE column",
+      "rva": "0x519ece8",
+      "count": 1,
+      "sites": [
+        "0x3a3d343"
+      ],
+      "containingRanges": [
+        "0x3a3d258"
+      ]
+    },
+    {
+      "text": "Cannot add a REFERENCES column with non-NULL default value",
+      "rva": "0x519eca8",
+      "count": 1,
+      "sites": [
+        "0x3a3d36e"
+      ],
+      "containingRanges": [
+        "0x3a3d258"
+      ]
+    },
+    {
+      "text": "Cannot add a NOT NULL column with default value NULL",
+      "rva": "0x519ec70",
+      "count": 1,
+      "sites": [
+        "0x3a3d38e"
+      ],
+      "containingRanges": [
+        "0x3a3d258"
+      ]
+    },
+    {
+      "text": "Cannot add a column with non-constant default",
+      "rva": "0x519ec40",
+      "count": 1,
+      "sites": [
+        "0x3a3d3eb"
+      ],
+      "containingRanges": [
+        "0x3a3d258"
+      ]
+    },
+    {
+      "text": "UPDATE \"%w\".%s SET sql = substr(sql,1,%d) || ', ' || %Q || substr(sql,%d) WHERE type = 'table' AND name = %Q",
+      "rva": "0x519ebd0",
+      "count": 1,
+      "sites": [
+        "0x3a3d54d"
+      ],
+      "containingRanges": [
+        "0x3a3d258"
+      ]
+    },
+    {
+      "text": "virtual tables may not be altered",
+      "rva": "0x519eba8",
+      "count": 1,
+      "sites": [
+        "0x3a3d725"
+      ],
+      "containingRanges": [
+        "0x3a3d6bc"
+      ]
+    },
+    {
+      "text": "Cannot add a column to a view",
+      "rva": "0x519eb88",
+      "count": 1,
+      "sites": [
+        "0x3a3d73d"
+      ],
+      "containingRanges": [
+        "0x3a3d6bc"
+      ]
+    },
+    {
+      "text": "sqlite_altertab_%s",
+      "rva": "0x519eb70",
+      "count": 1,
+      "sites": [
+        "0x3a3d836"
+      ],
+      "containingRanges": [
+        "0x3a3d7be"
+      ]
+    },
+    {
+      "text": "view",
+      "rva": "0x4f52264",
+      "count": 1,
+      "sites": [
+        "0x3a3da15"
+      ],
+      "containingRanges": [
+        "0x3a3d970"
+      ]
+    },
+    {
+      "text": "virtual table",
+      "rva": "0x519eb60",
+      "count": 1,
+      "sites": [
+        "0x3a3da26"
+      ],
+      "containingRanges": [
+        "0x3a3d970"
+      ]
+    },
+    {
+      "text": "cannot rename columns of %s \"%s\"",
+      "rva": "0x519eb38",
+      "count": 1,
+      "sites": [
+        "0x3a3da37"
+      ],
+      "containingRanges": [
+        "0x3a3d970"
+      ]
+    },
+    {
+      "text": "UPDATE \"%w\".%s SET sql = sqlite_rename_column(sql, type, name, %Q, %Q, %d, %Q, %d, %d) WHERE name NOT LIKE 'sqlite_%%' A",
+      "rva": "0x519ea70",
+      "count": 1,
+      "sites": [
+        "0x3a3dbee"
+      ],
+      "containingRanges": [
+        "0x3a3d970"
+      ]
+    },
+    {
+      "text": "UPDATE temp.%s SET sql = sqlite_rename_column(sql, type, name, %Q, %Q, %d, %Q, %d, 1) WHERE type IN ('trigger', 'view')",
+      "rva": "0x519e9f0",
+      "count": 1,
+      "sites": [
+        "0x3a3dc47"
+      ],
+      "containingRanges": [
+        "0x3a3d970"
+      ]
+    },
+    {
+      "text": " after rename",
+      "rva": "0x519e9e0",
+      "count": 1,
+      "sites": [
+        "0x3a3e044"
+      ],
+      "containingRanges": [
+        "0x3a3e010"
+      ]
+    },
+    {
+      "text": "error in %s %s%s: %s",
+      "rva": "0x519e9c8",
+      "count": 1,
+      "sites": [
+        "0x3a3e064"
+      ],
+      "containingRanges": [
+        "0x3a3e010"
+      ]
+    },
+    {
+      "text": "\"%w\"",
+      "rva": "0x519fea0",
+      "count": 1,
+      "sites": [
+        "0x3a3e2e3"
+      ],
+      "containingRanges": [
+        "0x3a3e270"
+      ]
+    },
+    {
+      "text": "sqlite_temp_master",
+      "rva": "0x51a00c8",
+      "count": 1,
+      "sites": [
+        "0x3a3e98b"
+      ],
+      "containingRanges": [
+        "0x3a3e600"
+      ]
+    }
+  ],
+  "disposition": "NO_GO",
+  "reasons": [
+    "navigation-aid-only",
+    "no-function-identity-is-claimed-by-this-report"
+  ]
+}

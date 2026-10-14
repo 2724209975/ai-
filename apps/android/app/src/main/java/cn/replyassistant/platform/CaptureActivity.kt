@@ -13,7 +13,7 @@ class CaptureActivity : ComponentActivity() {
     private val launcher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             startForegroundService(Intent(this, CaptureService::class.java)
-                .putExtra("code", result.resultCode).putExtra("data", result.data))
+                .putExtra("code", result.resultCode).putExtra("data", result.data).putExtra("append", intent.getBooleanExtra("append", false)))
         } else {
             (application as AssistantApplication).controller.notice("截屏未授权，可通过系统分享或相册导入截图")
             OverlayService.showPanel()

@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:0.8.7-pg17
         env:
           POSTGRES_DB: chat_agent_test
           POSTGRES_USER: postgres
@@ -38,6 +38,8 @@ jobs:
           package-manager-cache: false
       - name: Install root dependencies
         run: npm ci
+      - name: Initialize shared vector extension before parallel schema tests
+        run: node scripts/prepare-test-vector.mts
       - name: Install web dependencies
         run: npm --prefix apps/web ci
       - name: Install Chromium for mock mobile UI tests
@@ -46,3 +48,5 @@ jobs:
         run: chmod +x deploy/pg-dump-ci.sh deploy/pg-restore-ci.sh
       - name: Unit, contract, real PostgreSQL, mock flow, web build
         run: npm run verify
+      - name: P6 offline replay evidence (synthetic scenarios, no network or sends)
+        run: npm run eval:p6

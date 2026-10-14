@@ -5,6 +5,35 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { superviseLocalStack, rotatingStackLog } from './local-supervisor.mts';
 
+test('a bridge restart leaves its sibling and dependencies running', async () => {
+  const controller=new AbortController(), starts:string[]=[], stops:string[]=[];
+  let qqStarts=0, exitQq!:()=>void, wechatReady!:()=>void;
+  const qqExit=new Promise<void>(resolve=>{exitQq=resolve;});
+  const wechatStarted=new Promise<void>(resolve=>{wechatReady=resolve;});
+  const run=superviseLocalStack({ names:['postgres','core','bridge-qq','bridge-wechat'],isolatedServices:['bridge-qq','bridge-wechat'],signal:controller.signal,
+    log:async()=>{},delay:async()=>{},start:async name=>{
+      starts.push(name); if(name==='bridge-qq') qqStarts++;
+      return { ready:async()=>{if(name==='bridge-wechat') wechatReady();if(name==='bridge-qq' && qqStarts===2) controller.abort();},
+        exited:name==='bridge-qq' && qqStarts===1 ? qqExit : new Promise<void>(()=>{}),stop:async()=>{stops.push(name);} };
+    } });
+  await wechatStarted; exitQq(); await run;
+  assert.equal(starts.filter(n=>n==='postgres').length,1);
+  assert.equal(starts.filter(n=>n==='core').length,1);
+  assert.equal(starts.filter(n=>n==='bridge-wechat').length,1);
+  assert.equal(qqStarts,2);
+  assert.equal(stops[0],'bridge-qq');
+  assert.deepEqual(stops.slice(-2),['core','postgres']);
+});
+
+test('dependency exit cancels a stalled independent bridge before restarting roots', async () => {
+  const controller=new AbortController(),stops:string[]=[];let exitCore!:()=>void,waiting!:()=>void;
+  const coreExit=new Promise<void>(resolve=>{exitCore=resolve;}),bridgeWaiting=new Promise<void>(resolve=>{waiting=resolve;});
+  const running=superviseLocalStack({names:['postgres','core','bridge-qq'],isolatedServices:['bridge-qq'],signal:controller.signal,log:async()=>{},
+    start:async name=>({ready:async()=>{if(name==='bridge-qq'){waiting();await new Promise<void>(()=>{});}},exited:name==='core' ? coreExit : new Promise<void>(()=>{}),
+      stop:async()=>{stops.push(name);if(name==='postgres')controller.abort();}}) });
+  await bridgeWaiting;exitCore();await running;assert.deepEqual(stops,['bridge-qq','core','postgres']);
+});
+
 test('supervisor starts in dependency order and stops in reverse before backing off and restarting', async () => {
   const controller = new AbortController(), trace: string[] = [], delays: number[] = []; let round = 0;
   await superviseLocalStack({ names: ['postgres', 'core', 'bridge'], signal: controller.signal,

@@ -1,7 +1,7 @@
 package cn.replyassistant.platform
 
 import android.accessibilityservice.AccessibilityService
-import android.os.Bundle
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -20,8 +20,8 @@ class ChatAccessibilityService : AccessibilityService() {
             targetPackage = instance.get()?.applicationRoot()?.packageName?.toString()
             return targetPackage
         }
-        fun fill(text: String): Boolean = instance.get()?.fillCurrent(text) ?: false
         fun readCurrent(): List<ChatMessage>? = instance.get()?.readVisible()
+        fun readLayout(): String? = instance.get()?.visibleLayout()
     }
     override fun onServiceConnected() { instance = WeakReference(this) }
     override fun onDestroy() { if (instance.get() === this) instance.clear(); super.onDestroy() }
@@ -43,23 +43,6 @@ class ChatAccessibilityService : AccessibilityService() {
         }
         visit(root, 0); return result
     }
-    private fun fillCurrent(text: String): Boolean {
-        if (text.isBlank() || text.length > 4000) return false
-        val root = applicationRoot() ?: return false
-        if (root.packageName?.toString() != targetPackage) return false
-        val editable = nodes(root).filter { it.isEditable && it.isVisibleToUser && it.isEnabled && !it.isPassword }
-        val focused = editable.filter { it.isFocused }
-        val target = when { focused.size == 1 -> focused.single(); editable.size == 1 -> editable.single(); else -> return false }
-        // Preserve text already entered by the user; never silently overwrite an unrelated draft.
-        if (!target.isShowingHintText && !target.text.isNullOrBlank() && target.text.toString() != text) return false
-        if (!target.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }) return false
-        val ok = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        })
-        if (!ok) return false
-        target.refresh()
-        return target.text?.toString() == text
-    }
     private fun readVisible(): List<ChatMessage>? {
         val root = applicationRoot() ?: return null
         if (targetPackage == null || root.packageName?.toString() != targetPackage) return null
@@ -67,5 +50,21 @@ class ChatAccessibilityService : AccessibilityService() {
         return nodes(root).filter { it.isVisibleToUser && !it.isPassword && !it.isEditable && !it.text.isNullOrBlank() }
             .take(100).map { ChatMessage(speaker = Speaker.UNKNOWN, text = it.text.toString(),
                 origin = Origin.ACCESSIBILITY, sourceId = source, uncertain = true) }.takeIf { it.isNotEmpty() }
+    }
+    private fun visibleLayout(): String? {
+        val root = applicationRoot() ?: return null
+        if (targetPackage == null || root.packageName?.toString() != targetPackage) return null
+        val bounds = Rect().also(root::getBoundsInScreen)
+        val rows = nodes(root).filter { it.isVisibleToUser && !it.isPassword && !it.isEditable &&
+            (!it.text.isNullOrBlank() || !it.contentDescription.isNullOrBlank()) }
+            .map { node ->
+                val rect = Rect().also(node::getBoundsInScreen)
+                Triple(rect, node, node.text?.toString()?.takeIf { it.isNotBlank() } ?: node.contentDescription.toString())
+            }.filter { !it.first.isEmpty }.sortedWith(compareBy({it.first.top}, {it.first.left}))
+            .take(200)
+        if (rows.isEmpty()) return null
+        return ("应用=$targetPackage，窗口=$bounds\n" + rows.joinToString("\n") { (rect,node,text) ->
+            "位置=$rect；控件=${node.className}；ID=${node.viewIdResourceName.orEmpty()}；内容=${text.take(4000)}"
+        }).take(100_000)
     }
 }

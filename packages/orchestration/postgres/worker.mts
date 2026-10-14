@@ -13,6 +13,7 @@ export type DispatchWorkerOptions = {
   /** Collection only. The production core has no platform adapter, so it must never dispatch:
    * dispatch belongs to the per-account bridge, which holds 02's send lease. */
   dispatchEnabled?: boolean;
+  accountId?: string;
   /** Upper bound of sends attempted per conversation per tick, so one contact cannot starve others. */
   maxSendsPerTick?: number;
   onError?(error: unknown, phase: 'collect' | 'dispatch'): void;
@@ -35,13 +36,13 @@ export function createDispatchWorker(options: DispatchWorkerOptions) {
 
   async function runOnce(): Promise<TickResult> {
     const result: TickResult = { collected: 0, dispatched: 0, failures: 0 };
-    for (const conversationId of await options.service.claimDueCollections(batchSize)) {
+    for (const conversationId of await options.service.claimDueCollections(batchSize, options.accountId)) {
       try {
         if (await options.service.flushDue(conversationId)) result.collected++;
       } catch (error) { result.failures++; report(error, 'collect'); }
     }
     if (!dispatchEnabled) return result;
-    for (const conversationId of await options.service.dispatchableConversations(batchSize)) {
+    for (const conversationId of await options.service.dispatchableConversations(batchSize, options.accountId)) {
       for (let index = 0; index < maxSendsPerTick; index++) {
         try {
           const sent = await options.service.dispatchNext(conversationId);
@@ -75,6 +76,7 @@ export function createDispatchWorker(options: DispatchWorkerOptions) {
       if (timer) clearInterval(timer);
       timer = undefined;
       while (running) await new Promise(resolve => setTimeout(resolve, 25));
+      await options.service.waitForShadow?.();
     },
   };
 }

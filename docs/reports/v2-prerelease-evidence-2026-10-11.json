@@ -1,0 +1,274 @@
+{
+  "date": "2026-10-11",
+  "preparation": {
+    "releaseId": "2026-10-11T06-25-22-328Z-ca7721",
+    "results": [
+      {
+        "platform": "qq",
+        "previousMigrations": 16,
+        "migrations": 19,
+        "applied": [
+          "0017_reply_pipeline_v2.sql",
+          "0018_context_memory_v2.sql",
+          "0019_decision_models_v2.sql"
+        ],
+        "existingDataPreserved": true,
+        "tableRows": {
+          "data_contacts": 1,
+          "data_messages": 0,
+          "data_facts": 0,
+          "orch_send_tasks": 0,
+          "dispatch_attempts": 0,
+          "platform_inbox_raw": 2,
+          "data_relationship_memory": 1,
+          "mobile_link_state": 1
+        }
+      },
+      {
+        "platform": "wechat",
+        "previousMigrations": 16,
+        "migrations": 19,
+        "applied": [
+          "0017_reply_pipeline_v2.sql",
+          "0018_context_memory_v2.sql",
+          "0019_decision_models_v2.sql"
+        ],
+        "existingDataPreserved": true,
+        "tableRows": {
+          "data_contacts": 0,
+          "data_messages": 0,
+          "data_facts": 0,
+          "orch_send_tasks": 0,
+          "dispatch_attempts": 0,
+          "platform_inbox_raw": 0,
+          "data_relationship_memory": 0,
+          "mobile_link_state": 0
+        }
+      }
+    ],
+    "migrationMapping": [
+      {
+        "source": "0001_core.sql",
+        "target": "0001_core.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0002_data.sql",
+        "target": "0002_data.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0003_data_scope_fix.sql",
+        "target": "0003_data_scope_fix.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0004_orchestration.sql",
+        "target": "0004_orchestration.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0005_orchestration_states.sql",
+        "target": "0005_orchestration_states.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0006_orchestration_scheduling.sql",
+        "target": "0006_orchestration_scheduling.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0007_mock_auto_approval.sql",
+        "target": "0007_mock_auto_approval.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0008_platform_message_mutations.sql",
+        "target": "0008_platform_message_mutations.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0009_skills.sql",
+        "target": "0009_skills.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0010_paused_inbound_review.sql",
+        "target": "0010_paused_inbound_review.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0011_plan_generation_versions.sql",
+        "target": "0011_plan_generation_versions.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0012_account_health.sql",
+        "target": "0012_account_health.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0013_platform_accounts.sql",
+        "target": "0015_platform_accounts.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0014_mobile_link.sql",
+        "target": "0016_mobile_link.sql",
+        "action": "already_present"
+      },
+      {
+        "source": "0015_reply_pipeline_v2.sql",
+        "target": "0017_reply_pipeline_v2.sql",
+        "action": "append"
+      },
+      {
+        "source": "0016_context_memory_v2.sql",
+        "target": "0018_context_memory_v2.sql",
+        "action": "append"
+      },
+      {
+        "source": "0017_decision_models_v2.sql",
+        "target": "0019_decision_models_v2.sql",
+        "action": "append"
+      }
+    ],
+    "outbound": false,
+    "cloud": false,
+    "dailyDataChanged": false
+  },
+  "verification": {
+    "releaseId": "2026-10-11T06-25-22-328Z-ca7721",
+    "startPassed": true,
+    "restartPassed": true,
+    "authPassed": true,
+    "existingDataPreserved": true,
+    "dailySourceUnchanged": true,
+    "realPlatformConnected": false,
+    "realModelEnabled": false,
+    "automaticSendEnabled": false,
+    "profiles": [
+      {
+        "platform": "qq",
+        "url": "http://127.0.0.1:56419/#chat",
+        "ready": true
+      },
+      {
+        "platform": "wechat",
+        "url": "http://127.0.0.1:56426/#chat",
+        "ready": true
+      }
+    ]
+  },
+  "rollback": {
+    "releaseId": "2026-10-11T06-25-22-328Z-ca7721",
+    "outcomes": [
+      {
+        "platform": "qq",
+        "originalDataRestored": true,
+        "legacyMigrationsValid": true,
+        "newPipelinePresent": false
+      },
+      {
+        "platform": "wechat",
+        "originalDataRestored": true,
+        "legacyMigrationsValid": true,
+        "newPipelinePresent": false
+      }
+    ],
+    "dailySourceTouched": false
+  },
+  "fullGate": {
+    "passed": 917,
+    "failed": 0,
+    "skipped": 0,
+    "groups": {
+      "unit": 418,
+      "app": 33,
+      "tools": 225,
+      "contracts": 11,
+      "integration": 181,
+      "e2e": 49
+    },
+    "testDatabaseStopped": true
+  },
+  "strictTypecheck": {
+    "scope": "selected v2 production and tests",
+    "files": 52,
+    "passed": true
+  },
+  "sourceInventory": {
+    "fileCount": 488,
+    "lineCount": 52924,
+    "testFileCount": 182
+  },
+  "browser": {
+    "productionBuild": true,
+    "passwordLoginApiPassed": [
+      "qq",
+      "wechat"
+    ],
+    "qqConversationSettingsMemoryModelsReadable": true,
+    "wechatEmptyConversationsRendered": true,
+    "widthChecks": [
+      {
+        "platform": "qq",
+        "viewports": [
+          {
+            "width": 1440,
+            "scrollWidth": 1440,
+            "sessionStatus": 200
+          },
+          {
+            "width": 390,
+            "scrollWidth": 390,
+            "sessionStatus": 200
+          },
+          {
+            "width": 320,
+            "scrollWidth": 320,
+            "sessionStatus": 200
+          }
+        ]
+      },
+      {
+        "platform": "wechat",
+        "viewports": [
+          {
+            "width": 1440,
+            "scrollWidth": 1440,
+            "sessionStatus": 200
+          },
+          {
+            "width": 390,
+            "scrollWidth": 390,
+            "sessionStatus": 200
+          },
+          {
+            "width": 320,
+            "scrollWidth": 320,
+            "sessionStatus": 200
+          }
+        ]
+      }
+    ],
+    "consoleNotes": [
+      "Expected unauthenticated session 401 before login",
+      "Existing favicon 404"
+    ],
+    "nativeAndroidTested": false,
+    "realPhoneLanTested": false
+  },
+  "runtimeSnapshot": {
+    "manifest": "release-manifest.json",
+    "files": 371,
+    "dependenciesExcluded": true
+  },
+  "pending": [
+    "Real-model budget and permitted deidentified samples",
+    "Real-model comparison and human blind ratings",
+    "Explicit contact scope and real-platform manual trial"
+  ],
+  "dailyDeploymentChanged": false,
+  "automaticSendAuthorized": false
+}

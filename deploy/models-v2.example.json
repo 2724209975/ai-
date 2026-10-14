@@ -1,0 +1,15 @@
+[
+  {
+    "key": "economy",
+    "providerId": "configured-compatible",
+    "modelId": "operator-chosen-model-id",
+    "modelVersion": "operator-declared-version",
+    "baseUrl": "https://provider.example/v1/",
+    "apiKeyEnv": "AI_V2_ECONOMY_KEY",
+    "dataRegion": "operator-confirmed-region",
+    "retentionPolicy": "operator-confirmed-policy",
+    "tasks": ["decision", "generation"],
+    "contextTokens": 8192,
+    "outputTokens": 1024
+  }
+]

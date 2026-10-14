@@ -12,10 +12,12 @@ import { PgOwnerDataPort } from '../../../packages/data/postgres/owner-data-port
 import { PgConfirmedService } from '../../../packages/orchestration/postgres/confirmed-service.mts';
 import { createDispatchWorker } from '../../../packages/orchestration/postgres/worker.mts';
 import { createSkillOutboxPump } from '../../../packages/infrastructure/postgres/skill-outbox-pump.mts';
-import { MockPlatformAdapter } from '../../../packages/platform/mock/adapter.mts';
+import { MockPlatformAdapter,type Event } from '../../../packages/platform/mock/adapter.mts';
 import { createPgPersistentFakeIntelligence } from '../../../packages/ai/index.mts';
 import { createPgOwnerPort } from './pg-owner-port.mts';
 import { createOwnerApp } from './owner-server.mts';
+import {configureUnifiedMoneyEnv} from '../../../packages/ai/generation/unified-budget.mts';
+configureUnifiedMoneyEnv(process.env);
 
 function required(name: string): string {
   const value = process.env[name];
@@ -64,12 +66,12 @@ const platform = new MockPlatformAdapter({ platform: platformName, accountId, au
 if (flag('MOCK_PLATFORM_CONNECTED', true)) { platform.setConnection('RECONCILING'); platform.setConnection('CONNECTED'); }
 const data = new PgDataProvider();
 const service = new PgConfirmedService({
-  pool, data, intelligence: createPgPersistentFakeIntelligence({ pool, data }), platform, authority,
+  pool, data, intelligence: createPgPersistentFakeIntelligence({ pool, data }), platform, authority,ownerId,
   aggregationWindowMs: integer('AGGREGATION_WINDOW_MS', 0),
   maxAggregationMs: integer('MAX_AGGREGATION_MS', 30_000),
 });
 await service.recover();
-const skillOutbox = createSkillOutboxPump({ pool, onEvent: event => service.consumeSkillEvent(event),
+const skillOutbox = createSkillOutboxPump({ pool, onEvent: event => service.consumeSkillEvent(event as Event),
   intervalMs: integer('SKILL_OUTBOX_INTERVAL_MS', 2_000),
   onError: () => process.stderr.write('skill outbox delivery failed; event remains pending\n') });
 try { await skillOutbox.tick(); }

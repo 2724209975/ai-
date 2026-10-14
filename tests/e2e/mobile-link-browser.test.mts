@@ -1,0 +1,91 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {readFile,mkdir,mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {resolve,extname,sep,join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {LinkService} from '../../packages/link/service.mts';
+import {MemoryLinkStore} from '../../packages/link/store.mts';
+import {linkHttp} from '../../packages/link/http.mts';
+import {UnifiedLinkBudget} from '../../packages/link/unified-budget.mts';
+import {UnifiedMoneyBudget,moneyDay} from '../../packages/ai/generation/unified-budget.mts';
+const enabled=process.env.RUN_BROWSER_E2E==='1';
+test('mobile linkage: expired QR, search, polling preserves edit base and readable conflict resolution',{skip:!enabled},async()=>{
+ const {chromium}=await import('playwright');const service=new LinkService(new MemoryLinkStore());
+ const paired=await service.pair(await service.invite(),'合成手机');
+ const profile={name:'同名对象',platform:'微信',relationship:'朋友',style:'原风格',preferences:[{id:'p',text:'不催回复'}],memory:{consent:false,paused:false,profile:'',entries:[]}};
+ const group=await service.bind(paired.deviceId,'wx',profile,'synthetic-contact');await service.bind(paired.deviceId,'qq',{...profile,platform:'QQ'},null);
+ await service.desktopUpdate(group.id,Array.from({length:120},(_,i)=>({id:`desktop:fixture-${i}`,kind:'message' as const,body:{speaker:i%2?'ME' as const:'OTHER' as const,text:`合成原文-${String(i).padStart(3,'0')}`,timestamp:Date.UTC(2026,9,12)+i*1000,uncertain:false,generated:false,styleExample:false,sourceId:`fixture-${i}`},deleted:false,expectedVersion:0})));
+ const phoneRecordId=`phone:${paired.deviceId}:fixture-correction`;await service.sync(paired.deviceId,group.id,[{id:phoneRecordId,kind:'message',body:{speaker:'OTHER',text:'待纠正的合成原文',timestamp:null,uncertain:false,generated:false,styleExample:false,sourceId:'fixture-page'},deleted:false,expectedVersion:0}],0,true);
+ const memoryBase={id:'memory-usable',version:1,ownerId:'owner',contactId:'synthetic-contact',conversationId:'conv',accountId:'account',memoryType:'preference' as const,subject:'contact',predicate:'likes',object:'饺子',content:'喜欢饺子',evidenceType:'explicit_statement' as const,evidenceRefs:[{id:'00000000-0000-4000-8000-000000000001',version:1}],confidence:1,importance:.5,status:'active' as const,observedAt:new Date().toISOString(),supersedesId:null,evidenceValid:true};
+ const fixtureMemories=[memoryBase,{...memoryBase,id:'memory-pending',content:'待核对喜欢面条',status:'pending' as const},{...memoryBase,id:'memory-expired',content:'临时周末有空',memoryType:'temporary_state' as const,validUntil:'2020-01-01T00:00:00Z'},{...memoryBase,id:'memory-source',content:'旧来源的偏好',evidenceValid:false},{...memoryBase,id:'memory-future',content:'尚未生效的偏好',validFrom:'2099-01-01T00:00:00Z'},{...memoryBase,id:'memory-retained',content:'超过保留期限',observedAt:'2020-01-01T00:00:00Z'},{...memoryBase,id:'memory-confirmed',content:'本人确认不催回复',evidenceType:'user_confirmed' as const,evidenceRefs:[]}];
+ await service.desktopUpdate(group.id,[{id:'desktop:context-v2',kind:'context_v2',deleted:false,expectedVersion:0,body:{schemaVersion:'2.0',contactId:'synthetic-contact',ownerId:'owner',accountId:'account',conversationId:'conv',platform:'wechat',enabled:true,retentionDays:90,relationship:{confirmedStage:'unknown',inferredHint:null,locked:false,version:0,sourceRefs:[]},personalStyle:{globalVersion:null,contactVersion:null,settings:{},statistics:null,examples:[],sourceRefs:[],deliveredEditRefs:[]}}},...fixtureMemories.map(body=>({id:`desktop:memory:${body.id}`,kind:'memory_v2' as const,body,deleted:false,expectedVersion:0}))]);
+ const writes:any[]=[],sourceNotes:any[]=[];let failRead=false;
+ const auth:any={authenticateRequest:async()=>({}),verifyWrite:(req:any)=>req.headers['x-csrf-token']==='synthetic'};
+ const moneyRoot=await mkdtemp(join(tmpdir(),'browser-unified-money-')),moneyPath=join(moneyRoot,'money.json');await writeFile(moneyPath,JSON.stringify({day:moneyDay(Date.now()),reservedMicros:100000,calls:1,tokens:200}));
+ const money=new UnifiedMoneyBudget({path:moneyPath,totalCny:1,dailyCny:1,dailyCalls:10,dailyTokens:100000});const budget=new UnifiedLinkBudget(money,service.store);await budget.initialize();
+ const handle=linkHttp(service,auth,{budget,endpoint:'https://192.168.1.2:8791',fingerprint:'0'.repeat(64),contacts:async()=>({items:[{id:'synthetic-contact',name:'电脑小陈',platform:'微信'}]}),evidence:async(_group,id)=>({memoryId:id,memoryVersion:1,sources:id.endsWith('memory-source')?[{id:'source',version:1,status:'deleted'}]:[{id:'source',version:1,status:'current',speaker:'OTHER',text:'合成来源：我喜欢饺子',timestamp:null,origin:'phone'}]}),remember:async(g,input)=>{sourceNotes.push(input);await service.desktopUpdate(g.id,[{id:'desktop:memory:from-source',kind:'memory_v2',body:{...memoryBase,id:'from-source',content:input.content,evidenceType:'user_confirmed',subject:input.subject,memoryType:input.memoryType},deleted:false,expectedVersion:0}]);return {id:'from-source'};}});
+ const build=resolve(process.env.WEB_TEST_BUILD_DIR??'apps/web/build');
+ const server=createServer(async(req,res)=>{try {
+  const path=new URL(req.url!,'http://localhost').pathname;
+  if(path==='/api/v1/session'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ownerId:'synthetic',csrfToken:'synthetic',expiresAt:'2099-01-01'}));return;}
+  if(path==='/api/v1/mobile-link'&&failRead){res.writeHead(503,{'Content-Type':'application/json'});res.end('{}');return;}
+  if(path.startsWith('/api/v1/mobile-link')){await handle(req,res,true);return;}
+  const target=resolve(build,path==='/'?'index.html':path.slice(1));if(!target.startsWith(build+sep)){res.writeHead(404);res.end();return;}
+  const bytes=await readFile(target);res.setHeader('Content-Type',extname(target)==='.js'?'text/javascript':extname(target)==='.css'?'text/css':'text/html');res.end(target.endsWith('index.html')?bytes.toString().replace('<head>','<head><meta name="csrf-token" content="synthetic">'):bytes);
+ }catch{res.writeHead(500);res.end();}});
+ await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));const address=server.address() as any;
+ const browser=await chromium.launch({headless:true});
+ try {
+  const page=await browser.newPage({viewport:{width:1100,height:850}});
+  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/profile'))writes.push(r.postDataJSON());});
+  await page.clock.install();await page.goto(`http://127.0.0.1:${address.port}/#link`);
+  await page.getByRole('heading',{name:'同名对象 · 微信',exact:true}).waitFor();
+  const card=page.locator('article').filter({has:page.getByRole('heading',{name:'同名对象 · 微信',exact:true})});
+  await card.getByText('已关联电脑联系人：电脑小陈 · 微信',{exact:false}).waitFor();await card.getByText('手机已确认收到第 0 版资料',{exact:false}).waitFor();
+  await card.locator('summary').filter({hasText:'同步给手机的长期记忆'}).click();const memories=card.getByTestId('linked-memory');assert.equal(await memories.count(),7);
+  assert.equal(await card.getByRole('heading',{name:'偏好 · 有效',exact:true}).count(),2);await card.getByRole('heading',{name:'偏好 · 待确认',exact:true}).waitFor();await card.getByRole('heading',{name:'临时状态 · 已过期',exact:true}).waitFor();await card.getByRole('heading',{name:'偏好 · 聊天来源已失效',exact:true}).waitFor();await card.getByRole('heading',{name:'偏好 · 尚未到生效时间',exact:true}).waitFor();await card.getByRole('heading',{name:'偏好 · 超出资料保留期限',exact:true}).waitFor();
+  await card.getByLabel('查找长期记忆').fill('饺子');assert.equal(await memories.count(),1);await memories.getByRole('button',{name:'查看聊天来源',exact:true}).click();await memories.getByText('对方：合成来源：我喜欢饺子',{exact:true}).waitFor();await memories.getByText('手机记录 · 时间未标注',{exact:false}).waitFor();
+  await card.getByLabel('查找长期记忆').fill('');await card.getByLabel('记忆状态').selectOption('pending');assert.equal(await memories.count(),1);await card.getByLabel('记忆状态').selectOption('unusable');assert.equal(await memories.count(),4);
+  const invalid=memories.filter({hasText:'旧来源的偏好'});await invalid.getByRole('button',{name:'查看聊天来源',exact:true}).click();await invalid.getByText('来源版本 1 · 来源已删除').waitFor();assert.ok(!(await invalid.innerText()).includes('合成来源：'));
+  await card.getByLabel('记忆类型').selectOption('temporary_state');assert.equal(await memories.count(),1);await card.getByLabel('记忆状态').selectOption('usable');await card.getByText('没有匹配的记忆，可调整关键词、状态或类型。').waitFor();
+  await card.getByLabel('记忆状态').selectOption('');await card.getByLabel('记忆类型').selectOption('');await card.getByText('由本人确认，未绑定聊天原文。').waitFor();await card.locator('summary').filter({hasText:'同步给手机的长期记忆'}).click();
+  const first=await service.sync(paired.deviceId,group.id,[],0);await page.getByRole('button',{name:'刷新联动资料',exact:true}).click();await card.getByText(`待手机确认 ${first.records.length} 项更新`,{exact:false}).waitFor();
+  await service.sync(paired.deviceId,group.id,[],first.cursor,true);await page.getByRole('button',{name:'刷新联动资料',exact:true}).click();await card.getByText('手机已确认收到电脑当前资料。').waitFor();
+  await page.getByLabel('查找关联对象').fill('电脑小陈');assert.equal(await page.getByRole('heading',{name:'同名对象 · QQ',exact:true}).isVisible(),false);await page.getByLabel('查找关联对象').fill('');
+  await card.locator('summary').filter({hasText:'手机可用的历史资料与表达习惯'}).click();const history=card.getByTestId('link-history');
+  assert.equal(await history.locator('[data-history-record]').count(),50);await card.getByRole('button',{name:'下一页',exact:true}).click();await card.getByRole('button',{name:'下一页',exact:true}).click();
+  assert.equal(await history.locator('[data-history-record]').count(),21);assert.match(await history.innerText(),/合成原文-000/);assert.equal(await card.getByRole('button',{name:'下一页',exact:true}).isEnabled(),false);
+  await card.getByLabel('查找聊天原文',{exact:true}).fill('合成原文-000');assert.equal(await history.locator('[data-history-record]').count(),1);
+  await card.getByLabel('记录来源',{exact:true}).selectOption('phone');await card.getByText('没有匹配的聊天原文，可调整关键词、来源或说话人。').waitFor();
+  await card.getByLabel('记录来源',{exact:true}).selectOption('desktop');await card.getByLabel('查找聊天原文',{exact:true}).fill('');await card.getByLabel('说话人',{exact:true}).selectOption('ME');assert.equal(await history.locator('[data-history-record]').count(),50);
+  await card.getByLabel('说话人',{exact:true}).selectOption('');await card.getByLabel('记录来源',{exact:true}).selectOption('phone');const sourceCard=history.locator('[data-history-record]');
+  await sourceCard.getByRole('button',{name:'纠正原文',exact:true}).click();await sourceCard.getByLabel('纠正后的原文').fill('纠正后的合成原文');await sourceCard.getByLabel('原文说话人').selectOption('ME');await sourceCard.getByRole('button',{name:'保存原文修订',exact:true}).click();await sourceCard.getByText('我：纠正后的合成原文',{exact:true}).waitFor();assert.equal(((await service.store.read()).groups[0].records[phoneRecordId].body as any).sourceId,'fixture-page');
+  await sourceCard.getByRole('button',{name:'从原文整理记忆',exact:true}).click();await sourceCard.getByLabel('确认的记忆内容').fill('本人确认的合成偏好');await sourceCard.getByLabel('整理记忆类型').selectOption('preference');await sourceCard.getByRole('button',{name:'确认保存记忆',exact:true}).click();await sourceCard.getByText('已保存，手机下次同步后更新。').waitFor();assert.equal(sourceNotes[0].expectedVersion,2);assert.equal(sourceNotes[0].subject,'owner');assert.equal(sourceNotes[0].recordId,phoneRecordId);
+  await card.getByLabel('记录来源',{exact:true}).selectOption('');await card.locator('summary').filter({hasText:'手机可用的历史资料与表达习惯'}).click();
+  await page.getByText('管理手机额度',{exact:true}).click();await page.getByLabel('手机累计额度（元）').fill('0.2');await page.getByRole('button',{name:'分配额度，随后在手机同步领取',exact:true}).click();
+  await page.getByText('累计分配 0.20 元',{exact:false}).waitFor();assert.equal((await money.view()).phones[0].limitMicroCny,200000);
+  await page.getByText('尚未记录手机费用上报时间，手机下次同步后更新。').waitFor();await budget.report(paired.deviceId,{budgetId:(await money.view()).budgetId,spentMicroCny:0,calls:0,tokens:0});await page.getByRole('button',{name:'刷新联动资料',exact:true}).click();await page.getByText('已收到手机费用上报。').waitFor();
+  await page.getByLabel('手机累计额度（元）').fill('2');assert.equal(await page.getByRole('button',{name:'分配额度，随后在手机同步领取',exact:true}).isEnabled(),false);await page.getByText('金额超出当前可分配范围，请核对最高累计额度。').waitFor();assert.equal((await money.view()).phones[0].limitMicroCny,200000);
+  await money.reserve('wechat','合成低成本模型',100,100,{inputPerMillion:2,outputPerMillion:8});await page.getByRole('button',{name:'刷新联动资料',exact:true}).click();await page.getByText('已用约 0.10 元',{exact:false}).waitFor();
+  await page.getByLabel('手机累计额度（元）').fill('0.1');assert.equal(await page.getByRole('button',{name:'分配额度，随后在手机同步领取',exact:true}).isEnabled(),false);
+  await page.getByRole('button',{name:'生成配对二维码',exact:true}).click();await page.getByRole('img',{name:'手机配对二维码'}).waitFor();
+  await page.clock.fastForward(121000);await page.getByText('配对码已过期，请重新生成。').waitFor();assert.equal(await page.getByRole('img',{name:'手机配对二维码'}).count(),0);
+  await page.getByLabel('查找关联对象').fill('微信');assert.equal(await page.getByRole('heading',{name:'同名对象 · QQ',exact:true}).isVisible(),false);
+  await card.locator('summary').filter({hasText:'整理背景与回复偏好'}).click();await card.getByLabel('回复风格', {exact:true}).fill('电脑编辑中的风格');
+  await service.sync(paired.deviceId,group.id,[{id:'profile',kind:'profile',body:{...profile,style:'手机新风格'},expectedVersion:1,deleted:false}],0);
+  await page.getByRole('button',{name:'刷新联动资料',exact:true}).click();await card.getByText('手机已更新资料。你的修改仍保留，保存后会比较两端版本。').waitFor();
+  assert.equal(await card.getByLabel('回复风格',{exact:true}).inputValue(),'电脑编辑中的风格');
+  await page.getByLabel('查找关联对象').fill('QQ');await page.getByLabel('查找关联对象').fill('微信');assert.equal(await card.getByLabel('回复风格',{exact:true}).inputValue(),'电脑编辑中的风格');
+  await card.getByRole('button',{name:'保存资料',exact:true}).click();await card.getByRole('heading',{name:'两端修改需要选择'}).waitFor();assert.equal(writes[0].expectedVersion,1);
+  assert.match(await card.innerText(),/风格：手机新风格/);assert.match(await card.innerText(),/风格：电脑编辑中的风格/);assert.doesNotMatch(await card.innerText(),/"consent"/);
+  await card.getByRole('button',{name:'使用待合并版本',exact:true}).click();await page.waitForFunction(()=>!document.body.textContent?.includes('两端修改需要选择'));
+  assert.equal(((await service.store.read()).groups[0].records.profile.body as any).style,'电脑编辑中的风格');
+  failRead=true;await page.getByRole('button',{name:'刷新联动资料',exact:true}).click();await page.getByRole('alert').waitFor();assert.equal(await card.getByLabel('回复风格',{exact:true}).inputValue(),'电脑编辑中的风格');
+  failRead=false;await page.getByRole('button',{name:'刷新联动资料',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('[role="alert"]'));
+  await mkdir('output/android/link-ux',{recursive:true});await page.screenshot({path:'output/android/link-ux/desktop-link.png',fullPage:true});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+  await page.setViewportSize({width:390,height:850});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+  await page.screenshot({path:'output/android/link-ux/mobile-budget.png',fullPage:true});
+ } finally {await browser.close();server.closeAllConnections();await new Promise<void>(done=>server.close(()=>done()));await rm(moneyRoot,{recursive:true,force:true});}
+});

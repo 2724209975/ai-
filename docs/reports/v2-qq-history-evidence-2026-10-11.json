@@ -1,0 +1,78 @@
+{
+  "checkedAt": "2026-10-11T10:41:26.097Z",
+  "scope": "Two owner-selected QQ private conversations only; current local availability",
+  "contacts": [
+    {
+      "name": "先及格",
+      "imported": 132,
+      "live": 9,
+      "body_unavailable": 7,
+      "owner_history": 56,
+      "peer_history": 76,
+      "history_from": "2026-10-10T06:47:39.000Z",
+      "history_to": "2026-10-11T10:08:24.000Z",
+      "duplicatePlatformMessages": 0,
+      "styleExamples": 8,
+      "panelHistoryCount": 132
+    },
+    {
+      "name": "🐑",
+      "imported": 26,
+      "live": 0,
+      "body_unavailable": 0,
+      "owner_history": 13,
+      "peer_history": 13,
+      "history_from": "2026-10-10T13:31:14.000Z",
+      "history_to": "2026-10-11T10:04:01.000Z",
+      "duplicatePlatformMessages": 0,
+      "styleExamples": 8,
+      "panelHistoryCount": 26
+    }
+  ],
+  "contextPreviews": [
+    {
+      "name": "先及格",
+      "triggerActor": "unknown",
+      "existingRealMessage": true,
+      "transactionRolledBack": true,
+      "historySelected": 31,
+      "styleHistorySources": 55,
+      "hasSummary": true,
+      "modelCalled": false,
+      "replyCreated": false
+    }
+  ],
+  "database": {
+    "reply_jobs": 1,
+    "send_tasks": 0,
+    "model_calls": 0,
+    "unverified_history_memories": 1,
+    "active_memories": 0
+  },
+  "connected": true,
+  "automaticSendEnabled": false,
+  "dispatchWorker": false,
+  "historyImportExternalModelCalls": 0,
+  "historyImportSendCalls": 0,
+  "trialBudget": {
+    "limitCny": 0.5,
+    "calls": 0,
+    "accountedCny": 0,
+    "heldCny": 0,
+    "unknownUsageCalls": 0,
+    "halted": false
+  },
+  "priorConservativeCny": 1.981516,
+  "trialBudgetCarriedForward": true,
+  "fullGate": {
+    "passed": 933,
+    "failed": 0,
+    "skipped": 0,
+    "testDatabaseStopped": true
+  },
+  "strictTypecheck": {
+    "selectedFiles": 65,
+    "passed": true
+  },
+  "releaseReady": false
+}

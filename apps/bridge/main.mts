@@ -12,7 +12,9 @@ import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv
 import { createOneBotImageSource, createPgQqRawImageLoader } from '../../packages/platform/qq/onebot-media-source.mts';
 import { readQqMediaConfiguration } from './image-preparation.mts';
 import { createQqBridge } from './bridge.mts';
-import { resolveBridgeRunMode } from './run-mode.mts';
+import { resolveBridgeRunMode,readBridgeStartPaused } from './run-mode.mts';
+import {configureUnifiedMoneyEnv} from '../../packages/ai/generation/unified-budget.mts';
+configureUnifiedMoneyEnv(process.env);
 
 function required(name: string): string {
   const value = process.env[name];
@@ -88,7 +90,7 @@ const bridge = createQqBridge({
   rawStore: createFileRawEventStore(rawEventDir),
   // A restart keeps the account paused until an operator has seen its state; the watchdog records
   // the first health row and then keeps it current.
-  startPaused: true,
+  startPaused: readBridgeStartPaused(process.env),
   ...(probe ? { watchdog: { probe,
     quietMs: integer('QQ_QUIET_MS', 300_000),
     intervalMs: integer('QQ_WATCHDOG_INTERVAL_MS', 10_000) },

@@ -24,6 +24,8 @@ export function validateScopedContext(context: ScopedContext, policy: PolicyProj
   const cutoff = Date.parse(snapshot.cutoffTime);
   if (!Number.isFinite(cutoff)) return fail('截止时间无效');
   const refs = new Set(snapshot.messageRefs);
+  const triggers=context.contextPackageV2?.triggerMessageIds;
+  if(triggers!==undefined&&(!Array.isArray(triggers)||!triggers.length||new Set(triggers).size!==triggers.length||triggers.some(id=>!refs.has(id))))return fail('当前回复批次引用无效');
   if (!Array.isArray(context.messages) || !Array.isArray(context.facts) || !Array.isArray(context.analyses)) return fail('上下文投影不完整');
   if (context.messages.length !== refs.size || new Set(context.messages.map(m => m.id)).size !== refs.size || context.messages.some(m => m.contactId !== context.contactId || !refs.has(m.id) || !m.evidenceRef || !Number.isFinite(Date.parse(m.sentAt)) || Date.parse(m.sentAt) > cutoff || m.isAgentGenerated !== (m.actor === 'agent') || (m.type === 'text' && !m.text?.trim()) || (m.mediaInterpretation && (m.mediaInterpretation.mediaId !== m.mediaId || !['draft', 'valid'].includes(m.mediaInterpretation.status))))) return fail('消息超出联系人或时间截断范围，或正文投影不完整');
   const persisted = context.messages.flatMap(m => m.mediaInterpretation?.status === 'valid' ? [m.mediaInterpretation] : []);
@@ -43,9 +45,14 @@ export function classifyRisks(text: string): RiskCategory[] {
   return patterns.filter(([, pattern]) => pattern.test(text)).map(([category]) => category);
 }
 
-/** The current reply batch starts after the latest owner/agent message. */
+/** V2 uses its persisted trigger batch; legacy contexts start after the latest owner/agent reply. */
 export function pendingContactBatch(context: ScopedContext): MessageProjection[] {
   const ordered = [...context.messages].sort((a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt) || context.snapshot.messageRefs.indexOf(a.id) - context.snapshot.messageRefs.indexOf(b.id));
+  const triggers=context.contextPackageV2?.triggerMessageIds;
+  if(triggers!==undefined){
+    if(!Array.isArray(triggers)||!triggers.length||new Set(triggers).size!==triggers.length||triggers.some(id=>!ordered.some(m=>m.id===id)))throw new Error('VALIDATION_FAILED');
+    const ids=new Set(triggers);return ordered.filter(m=>ids.has(m.id));
+  }
   const previousReply = ordered.findLastIndex(m => m.actor === 'owner' || m.actor === 'agent');
   return ordered.slice(previousReply + 1).filter(m => m.actor === 'contact' || m.actor === 'unknown' || m.type === 'unsupported');
 }

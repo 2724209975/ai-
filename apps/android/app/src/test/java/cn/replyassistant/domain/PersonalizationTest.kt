@@ -5,6 +5,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PersonalizationTest {
+    @Test fun modelInterpretedVisibleChatRequiresExplicitStyleSampleMark() {
+        val row=ChatMessage(speaker=Speaker.ME,text="模型整理的可见发言",origin=Origin.ACCESSIBILITY)
+        assertTrue(Personalization.samples(ChatArchive(name="A",messages=listOf(row))).isEmpty())
+        assertEquals(1,Personalization.samples(ChatArchive(name="A",messages=listOf(row.copy(styleExample=true)))).size)
+        assertTrue(Personalization.samples(ChatArchive(name="A",messages=listOf(row.copy(styleExample=true,orderUncertain=true)))).isEmpty())
+    }
     @Test fun screenshotSamplesRequireExplicitTeachingAndAiNeverQualifies() {
         val screenshot = ChatMessage(speaker = Speaker.ME,text = "行呀",origin = Origin.SCREENSHOT)
         val ai = screenshot.copy(id = newId(),generated = true,styleExample = true)

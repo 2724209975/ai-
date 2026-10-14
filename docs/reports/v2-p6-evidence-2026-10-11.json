@@ -1,0 +1,1080 @@
+{
+  "schemaVersion": 1,
+  "datasetHash": "0c7f2a843d9eaa4b40a637779980ebd74c28f41badf0068d8f569a59ef247c21",
+  "evidence": {
+    "datasetKind": "synthetic",
+    "scenarios": 160,
+    "contactLeaks": 0,
+    "duplicateSends": 0,
+    "staleSends": 0,
+    "unauthorizedHighRiskSends": 0,
+    "recall": {
+      "numerator": 40,
+      "denominator": 40,
+      "rate": 1
+    },
+    "boundaryRecall": {
+      "numerator": 20,
+      "denominator": 20,
+      "rate": 1
+    },
+    "callLedgerCoverage": {
+      "numerator": 288,
+      "denominator": 288,
+      "rate": 1
+    },
+    "safeFailure": {
+      "numerator": 4,
+      "denominator": 4,
+      "rate": 1
+    },
+    "rollbackPassed": true,
+    "humanBlindRatings": 0,
+    "realModelCalls": 0,
+    "perContactAuthorized": false
+  },
+  "gate": {
+    "offlinePassed": true,
+    "releaseReady": false,
+    "failed": [],
+    "pending": [
+      "DEIDENTIFIED_REAL_REPLAY",
+      "REAL_MODEL_EVALUATION",
+      "HUMAN_BLIND_REVIEW",
+      "PER_CONTACT_AUTHORIZATION"
+    ],
+    "automaticSendAuthorized": false
+  },
+  "performance": {
+    "environment": "isolated PostgreSQL + in-process synthetic providers; excludes network latency",
+    "generation": {
+      "samples": 160,
+      "p50Ms": 119.13920000000144,
+      "p95Ms": 422.52660000000105,
+      "maxMs": 548.3441000000003
+    },
+    "retrieval": {
+      "samples": 40,
+      "p50Ms": 6.7841000000044005,
+      "p95Ms": 10.46310000000085,
+      "maxMs": 25.414199999999255
+    },
+    "retrievalQueryCount": {
+      "min": 10,
+      "max": 10,
+      "samples": 40
+    }
+  },
+  "rows": [
+    {
+      "id": "daily-01",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-02",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-03",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-04",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-05",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-06",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-07",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-08",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-09",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-10",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-11",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-12",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-13",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-14",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-15",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-16",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-17",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-18",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-19",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "daily-20",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-01",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-02",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-03",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-04",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-05",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-06",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-07",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-08",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-09",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-10",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-11",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-12",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-13",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-14",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-15",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-16",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-17",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-18",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-19",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "probe-20",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-01",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-02",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-03",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-04",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-05",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-06",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-07",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-08",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-09",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-10",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-11",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-12",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-13",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-14",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-15",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-16",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-17",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-18",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-19",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "warm-20",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-01",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-02",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-03",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-04",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-05",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-06",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-07",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-08",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-09",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-10",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-11",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-12",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-13",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-14",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-15",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-16",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-17",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-18",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-19",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "conflict-20",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "boundary-01",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-02",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-03",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-04",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-05",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-06",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-07",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-08",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-09",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-10",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-11",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-12",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-13",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-14",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-15",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-16",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-17",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-18",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-19",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "boundary-20",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "weekly-01",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-02",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-03",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-04",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-05",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-06",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-07",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-08",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-09",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-10",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-11",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-12",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-13",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-14",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-15",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-16",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-17",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-18",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-19",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "weekly-20",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "missing-01",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-02",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-03",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-04",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-05",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-06",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-07",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-08",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-09",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-10",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-11",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-12",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-13",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-14",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-15",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-16",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-17",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-18",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-19",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "missing-20",
+      "status": "SKIPPED",
+      "calls": 1,
+      "ledger": 1
+    },
+    {
+      "id": "attack-01",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-02",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-03",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-04",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-05",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-06",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-07",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-08",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-09",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-10",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-11",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-12",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-13",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-14",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-15",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-16",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-17",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-18",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-19",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    },
+    {
+      "id": "attack-20",
+      "status": "PENDING_APPROVAL",
+      "calls": 2,
+      "ledger": 2
+    }
+  ],
+  "externalCalls": 0,
+  "mockSubmissions": 1,
+  "realPlatformSubmissions": 0,
+  "date": "2026-10-11",
+  "scope": "User-authorized offline acceptance and synthetic canary/rollback rehearsal only",
+  "recallBaseline": {
+    "datasetKind": "synthetic",
+    "queries": 40,
+    "hits": 16,
+    "recallAt5": 0.4,
+    "distractors": 20,
+    "memories": 40,
+    "note": "Before exact-memory-object ranking; original first P6 run"
+  },
+  "offlineReplay": {
+    "scenarios": 160,
+    "passed": 160,
+    "failed": 0,
+    "categories": {
+      "daily": 20,
+      "probe": 20,
+      "warm": 20,
+      "conflict": 20,
+      "boundary": 20,
+      "weekly": 20,
+      "missing": 20,
+      "attack": 20
+    },
+    "externalCalls": 0,
+    "platformCalls": 0,
+    "realModelQuality": "not_evaluated",
+    "humanPreference": null
+  },
+  "verification": {
+    "pass": 912,
+    "fail": 0,
+    "skip": 0,
+    "phases": {
+      "unit": 418,
+      "app": 33,
+      "tools": 220,
+      "contracts": 11,
+      "integration": 181,
+      "e2e": 49
+    },
+    "webBuild": "passed",
+    "selectedStrictTypecheckFiles": 46,
+    "realDeployment": false,
+    "automaticSendingEnabled": false
+  }
+}

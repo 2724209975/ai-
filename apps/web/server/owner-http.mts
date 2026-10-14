@@ -5,14 +5,50 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validRejectionReason, type RejectionReason } from '../../../packages/data/feedback/pg-candidate-journal.mts';
 import { requestIdOf } from '../../../packages/infrastructure/observability/request-id.mts';
+import type { WorkspaceQuery } from '../../../packages/orchestration/postgres/workspace-query.mts';
+import type { PipelineVersion } from '../../../packages/contracts/reply-pipeline-v2.mts';
+import type { MemoryCommand,ProfileCommand } from '../../../packages/data/memory-v2/service.mts';
+import type { ModelConfigCommandV2 } from '../../../packages/ai/pipeline-v2/model-service.mts';
+import type {TrialQualitySave,TrialQualityApply} from '../../../packages/contracts/trial-model-settings.mts';
+import type {PeopleCommand,ImportPreviewInput,ImportCommitInput,PersonMemoryInput,PersonMessageInput} from '../../../packages/contracts/people.mts';
 
 type Session = { ownerId: string };
 export type CommandResult = { resultVersion: number; correlationId: string; status?: string };
 export type OwnerPort = {
+  people?(ownerId:string):Promise<unknown>;
+  peopleCommand?(ownerId:string,input:PeopleCommand):Promise<unknown>;
+  personHistory?(ownerId:string,personId:string,contactId?:string,before?:string):Promise<unknown>;
+  historyPreview?(ownerId:string,input:ImportPreviewInput):Promise<unknown>;
+  historyCommit?(ownerId:string,input:ImportCommitInput):Promise<unknown>;
+  personMemory?(ownerId:string,input:PersonMemoryInput):Promise<unknown>;
+  personMessage?(ownerId:string,input:PersonMessageInput):Promise<unknown>;
+  trialEconomySettings?(ownerId:string):Promise<unknown>;
+  saveTrialEconomySettings?(ownerId:string,input:TrialQualitySave):Promise<unknown>;
+  applyTrialEconomySettings?(ownerId:string,input:TrialQualityApply):Promise<unknown>;
+  trialQualitySettings?(ownerId:string):Promise<unknown>;
+  saveTrialQualitySettings?(ownerId:string,input:TrialQualitySave):Promise<unknown>;
+  applyTrialQualitySettings?(ownerId:string,input:TrialQualityApply):Promise<unknown>;
+  modelConfig?(ownerId:string):Promise<unknown>;
+  modelUsage?(ownerId:string):Promise<unknown>;
+  updateModelConfig?(ownerId:string,input:ModelConfigCommandV2):Promise<unknown>;
+  memoryControls?(ownerId:string,conversationId:string,input:{idempotencyKey:string;expectedVersion:number;enabled:boolean;styleSamples:boolean;retentionDays:number}):Promise<unknown>;
+  memories?(ownerId:string,conversationId:string):Promise<unknown>;
+  contextPreview?(ownerId:string,conversationId:string):Promise<unknown>;
+  memoryCommand?(ownerId:string,conversationId:string,action:'create'|'confirm'|'correct'|'expire'|'delete',id:string|undefined,input:MemoryCommand):Promise<unknown>;
+  memoryProfile?(ownerId:string,conversationId:string,kind:'relationship'|'style',input:ProfileCommand):Promise<unknown>;
+  replyJobs?(ownerId: string, conversationId: string): Promise<unknown>;
+  replyJob?(ownerId: string, id: string, trace: boolean): Promise<unknown>;
+  setPipelineVersion?(ownerId: string, conversationId: string, input: VersionCommand & { version: PipelineVersion }): Promise<unknown>;
+  approveReplyJob?(ownerId: string, id: string, input: ConfirmCommand & { expectedConversationRevision: number }): Promise<unknown>;
+  cancelReplyJob?(ownerId: string, id: string, input: VersionCommand): Promise<unknown>;
+  regenerateReplyJob?(ownerId:string,id:string,input:VersionCommand&{expectedConversationRevision:number}):Promise<unknown>;
   overview(ownerId: string): Promise<unknown>;
   tasks(ownerId: string): Promise<{ items: unknown[] }>;
   contacts(ownerId: string): Promise<{ items: unknown[] }>;
   conversations(ownerId: string): Promise<{ items: unknown[] }>;
+  workspaceList?(ownerId: string, query: WorkspaceQuery): Promise<unknown>;
+  workspaceDetail?(ownerId: string, conversationId: string, before?: string): Promise<unknown>;
+  resumeRoutine?(ownerId: string, contactId: string, command: VersionCommand): Promise<CommandResult>;
   facts(ownerId: string): Promise<{ items: unknown[] }>;
   analyses(ownerId: string): Promise<{ items: unknown[] }>;
   media(ownerId: string): Promise<{ items: unknown[] }>;
@@ -163,13 +199,13 @@ function mediaCommand(value: unknown): MediaApprovalCommand {
   if (value.action === 'approveAsset' && !stringList(value.allowedPlatforms, 4)) throw new HttpError(400, 'VALIDATION_FAILED');
   return { expectedVersion: value.expectedVersion, idempotencyKey: value.idempotencyKey, action: value.action as 'approveAsset' | 'revokeAsset', ...(value.allowedPlatforms === undefined ? {} : { allowedPlatforms: value.allowedPlatforms as string[] }) };
 }
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  let text = '';
+async function readJson(request: IncomingMessage,limit=64_000): Promise<unknown> {
+  const chunks:Buffer[]=[];let size=0;
   for await (const chunk of request) {
-    text += chunk.toString();
-    if (text.length > 64_000) throw new HttpError(413, 'VALIDATION_FAILED');
+    const bytes=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);size+=bytes.length;
+    if(size>limit)throw new HttpError(413,'VALIDATION_FAILED');chunks.push(bytes);
   }
-  try { return JSON.parse(text); } catch { throw new HttpError(400, 'VALIDATION_FAILED'); }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new HttpError(400, 'VALIDATION_FAILED'); }
 }
 function send(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -200,13 +236,48 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
     const correlationId = requestIdOf(request);
     try {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
-      if (!path.startsWith('/api/v1/')) throw new HttpError(404, 'NOT_FOUND');
+      if (!path.startsWith('/api/v1/') && !path.startsWith('/api/v2/')) throw new HttpError(404, 'NOT_FOUND');
       const session = await deps.authenticate(request);
       if (!session?.ownerId) throw new HttpError(401, 'UNAUTHENTICATED');
       const ownerId = session.ownerId;
       const method = request.method ?? 'GET';
 
       if (method === 'GET') {
+        if(path==='/api/v2/people'){if(!deps.ownerPort.people)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.people(ownerId));}
+        const personHistory=/^\/api\/v2\/people\/([^/]+)\/history$/.exec(path);
+        if(personHistory){if(!deps.ownerPort.personHistory)throw new HttpError(501,'NOT_IMPLEMENTED');const q=new URL(request.url!,'http://localhost').searchParams;return send(response,200,await deps.ownerPort.personHistory(ownerId,resourceId(personHistory[1]),q.get('contactId')??undefined,q.get('before')??undefined));}
+        if(path==='/api/v2/trial-economy-settings'){if(!deps.ownerPort.trialEconomySettings)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.trialEconomySettings(ownerId));}
+        if(path==='/api/v2/trial-quality-settings'){if(!deps.ownerPort.trialQualitySettings)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.trialQualitySettings(ownerId));}
+        if(path==='/api/v2/model-config'||path==='/api/v2/model-usage'){
+          const fn=path.endsWith('model-config')?deps.ownerPort.modelConfig:deps.ownerPort.modelUsage;
+          if(!fn)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await fn(ownerId));
+        }
+        const memory=/^\/api\/v2\/conversations\/([^/]+)\/(memories|context-preview)$/.exec(path);
+        if(memory){const fn=memory[2]==='memories'?deps.ownerPort.memories:deps.ownerPort.contextPreview;if(!fn)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await fn(ownerId,resourceId(memory[1])));}
+        let v2 = /^\/api\/v2\/conversations\/([^/]+)\/reply-jobs$/.exec(path);
+        if (v2) {
+          if (!deps.ownerPort.replyJobs) throw new HttpError(501, 'NOT_IMPLEMENTED');
+          return send(response,200,await deps.ownerPort.replyJobs(ownerId,resourceId(v2[1])));
+        }
+        v2 = /^\/api\/v2\/reply-jobs\/([^/]+)(\/trace)?$/.exec(path);
+        if (v2) {
+          if (!deps.ownerPort.replyJob) throw new HttpError(501, 'NOT_IMPLEMENTED');
+          return send(response,200,await deps.ownerPort.replyJob(ownerId,resourceId(v2[1]),!!v2[2]));
+        }
+        const params = new URL(request.url ?? '/', 'http://localhost').searchParams;
+        if (path === '/api/v1/workspace/conversations') {
+          if (!deps.ownerPort.workspaceList) throw new HttpError(501, 'NOT_IMPLEMENTED');
+          return send(response, 200, await deps.ownerPort.workspaceList(ownerId, {
+            search: params.get('search') ?? undefined, platform: params.get('platform') ?? undefined,
+            filter: params.get('filter') ?? undefined, cursor: params.get('cursor') ?? undefined,
+            limit: params.has('limit') ? Number(params.get('limit')) : undefined,
+          }));
+        }
+        const workspace = /^\/api\/v1\/conversations\/([^/]+)\/workspace$/.exec(path);
+        if (workspace) {
+          if (!deps.ownerPort.workspaceDetail) throw new HttpError(501, 'NOT_IMPLEMENTED');
+          return send(response, 200, await deps.ownerPort.workspaceDetail(ownerId, resourceId(workspace[1]), params.get('before') ?? undefined));
+        }
         const reads: Record<string, () => Promise<unknown>> = {
           '/api/v1/overview': () => deps.ownerPort.overview(ownerId),
           '/api/v1/tasks': () => deps.ownerPort.tasks(ownerId),
@@ -225,6 +296,71 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
       }
       if (method !== 'POST') throw new HttpError(405, 'VALIDATION_FAILED');
       if (!(await deps.verifyWrite(request, session))) throw new HttpError(403, 'FORBIDDEN');
+      if(path==='/api/v2/people/message'){const body=await readJson(request);if(!isObject(body))throw new HttpError(400,'VALIDATION_FAILED');if(!deps.ownerPort.personMessage)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.personMessage(ownerId,body as PersonMessageInput));}
+      if(path==='/api/v2/people/memory'){const body=await readJson(request);if(!isObject(body))throw new HttpError(400,'VALIDATION_FAILED');if(!deps.ownerPort.personMemory)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.personMemory(ownerId,body as PersonMemoryInput));}
+      if(['/api/v2/people','/api/v2/history-imports/preview','/api/v2/history-imports/commit'].includes(path)){
+        const body=await readJson(request,path==='/api/v2/people'?64000:4_000_000);if(!isObject(body))throw new HttpError(400,'VALIDATION_FAILED');
+        if(path==='/api/v2/people'){if(!deps.ownerPort.peopleCommand)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.peopleCommand(ownerId,body as PeopleCommand));}
+        if(path.endsWith('/preview')){if(!deps.ownerPort.historyPreview)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.historyPreview(ownerId,body as ImportPreviewInput));}
+        if(!deps.ownerPort.historyCommit)throw new HttpError(501,'NOT_IMPLEMENTED');return send(response,200,await deps.ownerPort.historyCommit(ownerId,body as ImportCommitInput));
+      }
+      if(['/api/v2/trial-quality-settings','/api/v2/trial-quality-settings/apply','/api/v2/trial-economy-settings','/api/v2/trial-economy-settings/apply'].includes(path)){
+        const apply=path.endsWith('/apply'),economy=path.includes('economy'),fn=economy?(apply?deps.ownerPort.applyTrialEconomySettings:deps.ownerPort.saveTrialEconomySettings):(apply?deps.ownerPort.applyTrialQualitySettings:deps.ownerPort.saveTrialQualitySettings);
+        if(!fn)throw new HttpError(501,'NOT_IMPLEMENTED');const body=await readJson(request);
+        if(!isObject(body)||Object.keys(body).sort().join(',')!==(apply?'expectedVersion,idempotencyKey':'expectedVersion,idempotencyKey,model')||!isPauseEpoch(body.expectedVersion)||!isKey(body.idempotencyKey)||!apply&&!isObject(body.model))throw new HttpError(400,'VALIDATION_FAILED');
+        return send(response,200,await fn(ownerId,body as unknown as TrialQualitySave));
+      }
+      if(path==='/api/v2/model-config'){
+        if(!deps.ownerPort.updateModelConfig)throw new HttpError(501,'NOT_IMPLEMENTED');
+        const body=await readJson(request);
+        if(!isObject(body)||Object.keys(body).sort().join(',')!=='config,expectedVersion,idempotencyKey'||!isPauseEpoch(body.expectedVersion)||!isKey(body.idempotencyKey)||!isObject(body.config))throw new HttpError(400,'VALIDATION_FAILED');
+        return send(response,200,await deps.ownerPort.updateModelConfig(ownerId,body as ModelConfigCommandV2));
+      }
+
+      const memory=/^\/api\/v2\/conversations\/([^/]+)\/memories(?:\/([^/]+)\/(confirm|correct|expire|delete))?$/.exec(path);
+      if(memory){
+        if(!deps.ownerPort.memoryCommand)throw new HttpError(501,'NOT_IMPLEMENTED');
+        const body=await readJson(request),allowed=['idempotencyKey','expectedVersion','memory','content','object','validUntil'];
+        if(!isObject(body)||!isKey(body.idempotencyKey)||Object.keys(body).some(k=>!allowed.includes(k)))throw new HttpError(400,'VALIDATION_FAILED');
+        return send(response,200,await deps.ownerPort.memoryCommand(ownerId,resourceId(memory[1]),(memory[3]??'create') as 'create'|'confirm'|'correct'|'expire'|'delete',memory[2]?resourceId(memory[2]):undefined,body as MemoryCommand));
+      }
+      const profile=/^\/api\/v2\/conversations\/([^/]+)\/(relationship|style)$/.exec(path);
+      if(profile){
+        if(!deps.ownerPort.memoryProfile)throw new HttpError(501,'NOT_IMPLEMENTED');const body=await readJson(request);
+        if(!isObject(body)||!isKey(body.idempotencyKey)||Object.keys(body).some(k=>!['idempotencyKey','expectedVersion','stage','locked','sourceRefs','settings','global'].includes(k)))throw new HttpError(400,'VALIDATION_FAILED');
+        return send(response,200,await deps.ownerPort.memoryProfile(ownerId,resourceId(profile[1]),profile[2] as 'relationship'|'style',body as ProfileCommand));
+      }
+      const controls=/^\/api\/v2\/conversations\/([^/]+)\/memory-controls$/.exec(path);
+      if(controls){
+        if(!deps.ownerPort.memoryControls)throw new HttpError(501,'NOT_IMPLEMENTED');const body=await readJson(request);
+        if(!isObject(body)||!isKey(body.idempotencyKey)||!isPauseEpoch(body.expectedVersion)||Object.keys(body).some(k=>!['idempotencyKey','expectedVersion','enabled','styleSamples','retentionDays'].includes(k)))throw new HttpError(400,'VALIDATION_FAILED');
+        return send(response,200,await deps.ownerPort.memoryControls(ownerId,resourceId(controls[1]),body as {idempotencyKey:string;expectedVersion:number;enabled:boolean;styleSamples:boolean;retentionDays:number}));
+      }
+
+      let v2 = /^\/api\/v2\/conversations\/([^/]+)\/pipeline$/.exec(path);
+      if (v2) {
+        if (!deps.ownerPort.setPipelineVersion) throw new HttpError(501, 'NOT_IMPLEMENTED');
+        const body = await readJson(request);
+        if (!isObject(body) || ![1,2].includes(body.version as number)) throw new HttpError(400,'VALIDATION_FAILED');
+        return send(response,200,await deps.ownerPort.setPipelineVersion(ownerId,resourceId(v2[1]),{...versionCommand(body),version: body.version as PipelineVersion}));
+      }
+      v2 = /^\/api\/v2\/reply-jobs\/([^/]+)\/(approve|cancel|regenerate)$/.exec(path);
+      if (v2) {
+        const id = resourceId(v2[1]),body = await readJson(request);
+        const fields=v2[2]==='regenerate'?['expectedVersion','idempotencyKey','expectedConversationRevision']:v2[2]==='cancel'?['expectedVersion','idempotencyKey']:['taskVersion','planVersion','alternativeId','editedParts','contentHash','idempotencyKey','shownAlternativeIds','expectedConversationRevision'];
+        if(!isObject(body)||Object.keys(body).some(k=>!fields.includes(k)))throw new HttpError(400,'VALIDATION_FAILED');
+        if(v2[2]==='regenerate'){
+          if(!deps.ownerPort.regenerateReplyJob)throw new HttpError(501,'NOT_IMPLEMENTED');if(!isVersion(body.expectedConversationRevision))throw new HttpError(400,'VALIDATION_FAILED');
+          return send(response,200,await deps.ownerPort.regenerateReplyJob(ownerId,id,{...versionCommand(body),expectedConversationRevision:body.expectedConversationRevision as number}));
+        }
+        if (v2[2] === 'cancel') {
+          if (!deps.ownerPort.cancelReplyJob) throw new HttpError(501,'NOT_IMPLEMENTED');
+          return send(response,200,await deps.ownerPort.cancelReplyJob(ownerId,id,versionCommand(body)));
+        }
+        if (!deps.ownerPort.approveReplyJob) throw new HttpError(501,'NOT_IMPLEMENTED');
+        if (!isObject(body) || !isVersion(body.expectedConversationRevision)) throw new HttpError(400,'VALIDATION_FAILED');
+        return send(response,200,await deps.ownerPort.approveReplyJob(ownerId,id,{...confirmCommand(body),expectedConversationRevision: body.expectedConversationRevision as number}));
+      }
 
       if (path === '/api/v1/control/pause-all') return send(response, 200, await deps.ownerPort.pauseAll(ownerId, controlCommand(await readJson(request))));
       if (path === '/api/v1/control/resume-all') return send(response, 200, await deps.ownerPort.resumeAll(ownerId, controlCommand(await readJson(request))));
@@ -244,10 +380,14 @@ export function createOwnerHttpHandler<S extends Session = Session>(deps: OwnerH
         const sendTaskId = resourceId(match[1]);
         return send(response, 200, await deps.ownerPort.resolveSend(ownerId, sendTaskId, resolveSendCommand(await readJson(request))));
       }
-      match = /^\/api\/v1\/contacts\/([^/]+)\/(pauseContact|resumeContact|acknowledgePausedInbound|requestPausedReply|updatePolicy)$/.exec(path);
+      match = /^\/api\/v1\/contacts\/([^/]+)\/(pauseContact|resumeContact|resumeRoutine|acknowledgePausedInbound|requestPausedReply|updatePolicy)$/.exec(path);
       if (match) {
         const contactId = resourceId(match[1]);
         const body = await readJson(request);
+        if (match[2] === 'resumeRoutine') {
+          if (!deps.ownerPort.resumeRoutine) throw new HttpError(501, 'NOT_IMPLEMENTED');
+          return send(response, 200, await deps.ownerPort.resumeRoutine(ownerId, contactId, versionCommand(body)));
+        }
         if (match[2] === 'pauseContact') return send(response, 200, await deps.ownerPort.pauseContact(ownerId, contactId, versionCommand(body)));
         if (match[2] === 'resumeContact') return send(response, 200, await deps.ownerPort.resumeContact(ownerId, contactId, versionCommand(body)));
         if (match[2] === 'acknowledgePausedInbound') return send(response, 200, await deps.ownerPort.acknowledgePausedInbound(ownerId, contactId, versionCommand(body)));

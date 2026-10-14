@@ -23,6 +23,12 @@ async function fixtureServer(mode: 'unknown' | 'stale') {
   const server = createServer(async (request, response) => {
     try {
       const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+      if (pathname === '/api/v1/workspace/conversations') {
+        response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({items:[{id:'conversation-1',contactId:'contact-1',contactName:task.contactName,platform:'qq',pendingCount:1,needsAttention:false,preview:'你好'}],total:1,nextCursor:null})); return;
+      }
+      if (pathname === '/api/v1/conversations/conversation-1/workspace') {
+        response.writeHead(200, {'Content-Type':'application/json'}); response.end(JSON.stringify({contact:{id:'contact-1',name:task.contactName,platform:'qq',agentEnabled:true,allowedActions:[],goal:'合成',policyVersion:1},conversation:{id:'conversation-1',contactId:'contact-1',version:1,contactName:task.contactName,status:task.status,allowedActions:[],pauseReasons:[],messages:task.triggerMessages.map(m=>({...m,actor:'contact'})),sends:task.sends},tasks:[task],nextCursor:null})); return;
+      }
       if (pathname === '/api/v1/tasks' && request.method === 'GET') {
         response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify({ items: [task] })); return;
       }
@@ -55,7 +61,7 @@ async function fixtureServer(mode: 'unknown' | 'stale') {
   await new Promise<void>(resolveListening => server.listen(0, '127.0.0.1', resolveListening));
   const address = server.address();
   if (!address || typeof address === 'string') throw Error('fixture server address unavailable');
-  return { url: `http://127.0.0.1:${address.port}/#tasks`, commands, close: () => new Promise<void>((resolveClose, rejectClose) => server.close(error => error ? rejectClose(error) : resolveClose())) };
+  return { url: `http://127.0.0.1:${address.port}/#chat/conversation-1`, commands, close: () => new Promise<void>((resolveClose, rejectClose) => server.close(error => error ? rejectClose(error) : resolveClose())) };
 }
 
 test('mock mobile Chromium: edited confirmation payload and result-unknown display', { skip: !enabled && 'set RUN_BROWSER_E2E=1 after building apps/web and installing Chromium' }, async () => {
@@ -65,7 +71,7 @@ test('mock mobile Chromium: edited confirmation payload and result-unknown displ
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await page.goto(server.url);
-    await page.getByText('合成联系人').waitFor();
+    await page.getByRole('heading',{name:'合成联系人',exact:true}).waitFor();
     assert.equal(server.commands.length, 0);
     await page.locator('textarea').fill('编辑后的文字');
     await page.getByRole('button', { name: '刷新' }).click();
@@ -89,12 +95,10 @@ test('mock mobile Chromium: stale confirmation reports no send and refreshes ver
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await page.goto(server.url);
-    await page.getByText('合成联系人').waitFor();
+    await page.getByRole('heading',{name:'合成联系人',exact:true}).waitFor();
     await page.getByRole('button', { name: '确认并发送' }).click();
     await page.getByText(/旧版本未发送/).first().waitFor();
-    await page.getByText('暂无待处理任务').waitFor();
-    await page.getByRole('button', { name: '历史记录（1）' }).click();
-    await page.getByText(/已失效：NEW_MESSAGE/).waitFor();
+    await page.getByText('当前没有待确认的回复').waitFor();
     assert.equal(server.commands.length, 1);
     assert.equal(await page.getByRole('button', { name: '确认并发送' }).count(), 0);
   } finally { await browser.close(); await server.close(); }

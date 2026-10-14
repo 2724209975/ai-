@@ -1,5 +1,7 @@
 # 运行与恢复手册（07 初稿）
 
+2026-10-11 v2独立预发布已有可执行启停、升级、重启与冷恢复入口，见[指南](../docs/prerelease-v2.md)和[报告](../docs/reports/v2-prerelease-2026-10-11.md)。只运行本机隔离副本，不替换日常环境，不启用真实模型/Bridge/自动发送；真实平台生产恢复仍未验收。
+
 > 当前阶段与状态只见 [开发计划 §0](../docs/development-plan.md#0-当前状态每完成一个任务由总控更新本节)。P0–P4 在本人电脑运行；本文中的云端、反代或宿主配置只是历史准备步骤，P5 选型后复核，管理端仅私网访问。真实登录、注入与发送由本人执行。
 
 ## 微信客户端版本守护（本机操作）
@@ -25,7 +27,7 @@
 `apps/core/main.mts` 是常驻核心：本人管理 API、聚合/收集 worker、05 Skill 内部 outbox pump。**它不派发**——发送只属于每个平台账号的桥接进程。配置与失败关闭规则见 [apps/core/README.md](../apps/core/README.md)。
 
 1. `npm run migrate`（读 `DATABASE_URL`），缺 schema 时进程会直接退出并输出 `schema_not_ready`，不会带病运行。
-2. 必填 `DATABASE_URL`、`OWNER_ID`、`OWNER_PASSWORD_HASH`（scrypt 存储格式）、`PUBLIC_ORIGIN`、`CORE_PLATFORM`；`HOST` 默认 `127.0.0.1`，绑非回环地址必须显式 `ALLOW_NON_LOOPBACK_BIND=1`，非回环 `PUBLIC_ORIGIN` 必须 HTTPS。
+2. 必填 `DATABASE_URL`、`OWNER_ID`、`OWNER_PASSWORD_HASH`（scrypt 存储格式）、`PUBLIC_ORIGIN`、`CORE_PLATFORM`；`HOST` 默认 `127.0.0.1`，绑非回环地址必须显式 `ALLOW_NON_LOOPBACK_BIND=1`，非回环 `PUBLIC_ORIGIN` 默认要求 HTTPS；同一 Wi-Fi 下的私有 IPv4 HTTP 访问见下节，须另设 `ALLOW_LAN_HTTP=1`。
 3. 启动即暂停：进程先读 `dispatch_global_control`，活动态则调用 02 的 `pauseAll`，然后才 `recover()`。暂停态重启只记录、不重复抬高 epoch。只有本人显式恢复后才会有可派发工作。
 4. 就绪检查：`GET /healthz`（存活）、`GET /readyz`（`database`/`schema`/`control`/`recovery`）。`/readyz` 为 503 时不要给它派工，也不要据此自动重启掩盖故障。
 5. 日志为单行 JSON，每个请求带 `X-Request-Id`；错误响应体里的 `correlationId` 与日志行同值，可用于串联。日志不含正文、口令、平台标识。
@@ -34,6 +36,8 @@
 ### 候选模型（DeepSeek）
 
 默认 `INTELLIGENCE_PROVIDER=persistent-fake`。启用真实模型：设 `INTELLIGENCE_PROVIDER=deepseek` 与 `DEEPSEEK_API_KEY`（缺密钥进程启动即失败），可选 `DEEPSEEK_MODEL`（默认 `deepseek-flash`，可改 `deepseek-v4-pro`）、`DEEPSEEK_BASE_URL`、`DEEPSEEK_THINKING`（默认 `disabled`）、`DEEPSEEK_TIMEOUT_MS`、`DEEPSEEK_MAX_TOKENS`、`DEEPSEEK_TEMPERATURE`、`DEEPSEEK_DATA_REGION`、`DEEPSEEK_RETENTION_POLICY`。微信桥接另设 `WECHAT_INTELLIGENCE=deepseek`，与 `WECHAT_ENABLE_OUTBOUND` 相互独立。
+
+**回复更像真人（2026-10-04 起默认）**：DeepSeek 候选使用 `reply-candidates-3`：从本联系人的最近消息中取本人真实回复作为示例、统计本人说话习惯（句长、句号、表情、口头禅），写入图片描述，并把回答拆成 1–3 条短消息、去掉 Markdown 和 AI 腔。**连续消息合并**：日常建议在核心、QQ 桥接、微信桥接都设 `AGGREGATION_WINDOW_MS=10000`（最后一条消息后等 10 秒再生成，对方连发几条只出一次候选），`MAX_AGGREGATION_MS` 默认 30000；默认 0 表示立刻生成。
 
 **失控闸**：`DEEPSEEK_DAILY_CALL_LIMIT`（默认 300）与 `DEEPSEEK_DAILY_TOKEN_LIMIT`（默认 500000）按 UTC 日计数，超出即拒绝调用；04 把拒绝映射成 `MODEL_UNAVAILABLE`，02 据此暂停该联系人转人工。它是**进程内的循环闸**：重启清零，不能当作月度预算、也不代表账单上限；月度成本以平台账单与 `model_call` 日志对账。
 
@@ -113,18 +117,49 @@ P4-4c 已装配图片确认模式的受控流程：消息提交后，锁外获�
 
 本节只用于当前 Windows 本机开发；不代表 P5 宿主、开机自启或真实平台故障验收。便携检测逻辑在 `apps/bridge/watchdog.mts`，可供后续宿主复用。
 
-准备好现有 PostgreSQL 集群、已构建网页与私有配置后，运行 `npm run serve:local`。新增必填 `LOCAL_PG_BIN`（含 postgres.exe/pg_ctl.exe 的绝对目录）、`LOCAL_PG_DATA`（既有集群绝对目录，含 PG_VERSION）；数据库必须是 `postgres://...@127.0.0.1:<port>/<database>`，PUBLIC_ORIGIN 必须为 `http://127.0.0.1:<core-port>`。默认桥接端口 19099，可用 `LOCAL_BRIDGE_PORT` 调整，三个端口必须不同。私有原始事件、会话和集群不要放入仓库。
+准备好现有 PostgreSQL 集群、已构建网页与私有配置后，运行 `npm run serve:local`。新增必填 `LOCAL_PG_BIN`（含 postgres.exe/pg_ctl.exe 的绝对目录）、`LOCAL_PG_DATA`（既有集群绝对目录，含 PG_VERSION）；数据库必须是 `postgres://...@127.0.0.1:<port>/<database>`，PUBLIC_ORIGIN 默认为 `http://127.0.0.1:<core-port>`；显式启用下节局域网选项后也可配置私有 IPv4 地址。单平台默认桥接端口 19099，可用 `LOCAL_BRIDGE_PORT` 调整；双平台用 `LOCAL_QQ_BRIDGE_PORT` / `LOCAL_WECHAT_BRIDGE_PORT`（默认按启用顺序 19099 / 19100）。所有监听端口必须不同。私有原始事件、会话和集群不要放入仓库。
 
-**平台由 `LOCAL_BRIDGE_PLATFORM` 选择（默认 `wechat`，只接受 `wechat` 或 `qq`，其他值拒绝启动）**，它同时决定桥接入口与必填变量，并且 `CORE_PLATFORM` 跟随该值：
+**双平台设置 `LOCAL_STACK_PLATFORMS=qq,wechat`**，共享 PostgreSQL 和一个 core，独立运行 `bridge-qq` / `bridge-wechat`。未设置时仍由 `LOCAL_BRIDGE_PLATFORM` 选择一个平台（默认 `wechat`）；每个已启用平台都要提供自己的必填变量：
 
 - `wechat`：入口 `apps/bridge/wechat-main.mts`；必填 `WECHAT_ACCOUNT_ID`、`WECHAT_SELF_REF`、`WECHAT_INGRESS_TOKEN`、`WECHAT_PROCESS_ID`，以及已通过哈希守护的两个 DLL 路径。
 - `qq`：入口 `apps/bridge/main.mts`；必填 `QQ_ACCOUNT_ID`、`QQ_SELF_ID`、`QQ_BRIDGE_TOKEN`。出站由 `QQ_ENABLE_OUTBOUND=1` 开启，此时另需 `QQ_ONEBOT_BASE_URL`；只接收模式不需要 OneBot 地址，也不需要 `QQ_PROCESS_ID`（未给就视为进程存活）。QQ 看门狗另可用 `QQ_ONEBOT_HEALTH_URL`、`QQ_QUIET_MS`、`QQ_WATCHDOG_INTERVAL_MS`。
 
-两个平台不要在同一数据库上同时跑常驻栈：核心的 `CORE_PLATFORM` 只服务一个平台账号。切换平台前先按 Ctrl+C 停整组，再改 `LOCAL_BRIDGE_PLATFORM`。
+账号与平台映射由迁移 `0013` 和桥接注册持久化，`CORE_PLATFORM` 不再决定联系人标签。两个内部账号 ID 必须不同；不要同时为同一账号启动多个桥接。历史 raw inbox 证据冲突或缺失显示「平台待核对」，不能凭核心配置猜测。
 
 脚本不初始化数据库，也不启动微信、helper、登录或注入。集群必须已经停止：即使配置端口空闲，只要启动前仍有 postmaster.pid，也拒绝接管，不能把外部运行在另一端口的集群当作本轮所有。无法确认是否陈旧时由本人核查，不自动删除 PID 文件。已运行的外部数据库/核心/桥接占用端口同样拒绝接管；请本人先停对应外部进程。本人按既有受控清单完成微信操作后再运行常驻入口。未配置出站开关时依旧只接收；真实发送授权沿用 P1，不因常驻改变。
 
-启动顺序是 PostgreSQL 可查询 → 应用编号迁移 → 核心 readyz → 桥接 healthz。强制核心 `START_PAUSED=1` 和回环绑定；桥接先设置账号故障暂停再恢复账本，健康探测成功也不自动恢复。后续服务还在启动时，前面的服务退出也立即停止整组。异常退出后先逆序停止所有自己创建的依赖，再以 1/2/4…最多 30 秒退避重启整组；连续稳定运行一分钟后退避重置。某项停止失败仍尽力停止其他项，随后终止守护，不再启动重叠进程。按 Ctrl+C 逆序停止，数据库使用 pg_ctl fast stop；启动中的迁移先取消并等子进程退出。Windows 终止 Node 子进程可能是硬退出，重启仍执行未知发送恢复，不能视为安全送达。
+启动顺序是 PostgreSQL 可查询 → 应用编号迁移 → 核心 readyz → 各桥接 healthz。本机栈默认 `START_PAUSED=0`，也可显式设为 `1`；独立入口不设置时仍保留原来的暂停默认值。正常启动不额外制造账号暂停，已有人工暂停、账号故障和未决发送保留。只有全新空库才在 `START_PAUSED=0` 时解除初始全局暂停，不能把启动当作清除本人暂停的操作。桥接核对账本并完成首次健康探测后再启动 worker。局域网配置时仅核心绑定 `0.0.0.0`，桥接与数据库绑定 `127.0.0.1`。
+
+单个桥接异常只停止并重启该桥接；数据库或 core 异常先停止两个桥接，再按依赖顺序重启整组。日志服务名区分 `bridge-qq` 与 `bridge-wechat`。重启使用退避，停止失败则终止守护以免重叠进程。Ctrl+C 停止本轮所有子进程；数据库使用 pg_ctl fast stop。Windows 进程终止后仍须核对含糊发送，不能推断消息已送达。
+
+加载私有配置后可使用无密钥模板：
+
+```powershell
+. .\deploy\workspace-stack.example.ps1
+npm run build:web
+npm run serve:local
+```
+
+此模板设置 QQ 接收端口 19099、微信接收端口 19100。同步修改各平台回调目标，否则来信会送错端口。不会修改出站授权开关，不执行登录、注入或真实发送。升级现有运行实例时先停止本人管理的本机栈，保留私有集群和配置，重新构建；`serve:local` 会在 worker 启动前执行 `0013`。若使用单独运行的数据库，先 `npm run migrate`，再重启核心和两个桥接。
+
+### 同一 Wi-Fi 下用手机操作
+
+可使用单平台或双平台模板。加载原有私有启动配置（数据库、本人密码哈希、平台账号与桥接参数），再执行下列命令；模板只覆盖局域网参数，不包含账号或密钥，也不自动读取 `.env`：
+
+```powershell
+# 先按 ipconfig 的 WLAN IPv4 修改模板中的 PUBLIC_ORIGIN
+. .\deploy\lan-access.example.ps1
+npm run build:web
+npm run serve:local
+```
+
+模板设置 `ALLOW_LAN_HTTP=1`、`ALLOW_NON_LOOPBACK_BIND=1`、`HOST=0.0.0.0`、`PORT=8787`、`SECURE_COOKIES=0`。`PUBLIC_ORIGIN` 必须是电脑实际私有 IPv4 的 HTTP 地址，仅接受 `10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`；域名、公网地址、链路本地地址和 IPv6 HTTP 不在此选项范围内。关闭选项并把 PUBLIC_ORIGIN 改回 `http://127.0.0.1:8787` 后恢复原来的本机访问。直接启动核心时也使用这些参数；桥接另开进程时显式设 `HOST=127.0.0.1` 和桥接自己的 `PORT`。
+
+Windows 防火墙准备：在**管理员 PowerShell** 中执行 `powershell -File .\scripts\enable-lan-access.ps1 -Port 8787`。规则只允许管理端口的入站 TCP，网络类型为 Private（专用），来源为 LocalSubnet（本地子网），不会开放数据库和桥接端口。脚本可重复执行；电脑 Wi-Fi 须在 Windows 网络设置中标记为可信的专用网络。已有其他广泛放行 Node 的规则需要另外核对；此脚本不会修改其他程序的规则。移除此规则可用 `Remove-NetFirewallRule -Name PersonalChatAgent-LAN-8787`。若管理端口变化，删除旧规则再为新端口创建规则。
+
+启动器输出管理页面地址，等核心就绪后，手机连接同一 Wi-Fi，浏览器打开该地址（例如 `http://192.168.31.17:8787`）。电脑浏览器也使用同一个地址；其他 Origin 的登录和写入会被拒绝。使用现有密码登录，查看来信和候选，编辑并确认；微信发送结果未知时仍须核对原客户端，再在手机网页填写证据并点「已送达并恢复」。联系人设置、全局及联系人现有暂停/恢复功能均沿用原实现，会话时长未调整。
+
+本人最后用真实手机完成一次「收到消息 → 查看候选 → 确认 → 查看发送结果」；自动浏览器测试不替代真机送达验收。电脑保持开机、不休眠；若 IP 变化，修改 `PUBLIC_ORIGIN` 后停止并重启整组，再用新地址登录。若无法连接，先核对私有网络、防火墙和路由器是否开启访客网络/客户端隔离。本轮没有外网访问、手机推送或原生 App。
 
 Windows 单独强杀 PostgreSQL 主进程可能留下连接或后台进程，端口未释放时会保持拒绝重启，不会为此接管端口、删除 PID 文件或停止未知进程。这条进程树恢复路径尚未验收；故障时本人按本轮 PID、启动时间和集群目录核查并处理，保持暂停。离线数据库崩溃演练使用 `pg_ctl stop -m immediate`，原生停止其后台进程并在重启时执行 WAL 恢复，不能据此宣称单杀主进程同样能够自动恢复。
 
@@ -151,3 +186,18 @@ QQ 图片默认关闭。配置 `QQ_MEDIA_FETCH=1` 时，缓存目录 `QQ_MEDIA_C
 配置 `LOCAL_TEST_PG_BIN` 为包含 initdb/postgres/pg_ctl 的本机原生目录，并配置 `TEST_DATABASE_URL` 后，运行 `node --test tests/integration/postgres-local-stack.test.mts`。新演练不连接该 URL 指向的库；此变量沿用集成门禁开关，新集群使用随机端口。原生 `PG_DUMP_BIN` 所在目录也可作为备选；CI 的容器备份包装脚本不能替代原生数据库目录。完整门禁仍需原有测试库、备份工具、浏览器及网页构建环境。远程 CI 的原生工具准备留到 P6，尚未运行。
 
 演练覆盖启动迁移、核心/桥接硬退出、数据库原生立即停止后的暂停重启、不补发旧任务/未知发送、三类原生模拟 helper 故障、外部端口与不同端口集群保护、迁移取消和本轮进程回收。结果见 [P2-x 报告](../docs/reports/P2-x-local-stack-2026-10-02.md)。不计真实平台闭环；P1 继续使用 [现行清单补充](../docs/reports/P1-current-checklist-supplement-2026-10-02.md)。真实验收如果使用常驻入口，任一异常重启即结束本轮，不因模型计数重置而增加预算；轮转日志对账覆盖完整时间窗，每个文件只传一次。
+
+
+## 聊天工作台与恢复
+
+登录后默认进入聊天；旧待办、联系人和会话链接进入新的聊天入口。电脑左侧可搜索联系人、筛选平台与待处理状态，手机点击会话进入详情；聊天设置位于右侧面板。聊天内可编辑分条候选、确认、重新生成、不回复及处理暂停。Enter 换行，Ctrl/Cmd+Enter 确认；空内容、旧版本和后端阻塞不能发送。普通查询刷新或切换聊天保留当前登录会话的编辑；退出登录清空。浏览器整页重新加载会结束这些内存草稿。
+
+「一键恢复」清除手动暂停、人工接管，以及最近 30 秒健康探测正常的账号故障；「恢复全部代理」使用相同规则，并显示恢复数与跳过原因；全局暂停时也可直接在当前聊天恢复全部。代理关闭、未知发送、停止联系、事实及媒体待核仍保留专门处理。恢复不会补发旧方案或自动回复积压消息；可在聊天中为最新来信生成新候选。微信回复结果未知时，先在原客户端核对，再点「已收到，恢复聊天」；平台接受不代表送达。
+
+提交中断时页面保留原幂等键，先查询最新状态。只有「重试同一请求」重放相同命令，不自动重发。若已确认但部分回复未发送，逐条查看状态；不能将结果未知的回复当作失败重新发送。运行状态的探测结果超过 30 秒显示未知，探测正常不证明聊天历史完整。
+
+真实验收由本人分别在 QQ 和微信完成一次：来信 → 查看上下文 → 编辑候选 → 确认 → 原客户端核对结果；微信必要时人工标记已收到，再手发一条检查暂停与一键恢复。另在同一 Wi-Fi 手机查看窄屏详情。自动测试只使用合成数据和隔离数据库。
+
+## v2 P6离线验收与逐会话回滚
+
+见[验收指南](../docs/p6-acceptance-v2.md)和[交付报告](../docs/reports/v2-p6-2026-10-11.md)。本轮未部署或启用真实联系人灰度；真实试点须本人逐联系人授权并保持人工审批。回退仅更改pipeline version，保留已提交/送达/未知账本；未知结果先原客户端对账，不能切换管线后盲目重试。

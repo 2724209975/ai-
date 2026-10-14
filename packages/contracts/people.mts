@@ -1,0 +1,12 @@
+import type {ContextMessageV2,MemoryView} from './context-memory-v2.mts';
+export type ChatChannel = {contactId:string;personId:string;label:string;platform:string;accountId:string;conversationId:string;accountLabel:string;peerLabel:string;importOnly:boolean;shared:boolean;version:number};
+export type Person = {id:string;name:string;version:number;channels:ChatChannel[]};
+export type HistoryRow = {line:number;messageId?:string;speaker:'ME'|'OTHER'|'UNKNOWN';text:string;timestamp:string|null;uncertain:boolean;duplicateOf?:string|null};
+export type HistoryPreviewRow = HistoryRow & {duplicateCandidates:string[];duplicateTimes:Record<string,string|null>;exactDuplicate:boolean};
+export type HistoryPreview = {id:string;personId:string;personVersion:number;contactId:string;channelVersion:number;filename:string;sourceHash:string;status:'preview'|'committed';rows:HistoryPreviewRow[];inserted?:number;duplicates?:number};
+export type PeopleCommand = {action:'create'|'rename'|'attach'|'detach'|'channel';personId?:string;contactId?:string;expectedVersion?:number;sourcePersonVersion?:number;name?:string;label?:string;platform?:'qq'|'wechat'|'other';accountLabel?:string;peerLabel?:string;shared?:boolean;idempotencyKey:string};
+export type ImportPreviewInput = {contactId:string;filename:string;format:'json'|'csv'|'tsv';content:string};
+export type ImportCommitInput = {previewId:string;personVersion:number;channelVersion:number;rows:HistoryRow[];idempotencyKey:string};
+export type PersonMemoryInput = {contactId:string;messageId:string;expectedVersion:number;content:string;memoryType:import('./context-memory-v2.mts').MemoryType;subject:'owner'|'contact';validUntil?:string;idempotencyKey:string};
+export type PersonMessageInput = {contactId:string;messageId:string;expectedVersion:number;action:'correct'|'delete';row?:HistoryRow;idempotencyKey:string};
+export type PersonBackground = {personId:string;personVersion:number;currentContactId:string;channels:ChatChannel[];messages:(ContextMessageV2 & {contactId:string;channelLabel:string})[];memories:(MemoryView & {channelLabel:string})[]};

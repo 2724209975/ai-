@@ -21,7 +21,7 @@ export function replayOptions(args: string[]) {
     options.set(key, args[++i]!);
   }
   if (!options.has('--samples')) throw new Error('REPLAY_ARGUMENT_INVALID');
-  const versions = (options.get('--versions') ?? CANDIDATE_PROMPTS.join(',')).split(',').map(candidatePromptVersion);
+  const versions = (options.get('--versions') ?? CANDIDATE_PROMPTS.slice(-2).join(',')).split(',').map(candidatePromptVersion);
   if (versions.length !== 2 || versions[0] === versions[1]) throw new Error('REPLAY_VERSION_INVALID');
   const provider = options.get('--provider') ?? 'fake';
   if (provider !== 'fake' && provider !== 'deepseek') throw new Error('REPLAY_PROVIDER_INVALID');

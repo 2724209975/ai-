@@ -10,6 +10,7 @@ import { mediaBudgetOptionsFromEnv, withMediaDailyBudget, type MediaBudgetOption
 import { createVisionMediaProvider, IMAGE_UNDERSTANDING_PROMPT, VISION_DETAIL_LEVELS, type ImageDetail } from './vision-provider.mts';
 import { createVoiceMediaProvider, VOICE_TRANSCRIPTION_PROMPT } from './voice-provider.mts';
 import type { BinaryMediaProvider } from './media-provider.mts';
+import {unifiedMoneyFromEnv} from '../generation/unified-budget.mts';
 
 export type EnvLike = Record<string, string | undefined>;
 export type MediaEnv = {
@@ -106,7 +107,7 @@ export type MediaProviderSelection = Readonly<{
   providers: readonly string[];
   budget: MediaBudgetOptions;
   /** Safe to log: no key, no endpoint query, no contact data. */
-  describe(): Record<string, string | number | boolean>;
+  describe(): Record<string, string | number | boolean | null>;
 }>;
 
 /**
@@ -132,6 +133,7 @@ export function createMediaUnderstandingFromEnv(env: EnvLike, overrides: Partial
     endpoint: config.voiceEndpoint, timeoutMs: config.voiceTimeoutMs, ...(config.language ? { language: config.language } : {}),
   }));
   if (!providers.length) return null;
+  const money=unifiedMoneyFromEnv(env);
   const combined: BinaryMediaProvider = {
     // Named per enabled type so a log line never implies a single provider covers both.
     providerId: providers.map(p => p.providerId).join('+'),
@@ -144,6 +146,7 @@ export function createMediaUnderstandingFromEnv(env: EnvLike, overrides: Partial
     async invoke(input) {
       const target = providers.find(p => p.supportedMimeTypes[input.mediaType].includes(input.mimeType));
       if (!target) throw new Error('UNSUPPORTED_CAPABILITY');
+      if(money){const prefix=input.mediaType==='image'?'MEDIA_VISION':'MEDIA_VOICE';await money.reserve(input.mediaType,target.modelId,input.mediaType==='image'?65536+4096:input.bytes.byteLength+4096,config.maxTokens,{inputPerMillion:Number(env[prefix+'_INPUT_CNY_PER_MILLION']),outputPerMillion:Number(env[prefix+'_OUTPUT_CNY_PER_MILLION'])});}
       return await target.invoke(input);
     },
   };

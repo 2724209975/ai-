@@ -1,0 +1,13 @@
+export type LinkMessage = { speaker: 'ME'|'OTHER'|'UNKNOWN'; text: string; timestamp: number|null; uncertain: boolean; generated: boolean; styleExample: boolean; sourceId: string; channelContactId?:string;channelLabel?:string };
+export type LinkProfile = { name: string; platform: string; relationship: string; style: string; preferences: { id: string; text: string }[]; memory: { consent: boolean; paused: boolean; profile: string; entries: {id:string;kind:string;text:string;sourceIds:string[]}[] } };
+import type {MemoryView,RelationshipV2,StyleV2} from '../contracts/context-memory-v2.mts';
+export type LinkContextV2={schemaVersion:'2.0';contactId:string;ownerId:string;accountId:string;conversationId:string;platform:string;enabled:boolean;retentionDays:number;relationship:RelationshipV2;personalStyle:StyleV2;personId?:string;personVersion?:number;channels?:import('../contracts/people.mts').ChatChannel[]};
+export type LinkMemoryV2=MemoryView & {evidenceValid:boolean};
+export type LinkEvidenceSource={id:string;version:number;status:'current'|'updated'|'deleted'|'unavailable';speaker?:LinkMessage['speaker'];text?:string;timestamp?:number|null;origin?:'phone'|'desktop';uncertain?:boolean;generated?:boolean};
+export type LinkRecord = { id: string; kind: 'message'|'profile'|'memory_v2'|'context_v2'; body: LinkMessage|LinkProfile|LinkMemoryV2|LinkContextV2|null; version: number; seq: number; deleted: boolean; resolved?:boolean };
+export type LinkOperation = { id: string; kind: LinkRecord['kind']; body: LinkRecord['body']; expectedVersion: number; deleted: boolean };
+export type ContextPacket = { revision: number; summary: string; sourceIds: string[]; style: string; examples: string[]; method: 'extractive'|'model'; ready: boolean };
+export type LinkGroup = { id: string; deviceId: string; archiveId: string; contactId: string|null; revision: number; records: Record<string,LinkRecord>; packet: ContextPacket; conflicts: {id:string;operation:LinkOperation;current:LinkRecord}[]; deleted?:boolean; historyCorrections?:boolean; personChannels?:boolean; resetRevision?:number; syncReceipt?:{confirmedCursor:number;confirmedAt:number;lastRequestAt:number;lastRequestCursor:number} };
+export type LinkState = { devices: {id:string;name:string;tokenHash:string;revoked:boolean}[]; invitations: {hash:string;expires:number}[]; groups: LinkGroup[]; budget?:{id:string;phones:import('./budget.mts').PhoneAllowance[]} };
+export const emptyLinkState = (): LinkState => ({devices:[], invitations:[], groups:[]});
+export interface LinkStore { read(): Promise<LinkState>; change<T>(fn:(state:LinkState)=>T):Promise<T> }

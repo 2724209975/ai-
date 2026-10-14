@@ -1,0 +1,3693 @@
+{
+  "protocol": "p4-5d-entry-candidates-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "clientBytes": 100449384,
+  "offsetSourceSha256": "f5c78bb0c0bf4362fc86276b206ba7ee29def51fe27218242c8ecb0f2ab4368c",
+  "versionBranch": "V_3_9_11_25",
+  "exceptionUsable": true,
+  "candidateCount": 40,
+  "candidates": [
+    {
+      "first": "0x883d0",
+      "second": "0x30d8210",
+      "columnIndexes": [
+        1,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        19,
+        20,
+        22,
+        23,
+        26,
+        28,
+        29,
+        30,
+        31,
+        33,
+        36,
+        38
+      ],
+      "siteCount": 93,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x3081a5a"
+        },
+        {
+          "first": "0x4797cd",
+          "second": "0x3097c56"
+        },
+        {
+          "first": "0x2d65bb",
+          "second": "0x3081869"
+        },
+        {
+          "first": "0x87bcc",
+          "second": "0x3089dc2"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x30d8210",
+        "fileBacked": true,
+        "rangeStart": "0x30d8210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x308095a",
+        "0x3080a79",
+        "0x3081512",
+        "0x3081535",
+        "0x308186e",
+        "0x3081a5f",
+        "0x3081a76",
+        "0x3082338",
+        "0x3082c91",
+        "0x30847b3",
+        "0x3086437",
+        "0x3088b9e",
+        "0x3088f27",
+        "0x3089dc7",
+        "0x308a604",
+        "0x308ad24"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 149,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x890f0",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        19,
+        20,
+        23,
+        24,
+        26,
+        29,
+        31
+      ],
+      "siteCount": 93,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x8c628"
+        },
+        {
+          "first": "0x223f11",
+          "second": "0x5979"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x59e9"
+        },
+        {
+          "first": "0x4fcd29",
+          "second": "0x5a99"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 25,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x30d8210",
+      "columnIndexes": [
+        1,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        19,
+        20,
+        23,
+        26,
+        29,
+        31,
+        32
+      ],
+      "siteCount": 41,
+      "exampleSites": [
+        {
+          "first": "0x8c628",
+          "second": "0x3081a5a"
+        },
+        {
+          "first": "0x5bf9",
+          "second": "0x3097c56"
+        },
+        {
+          "first": "0x5c99",
+          "second": "0x3081869"
+        },
+        {
+          "first": "0x5d59",
+          "second": "0x3089dc2"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x30d8210",
+        "fileBacked": true,
+        "rangeStart": "0x30d8210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x308095a",
+        "0x3080a79",
+        "0x3081512",
+        "0x3081535",
+        "0x308186e",
+        "0x3081a5f",
+        "0x3081a76",
+        "0x3082338",
+        "0x3082c91",
+        "0x30847b3",
+        "0x3086437",
+        "0x3088b9e",
+        "0x3088f27",
+        "0x3089dc7",
+        "0x308a604",
+        "0x308ad24"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 149,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x2df3b60",
+      "columnIndexes": [
+        1,
+        2,
+        3,
+        4,
+        8,
+        10,
+        11,
+        12,
+        13,
+        14,
+        16,
+        17,
+        19,
+        21,
+        26,
+        42
+      ],
+      "siteCount": 66,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x2df4833"
+        },
+        {
+          "first": "0x223f11",
+          "second": "0x2dc37b8"
+        },
+        {
+          "first": "0x87b97",
+          "second": "0x2dbb474"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x2df49c0"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2df3b60",
+        "fileBacked": true,
+        "rangeStart": "0x2df3b60",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x2dba389",
+        "0x2dbb479",
+        "0x2dbb5c9",
+        "0x2dbbb6d",
+        "0x2dbbba9",
+        "0x2dbc6d5",
+        "0x2dbd379",
+        "0x2dbdb71",
+        "0x2dbf479",
+        "0x2dbf84a",
+        "0x2dbfa3a",
+        "0x2dc37bd",
+        "0x2dc3c90",
+        "0x2dc3d11",
+        "0x2dc4647",
+        "0x2de9473"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 24,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x40f2e0",
+      "columnIndexes": [
+        1,
+        2,
+        3,
+        4,
+        12,
+        13,
+        14,
+        16,
+        21,
+        22,
+        28,
+        30,
+        40,
+        55
+      ],
+      "siteCount": 53,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x410177"
+        },
+        {
+          "first": "0x223f11",
+          "second": "0x410493"
+        },
+        {
+          "first": "0x87b97",
+          "second": "0x40fcf7"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x40fe87"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x40f2e0",
+        "fileBacked": true,
+        "rangeStart": "0x40f2e0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x40f2c6",
+        "0x40f434",
+        "0x40f565",
+        "0x40f7f7",
+        "0x40f9cb",
+        "0x40fa21",
+        "0x40fad1",
+        "0x40fcfc",
+        "0x40fe8c",
+        "0x41017c",
+        "0x4102ef",
+        "0x410498",
+        "0x41060d",
+        "0x410661",
+        "0x410731",
+        "0x410819"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 39,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x2df3b60",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        8,
+        10,
+        11,
+        12,
+        13,
+        14,
+        16,
+        17,
+        19,
+        26
+      ],
+      "siteCount": 28,
+      "exampleSites": [
+        {
+          "first": "0x8c628",
+          "second": "0x2df4833"
+        },
+        {
+          "first": "0x5979",
+          "second": "0x2dc37b8"
+        },
+        {
+          "first": "0x59e9",
+          "second": "0x2df49c0"
+        },
+        {
+          "first": "0x5c99",
+          "second": "0x2dbbb68"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2df3b60",
+        "fileBacked": true,
+        "rangeStart": "0x2df3b60",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x2dba389",
+        "0x2dbb479",
+        "0x2dbb5c9",
+        "0x2dbbb6d",
+        "0x2dbbba9",
+        "0x2dbc6d5",
+        "0x2dbd379",
+        "0x2dbdb71",
+        "0x2dbf479",
+        "0x2dbf84a",
+        "0x2dbfa3a",
+        "0x2dc37bd",
+        "0x2dc3c90",
+        "0x2dc3d11",
+        "0x2dc4647",
+        "0x2de9473"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 24,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x33b090",
+      "columnIndexes": [
+        5,
+        6,
+        12,
+        13,
+        14,
+        16,
+        18,
+        19,
+        24,
+        26,
+        30,
+        31,
+        40
+      ],
+      "siteCount": 50,
+      "exampleSites": [
+        {
+          "first": "0x4fcd29",
+          "second": "0x1cdd93"
+        },
+        {
+          "first": "0x224d56",
+          "second": "0x1c9691"
+        },
+        {
+          "first": "0x3becea",
+          "second": "0x615777"
+        },
+        {
+          "first": "0x3a19ef",
+          "second": "0x61585e"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x33b090",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x1c2058",
+        "0x1c9696",
+        "0x1ca27d",
+        "0x1cc9bf",
+        "0x1cdd98",
+        "0x1d1a2e",
+        "0x1e40d0",
+        "0x1ed932",
+        "0x340edb",
+        "0x34202b",
+        "0x342ab7",
+        "0x3436d1",
+        "0x45f4c9",
+        "0x4605cd",
+        "0x460bbf",
+        "0x4611d7"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 27,
+      "bothLookLikeEntries": false
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x3a6d90",
+      "columnIndexes": [
+        1,
+        2,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        16,
+        17,
+        42
+      ],
+      "siteCount": 49,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x3b4919"
+        },
+        {
+          "first": "0x223f11",
+          "second": "0x3a8b89"
+        },
+        {
+          "first": "0x224d56",
+          "second": "0x3af5fa"
+        },
+        {
+          "first": "0x2d65bb",
+          "second": "0x3af867"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x3a6d90",
+        "fileBacked": true,
+        "rangeStart": "0x3a6d90",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x3a7509",
+        "0x3a7f4e",
+        "0x3a87a2",
+        "0x3a87d0",
+        "0x3a8b8e",
+        "0x3a992a",
+        "0x3a9941",
+        "0x3aa0b8",
+        "0x3aa0d6",
+        "0x3aa31c",
+        "0x3aa406",
+        "0x3aa7cc",
+        "0x3ab06d",
+        "0x3ab7ac",
+        "0x3abdfb",
+        "0x3ac7ee"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 64,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x29b1c30",
+      "columnIndexes": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        14,
+        16,
+        18,
+        21,
+        33
+      ],
+      "siteCount": 55,
+      "exampleSites": [
+        {
+          "first": "0x223f11",
+          "second": "0x2a06bfb"
+        },
+        {
+          "first": "0x87b97",
+          "second": "0x2a071aa"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x2a06c33"
+        },
+        {
+          "first": "0x4fcd29",
+          "second": "0x2a06aca"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x29b1c30",
+        "fileBacked": true,
+        "rangeStart": "0x29b1c30",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov rax,rsp"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x2a06acf",
+        "0x2a06b07",
+        "0x2a06c00",
+        "0x2a06c38",
+        "0x2a06c70",
+        "0x2a06d67",
+        "0x2a06e5c",
+        "0x2a06f53",
+        "0x2a06f8b",
+        "0x2a06fc3",
+        "0x2a070ba",
+        "0x2a071af",
+        "0x2a072a4"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 13,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x3a6d90",
+      "columnIndexes": [
+        1,
+        2,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        16,
+        17
+      ],
+      "siteCount": 25,
+      "exampleSites": [
+        {
+          "first": "0x8c628",
+          "second": "0x3b4919"
+        },
+        {
+          "first": "0x5979",
+          "second": "0x3a8b89"
+        },
+        {
+          "first": "0x5b49",
+          "second": "0x3af5fa"
+        },
+        {
+          "first": "0x5c99",
+          "second": "0x3af867"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x3a6d90",
+        "fileBacked": true,
+        "rangeStart": "0x3a6d90",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x3a7509",
+        "0x3a7f4e",
+        "0x3a87a2",
+        "0x3a87d0",
+        "0x3a8b8e",
+        "0x3a992a",
+        "0x3a9941",
+        "0x3aa0b8",
+        "0x3aa0d6",
+        "0x3aa31c",
+        "0x3aa406",
+        "0x3aa7cc",
+        "0x3ab06d",
+        "0x3ab7ac",
+        "0x3abdfb",
+        "0x3ac7ee"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 64,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x40f2e0",
+      "second": "0x30d8210",
+      "columnIndexes": [
+        1,
+        12,
+        13,
+        14,
+        16,
+        22,
+        28,
+        30,
+        40,
+        43,
+        44,
+        53
+      ],
+      "siteCount": 25,
+      "exampleSites": [
+        {
+          "first": "0x410177",
+          "second": "0x3081a5a"
+        },
+        {
+          "first": "0x4109a2",
+          "second": "0x3088f22"
+        },
+        {
+          "first": "0x41065c",
+          "second": "0x3088b99"
+        },
+        {
+          "first": "0x411122",
+          "second": "0x3086432"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x40f2e0",
+        "fileBacked": true,
+        "rangeStart": "0x40f2e0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x30d8210",
+        "fileBacked": true,
+        "rangeStart": "0x30d8210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x40f2c6",
+        "0x40f434",
+        "0x40f565",
+        "0x40f7f7",
+        "0x40f9cb",
+        "0x40fa21",
+        "0x40fad1",
+        "0x40fcfc",
+        "0x40fe8c",
+        "0x41017c",
+        "0x4102ef",
+        "0x410498",
+        "0x41060d",
+        "0x410661",
+        "0x410731",
+        "0x410819"
+      ],
+      "secondCallers": [
+        "0x308095a",
+        "0x3080a79",
+        "0x3081512",
+        "0x3081535",
+        "0x308186e",
+        "0x3081a5f",
+        "0x3081a76",
+        "0x3082338",
+        "0x3082c91",
+        "0x30847b3",
+        "0x3086437",
+        "0x3088b9e",
+        "0x3088f27",
+        "0x3089dc7",
+        "0x308a604",
+        "0x308ad24"
+      ],
+      "firstCallerCount": 39,
+      "secondCallerCount": 149,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x2df3b60",
+      "second": "0x30d8210",
+      "columnIndexes": [
+        1,
+        8,
+        10,
+        11,
+        12,
+        13,
+        14,
+        16,
+        17,
+        19,
+        25,
+        26
+      ],
+      "siteCount": 28,
+      "exampleSites": [
+        {
+          "first": "0x2df4833",
+          "second": "0x3081a5a"
+        },
+        {
+          "first": "0x2dbbb68",
+          "second": "0x3081869"
+        },
+        {
+          "first": "0x2dbc6d0",
+          "second": "0x3080a74"
+        },
+        {
+          "first": "0x2dbdb6c",
+          "second": "0x3080955"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x2df3b60",
+        "fileBacked": true,
+        "rangeStart": "0x2df3b60",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x30d8210",
+        "fileBacked": true,
+        "rangeStart": "0x30d8210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x2dba389",
+        "0x2dbb479",
+        "0x2dbb5c9",
+        "0x2dbbb6d",
+        "0x2dbbba9",
+        "0x2dbc6d5",
+        "0x2dbd379",
+        "0x2dbdb71",
+        "0x2dbf479",
+        "0x2dbf84a",
+        "0x2dbfa3a",
+        "0x2dc37bd",
+        "0x2dc3c90",
+        "0x2dc3d11",
+        "0x2dc4647",
+        "0x2de9473"
+      ],
+      "secondCallers": [
+        "0x308095a",
+        "0x3080a79",
+        "0x3081512",
+        "0x3081535",
+        "0x308186e",
+        "0x3081a5f",
+        "0x3081a76",
+        "0x3082338",
+        "0x3082c91",
+        "0x30847b3",
+        "0x3086437",
+        "0x3088b9e",
+        "0x3088f27",
+        "0x3089dc7",
+        "0x308a604",
+        "0x308ad24"
+      ],
+      "firstCallerCount": 24,
+      "secondCallerCount": 149,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x33b090",
+      "columnIndexes": [
+        5,
+        6,
+        12,
+        13,
+        14,
+        16,
+        18,
+        19,
+        24,
+        26,
+        31,
+        32
+      ],
+      "siteCount": 25,
+      "exampleSites": [
+        {
+          "first": "0x5a99",
+          "second": "0x1cdd93"
+        },
+        {
+          "first": "0x5b49",
+          "second": "0x1c9691"
+        },
+        {
+          "first": "0x5ec9",
+          "second": "0x615777"
+        },
+        {
+          "first": "0x5f79",
+          "second": "0x61585e"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x33b090",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x1c2058",
+        "0x1c9696",
+        "0x1ca27d",
+        "0x1cc9bf",
+        "0x1cdd98",
+        "0x1d1a2e",
+        "0x1e40d0",
+        "0x1ed932",
+        "0x340edb",
+        "0x34202b",
+        "0x342ab7",
+        "0x3436d1",
+        "0x45f4c9",
+        "0x4605cd",
+        "0x460bbf",
+        "0x4611d7"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 27,
+      "bothLookLikeEntries": false
+    },
+    {
+      "first": "0x3a6d90",
+      "second": "0x30d8210",
+      "columnIndexes": [
+        1,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        16,
+        17,
+        43,
+        44
+      ],
+      "siteCount": 25,
+      "exampleSites": [
+        {
+          "first": "0x3b4919",
+          "second": "0x3081a5a"
+        },
+        {
+          "first": "0x3af867",
+          "second": "0x3081869"
+        },
+        {
+          "first": "0x3affa0",
+          "second": "0x3089dc2"
+        },
+        {
+          "first": "0x3afdb0",
+          "second": "0x3080a74"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x3a6d90",
+        "fileBacked": true,
+        "rangeStart": "0x3a6d90",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x30d8210",
+        "fileBacked": true,
+        "rangeStart": "0x30d8210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x3a7509",
+        "0x3a7f4e",
+        "0x3a87a2",
+        "0x3a87d0",
+        "0x3a8b8e",
+        "0x3a992a",
+        "0x3a9941",
+        "0x3aa0b8",
+        "0x3aa0d6",
+        "0x3aa31c",
+        "0x3aa406",
+        "0x3aa7cc",
+        "0x3ab06d",
+        "0x3ab7ac",
+        "0x3abdfb",
+        "0x3ac7ee"
+      ],
+      "secondCallers": [
+        "0x308095a",
+        "0x3080a79",
+        "0x3081512",
+        "0x3081535",
+        "0x308186e",
+        "0x3081a5f",
+        "0x3081a76",
+        "0x3082338",
+        "0x3082c91",
+        "0x30847b3",
+        "0x3086437",
+        "0x3088b9e",
+        "0x3088f27",
+        "0x3089dc7",
+        "0x308a604",
+        "0x308ad24"
+      ],
+      "firstCallerCount": 64,
+      "secondCallerCount": 149,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x33b090",
+      "second": "0x30d8210",
+      "columnIndexes": [
+        12,
+        13,
+        14,
+        16,
+        18,
+        19,
+        26,
+        30,
+        31,
+        32,
+        40
+      ],
+      "siteCount": 23,
+      "exampleSites": [
+        {
+          "first": "0x615777",
+          "second": "0x3088f22"
+        },
+        {
+          "first": "0x61585e",
+          "second": "0x3088b99"
+        },
+        {
+          "first": "0x342ab2",
+          "second": "0x3086432"
+        },
+        {
+          "first": "0x1d1a29",
+          "second": "0x3091716"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x33b090",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x30d8210",
+        "fileBacked": true,
+        "rangeStart": "0x30d8210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x1c2058",
+        "0x1c9696",
+        "0x1ca27d",
+        "0x1cc9bf",
+        "0x1cdd98",
+        "0x1d1a2e",
+        "0x1e40d0",
+        "0x1ed932",
+        "0x340edb",
+        "0x34202b",
+        "0x342ab7",
+        "0x3436d1",
+        "0x45f4c9",
+        "0x4605cd",
+        "0x460bbf",
+        "0x4611d7"
+      ],
+      "secondCallers": [
+        "0x308095a",
+        "0x3080a79",
+        "0x3081512",
+        "0x3081535",
+        "0x308186e",
+        "0x3081a5f",
+        "0x3081a76",
+        "0x3082338",
+        "0x3082c91",
+        "0x30847b3",
+        "0x3086437",
+        "0x3088b9e",
+        "0x3088f27",
+        "0x3089dc7",
+        "0x308a604",
+        "0x308ad24"
+      ],
+      "firstCallerCount": 27,
+      "secondCallerCount": 149,
+      "bothLookLikeEntries": false
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x1d8cd10",
+      "columnIndexes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        10,
+        14
+      ],
+      "siteCount": 57,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x1d923ec"
+        },
+        {
+          "first": "0x223f11",
+          "second": "0x1d8f8eb"
+        },
+        {
+          "first": "0x87b97",
+          "second": "0x1d8f8e0"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x1d8e69f"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x1d8cd10",
+        "fileBacked": true,
+        "rangeStart": "0x1d8cd10",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "sub rsp,imm8"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x1d8c074",
+        "0x1d8e6a4",
+        "0x1d8e6af",
+        "0x1d8e6ba",
+        "0x1d8e6c5",
+        "0x1d8e6d0",
+        "0x1d8e6db",
+        "0x1d8f8e5",
+        "0x1d8f8f0",
+        "0x1d8f8fb",
+        "0x1d8fa8b",
+        "0x1d8fa96",
+        "0x1d8fbf9",
+        "0x1d8fc04",
+        "0x1d8fc0f",
+        "0x1d90e7a"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 46,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x237a860",
+      "columnIndexes": [
+        2,
+        3,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        24
+      ],
+      "siteCount": 45,
+      "exampleSites": [
+        {
+          "first": "0x223f11",
+          "second": "0x21fb73b"
+        },
+        {
+          "first": "0x87b97",
+          "second": "0x1e8e865"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x2210cd8"
+        },
+        {
+          "first": "0x224d56",
+          "second": "0x2210cb6"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x237a860",
+        "fileBacked": true,
+        "rangeStart": "0x237a860",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x1b462f0",
+        "0x1b46300",
+        "0x1b46310",
+        "0x1b46320",
+        "0x1b46330",
+        "0x1b46340",
+        "0x1b46350",
+        "0x1b46360",
+        "0x1b73bdd",
+        "0x1b73bf5",
+        "0x1b7a152",
+        "0x1b7a162",
+        "0x1b7a172",
+        "0x1b7a182",
+        "0x1b7a4c0",
+        "0x1b7a4d5"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 1228,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x29b1c30",
+      "columnIndexes": [
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        14,
+        16,
+        18,
+        32
+      ],
+      "siteCount": 20,
+      "exampleSites": [
+        {
+          "first": "0x5979",
+          "second": "0x2a06bfb"
+        },
+        {
+          "first": "0x59e9",
+          "second": "0x2a06c33"
+        },
+        {
+          "first": "0x5a99",
+          "second": "0x2a06aca"
+        },
+        {
+          "first": "0x5b49",
+          "second": "0x2a0729f"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x29b1c30",
+        "fileBacked": true,
+        "rangeStart": "0x29b1c30",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov rax,rsp"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x2a06acf",
+        "0x2a06b07",
+        "0x2a06c00",
+        "0x2a06c38",
+        "0x2a06c70",
+        "0x2a06d67",
+        "0x2a06e5c",
+        "0x2a06f53",
+        "0x2a06f8b",
+        "0x2a06fc3",
+        "0x2a070ba",
+        "0x2a071af",
+        "0x2a072a4"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 13,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x3a6d90",
+      "second": "0x2df3b60",
+      "columnIndexes": [
+        1,
+        2,
+        8,
+        10,
+        11,
+        12,
+        14,
+        16,
+        17,
+        42
+      ],
+      "siteCount": 22,
+      "exampleSites": [
+        {
+          "first": "0x3b4919",
+          "second": "0x2df4833"
+        },
+        {
+          "first": "0x3a8b89",
+          "second": "0x2dc37b8"
+        },
+        {
+          "first": "0x3af867",
+          "second": "0x2dbbb68"
+        },
+        {
+          "first": "0x3afdb0",
+          "second": "0x2dbc6d0"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x3a6d90",
+        "fileBacked": true,
+        "rangeStart": "0x3a6d90",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2df3b60",
+        "fileBacked": true,
+        "rangeStart": "0x2df3b60",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x3a7509",
+        "0x3a7f4e",
+        "0x3a87a2",
+        "0x3a87d0",
+        "0x3a8b8e",
+        "0x3a992a",
+        "0x3a9941",
+        "0x3aa0b8",
+        "0x3aa0d6",
+        "0x3aa31c",
+        "0x3aa406",
+        "0x3aa7cc",
+        "0x3ab06d",
+        "0x3ab7ac",
+        "0x3abdfb",
+        "0x3ac7ee"
+      ],
+      "secondCallers": [
+        "0x2dba389",
+        "0x2dbb479",
+        "0x2dbb5c9",
+        "0x2dbbb6d",
+        "0x2dbbba9",
+        "0x2dbc6d5",
+        "0x2dbd379",
+        "0x2dbdb71",
+        "0x2dbf479",
+        "0x2dbf84a",
+        "0x2dbfa3a",
+        "0x2dc37bd",
+        "0x2dc3c90",
+        "0x2dc3d11",
+        "0x2dc4647",
+        "0x2de9473"
+      ],
+      "firstCallerCount": 64,
+      "secondCallerCount": 24,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x251c210",
+      "columnIndexes": [
+        4,
+        9,
+        13,
+        19,
+        23,
+        26,
+        29,
+        30,
+        33
+      ],
+      "siteCount": 35,
+      "exampleSites": [
+        {
+          "first": "0x3d5582",
+          "second": "0x209dde2"
+        },
+        {
+          "first": "0x87bcc",
+          "second": "0x1d606c4"
+        },
+        {
+          "first": "0x3a19ef",
+          "second": "0x1d631f4"
+        },
+        {
+          "first": "0x4d1fc3",
+          "second": "0x1e6eeb4"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x251c210",
+        "fileBacked": true,
+        "rangeStart": "0x251c210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x1b430cc",
+        "0x1baf131",
+        "0x1bfbb99",
+        "0x1c5f95d",
+        "0x1c660e7",
+        "0x1c66118",
+        "0x1c66984",
+        "0x1c66ce1",
+        "0x1c66f89",
+        "0x1c670d4",
+        "0x1c670ef",
+        "0x1c690a3",
+        "0x1c690e8",
+        "0x1c691de",
+        "0x1c6946a",
+        "0x1c699dc"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 130,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x2c5c340",
+      "columnIndexes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "siteCount": 44,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x2c58ec8"
+        },
+        {
+          "first": "0x223f11",
+          "second": "0x2c596af"
+        },
+        {
+          "first": "0x87b97",
+          "second": "0x1e5e8bc"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x1c9c2dd"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2c5c340",
+        "fileBacked": true,
+        "rangeStart": "0x2c5c340",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x1c9c2e2",
+        "0x1c9c4e3",
+        "0x1c9c9e4",
+        "0x1c9caf4",
+        "0x1c9cc50",
+        "0x1c9cd21",
+        "0x1e552a5",
+        "0x1e5e8c1",
+        "0x1e6071e",
+        "0x2c58ecd",
+        "0x2c596b4"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 11,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x1d8cd10",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        10,
+        14
+      ],
+      "siteCount": 28,
+      "exampleSites": [
+        {
+          "first": "0x8c628",
+          "second": "0x1d923ec"
+        },
+        {
+          "first": "0x5979",
+          "second": "0x1d8f8eb"
+        },
+        {
+          "first": "0x59e9",
+          "second": "0x1d8e69f"
+        },
+        {
+          "first": "0x5a99",
+          "second": "0x1d8e6aa"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x1d8cd10",
+        "fileBacked": true,
+        "rangeStart": "0x1d8cd10",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "sub rsp,imm8"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x1d8c074",
+        "0x1d8e6a4",
+        "0x1d8e6af",
+        "0x1d8e6ba",
+        "0x1d8e6c5",
+        "0x1d8e6d0",
+        "0x1d8e6db",
+        "0x1d8f8e5",
+        "0x1d8f8f0",
+        "0x1d8f8fb",
+        "0x1d8fa8b",
+        "0x1d8fa96",
+        "0x1d8fbf9",
+        "0x1d8fc04",
+        "0x1d8fc0f",
+        "0x1d90e7a"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 46,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x237a860",
+      "columnIndexes": [
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        24
+      ],
+      "siteCount": 20,
+      "exampleSites": [
+        {
+          "first": "0x5979",
+          "second": "0x21fb73b"
+        },
+        {
+          "first": "0x59e9",
+          "second": "0x2210cd8"
+        },
+        {
+          "first": "0x5b49",
+          "second": "0x2210cb6"
+        },
+        {
+          "first": "0x5c99",
+          "second": "0x2210ce9"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x237a860",
+        "fileBacked": true,
+        "rangeStart": "0x237a860",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x1b462f0",
+        "0x1b46300",
+        "0x1b46310",
+        "0x1b46320",
+        "0x1b46330",
+        "0x1b46340",
+        "0x1b46350",
+        "0x1b46360",
+        "0x1b73bdd",
+        "0x1b73bf5",
+        "0x1b7a152",
+        "0x1b7a162",
+        "0x1b7a172",
+        "0x1b7a182",
+        "0x1b7a4c0",
+        "0x1b7a4d5"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 1228,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x3a6d90",
+      "second": "0x40f2e0",
+      "columnIndexes": [
+        1,
+        2,
+        12,
+        14,
+        15,
+        16,
+        43,
+        44,
+        45
+      ],
+      "siteCount": 19,
+      "exampleSites": [
+        {
+          "first": "0x3b4919",
+          "second": "0x410177"
+        },
+        {
+          "first": "0x3a8b89",
+          "second": "0x410493"
+        },
+        {
+          "first": "0x3b0da2",
+          "second": "0x4109a2"
+        },
+        {
+          "first": "0x3b069e",
+          "second": "0x411122"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x3a6d90",
+        "fileBacked": true,
+        "rangeStart": "0x3a6d90",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x40f2e0",
+        "fileBacked": true,
+        "rangeStart": "0x40f2e0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "firstCallers": [
+        "0x3a7509",
+        "0x3a7f4e",
+        "0x3a87a2",
+        "0x3a87d0",
+        "0x3a8b8e",
+        "0x3a992a",
+        "0x3a9941",
+        "0x3aa0b8",
+        "0x3aa0d6",
+        "0x3aa31c",
+        "0x3aa406",
+        "0x3aa7cc",
+        "0x3ab06d",
+        "0x3ab7ac",
+        "0x3abdfb",
+        "0x3ac7ee"
+      ],
+      "secondCallers": [
+        "0x40f2c6",
+        "0x40f434",
+        "0x40f565",
+        "0x40f7f7",
+        "0x40f9cb",
+        "0x40fa21",
+        "0x40fad1",
+        "0x40fcfc",
+        "0x40fe8c",
+        "0x41017c",
+        "0x4102ef",
+        "0x410498",
+        "0x41060d",
+        "0x410661",
+        "0x410731",
+        "0x410819"
+      ],
+      "firstCallerCount": 64,
+      "secondCallerCount": 39,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x40f2e0",
+      "second": "0x2df3b60",
+      "columnIndexes": [
+        1,
+        2,
+        3,
+        4,
+        12,
+        13,
+        14,
+        16,
+        21
+      ],
+      "siteCount": 19,
+      "exampleSites": [
+        {
+          "first": "0x410177",
+          "second": "0x2df4833"
+        },
+        {
+          "first": "0x410493",
+          "second": "0x2dc37b8"
+        },
+        {
+          "first": "0x40fcf7",
+          "second": "0x2dbb474"
+        },
+        {
+          "first": "0x40fe87",
+          "second": "0x2df49c0"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x40f2e0",
+        "fileBacked": true,
+        "rangeStart": "0x40f2e0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2df3b60",
+        "fileBacked": true,
+        "rangeStart": "0x2df3b60",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x40f2c6",
+        "0x40f434",
+        "0x40f565",
+        "0x40f7f7",
+        "0x40f9cb",
+        "0x40fa21",
+        "0x40fad1",
+        "0x40fcfc",
+        "0x40fe8c",
+        "0x41017c",
+        "0x4102ef",
+        "0x410498",
+        "0x41060d",
+        "0x410661",
+        "0x410731",
+        "0x410819"
+      ],
+      "secondCallers": [
+        "0x2dba389",
+        "0x2dbb479",
+        "0x2dbb5c9",
+        "0x2dbbb6d",
+        "0x2dbbba9",
+        "0x2dbc6d5",
+        "0x2dbd379",
+        "0x2dbdb71",
+        "0x2dbf479",
+        "0x2dbf84a",
+        "0x2dbfa3a",
+        "0x2dc37bd",
+        "0x2dc3c90",
+        "0x2dc3d11",
+        "0x2dc4647",
+        "0x2de9473"
+      ],
+      "firstCallerCount": 39,
+      "secondCallerCount": 24,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x33b090",
+      "second": "0x40f2e0",
+      "columnIndexes": [
+        12,
+        13,
+        14,
+        16,
+        30,
+        40,
+        48,
+        60,
+        61
+      ],
+      "siteCount": 19,
+      "exampleSites": [
+        {
+          "first": "0x615777",
+          "second": "0x4109a2"
+        },
+        {
+          "first": "0x61585e",
+          "second": "0x41065c"
+        },
+        {
+          "first": "0x342ab2",
+          "second": "0x411122"
+        },
+        {
+          "first": "0x1d1a29",
+          "second": "0x410814"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x33b090",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x40f2e0",
+        "fileBacked": true,
+        "rangeStart": "0x40f2e0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "firstCallers": [
+        "0x1c2058",
+        "0x1c9696",
+        "0x1ca27d",
+        "0x1cc9bf",
+        "0x1cdd98",
+        "0x1d1a2e",
+        "0x1e40d0",
+        "0x1ed932",
+        "0x340edb",
+        "0x34202b",
+        "0x342ab7",
+        "0x3436d1",
+        "0x45f4c9",
+        "0x4605cd",
+        "0x460bbf",
+        "0x4611d7"
+      ],
+      "secondCallers": [
+        "0x40f2c6",
+        "0x40f434",
+        "0x40f565",
+        "0x40f7f7",
+        "0x40f9cb",
+        "0x40fa21",
+        "0x40fad1",
+        "0x40fcfc",
+        "0x40fe8c",
+        "0x41017c",
+        "0x4102ef",
+        "0x410498",
+        "0x41060d",
+        "0x410661",
+        "0x410731",
+        "0x410819"
+      ],
+      "firstCallerCount": 27,
+      "secondCallerCount": 39,
+      "bothLookLikeEntries": false
+    },
+    {
+      "first": "0x849b0",
+      "second": "0x890f0",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        8,
+        12,
+        16,
+        24,
+        32
+      ],
+      "siteCount": 35,
+      "exampleSites": [
+        {
+          "first": "0x3e4e",
+          "second": "0x8c628"
+        },
+        {
+          "first": "0x3e3a1",
+          "second": "0x5979"
+        },
+        {
+          "first": "0x61d4e",
+          "second": "0x59e9"
+        },
+        {
+          "first": "0xb3f6d",
+          "second": "0x5c99"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x849b0",
+        "fileBacked": true,
+        "rangeStart": "0x849b0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "sub rsp,imm8"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "firstCallers": [
+        "0x3e53",
+        "0x4926",
+        "0x213c0",
+        "0x3e3a6",
+        "0x3f376",
+        "0x414d8",
+        "0x41510",
+        "0x5263d",
+        "0x526c1",
+        "0x52740",
+        "0x52775",
+        "0x54394",
+        "0x543cd",
+        "0x56078",
+        "0x56d80",
+        "0x582ed"
+      ],
+      "secondCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "firstCallerCount": 138,
+      "secondCallerCount": 25,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x1be6020",
+      "columnIndexes": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        11
+      ],
+      "siteCount": 40,
+      "exampleSites": [
+        {
+          "first": "0x87b97",
+          "second": "0x1bd706b"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x1bd736c"
+        },
+        {
+          "first": "0x4fcd29",
+          "second": "0x1be8e7c"
+        },
+        {
+          "first": "0x224d56",
+          "second": "0x1bec369"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x1be6020",
+        "fileBacked": true,
+        "rangeStart": "0x1be6020",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x1bceff2",
+        "0x1bd6e91",
+        "0x1bd7070",
+        "0x1bd7166",
+        "0x1bd7217",
+        "0x1bd7371",
+        "0x1be6be9",
+        "0x1be89d0",
+        "0x1be8e81",
+        "0x1bea1c2",
+        "0x1beac98",
+        "0x1beb900",
+        "0x1bec36e",
+        "0x1bef153",
+        "0x1bf1ce6"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 15,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x293f0b0",
+      "columnIndexes": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "siteCount": 40,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x204a997"
+        },
+        {
+          "first": "0x87b97",
+          "second": "0x2067b17"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x29cc4ae"
+        },
+        {
+          "first": "0x4fcd29",
+          "second": "0x29cc3be"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x293f0b0",
+        "fileBacked": true,
+        "rangeStart": "0x293f0b0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x204a8b1",
+        "0x204a99c",
+        "0x204aa37",
+        "0x204c524",
+        "0x2065a70",
+        "0x2067b1c",
+        "0x29cc173",
+        "0x29cc3c3",
+        "0x29cc4b3",
+        "0x29ccccb",
+        "0x29ceb4d"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 11,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x40f2e0",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "siteCount": 16,
+      "exampleSites": [
+        {
+          "first": "0x8c628",
+          "second": "0x410177"
+        },
+        {
+          "first": "0x5979",
+          "second": "0x410493"
+        },
+        {
+          "first": "0x59e9",
+          "second": "0x40fe87"
+        },
+        {
+          "first": "0x5ec9",
+          "second": "0x4109a2"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x40f2e0",
+        "fileBacked": true,
+        "rangeStart": "0x40f2e0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x40f2c6",
+        "0x40f434",
+        "0x40f565",
+        "0x40f7f7",
+        "0x40f9cb",
+        "0x40fa21",
+        "0x40fad1",
+        "0x40fcfc",
+        "0x40fe8c",
+        "0x41017c",
+        "0x4102ef",
+        "0x410498",
+        "0x41060d",
+        "0x410661",
+        "0x410731",
+        "0x410819"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 39,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x1be6020",
+      "columnIndexes": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        11,
+        15
+      ],
+      "siteCount": 19,
+      "exampleSites": [
+        {
+          "first": "0x59e9",
+          "second": "0x1bd736c"
+        },
+        {
+          "first": "0x5a99",
+          "second": "0x1be8e7c"
+        },
+        {
+          "first": "0x5b49",
+          "second": "0x1bec369"
+        },
+        {
+          "first": "0x5bf9",
+          "second": "0x1bd7212"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x1be6020",
+        "fileBacked": true,
+        "rangeStart": "0x1be6020",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x1bceff2",
+        "0x1bd6e91",
+        "0x1bd7070",
+        "0x1bd7166",
+        "0x1bd7217",
+        "0x1bd7371",
+        "0x1be6be9",
+        "0x1be89d0",
+        "0x1be8e81",
+        "0x1bea1c2",
+        "0x1beac98",
+        "0x1beb900",
+        "0x1bec36e",
+        "0x1bef153",
+        "0x1bf1ce6"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 15,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x890f0",
+      "second": "0x2c5c340",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "siteCount": 16,
+      "exampleSites": [
+        {
+          "first": "0x8c628",
+          "second": "0x2c58ec8"
+        },
+        {
+          "first": "0x5979",
+          "second": "0x2c596af"
+        },
+        {
+          "first": "0x59e9",
+          "second": "0x1c9c2dd"
+        },
+        {
+          "first": "0x5a99",
+          "second": "0x1c9caef"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2c5c340",
+        "fileBacked": true,
+        "rangeStart": "0x2c5c340",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x1c9c2e2",
+        "0x1c9c4e3",
+        "0x1c9c9e4",
+        "0x1c9caf4",
+        "0x1c9cc50",
+        "0x1c9cd21",
+        "0x1e552a5",
+        "0x1e5e8c1",
+        "0x1e6071e",
+        "0x2c58ecd",
+        "0x2c596b4"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 11,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x1d8cd10",
+      "second": "0x29b1c30",
+      "columnIndexes": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        14
+      ],
+      "siteCount": 26,
+      "exampleSites": [
+        {
+          "first": "0x1d8f8eb",
+          "second": "0x2a06bfb"
+        },
+        {
+          "first": "0x1d8f8e0",
+          "second": "0x2a071aa"
+        },
+        {
+          "first": "0x1d8e69f",
+          "second": "0x2a06c33"
+        },
+        {
+          "first": "0x1d8e6aa",
+          "second": "0x2a06aca"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x1d8cd10",
+        "fileBacked": true,
+        "rangeStart": "0x1d8cd10",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "sub rsp,imm8"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x29b1c30",
+        "fileBacked": true,
+        "rangeStart": "0x29b1c30",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov rax,rsp"
+        ]
+      },
+      "firstCallers": [
+        "0x1d8c074",
+        "0x1d8e6a4",
+        "0x1d8e6af",
+        "0x1d8e6ba",
+        "0x1d8e6c5",
+        "0x1d8e6d0",
+        "0x1d8e6db",
+        "0x1d8f8e5",
+        "0x1d8f8f0",
+        "0x1d8f8fb",
+        "0x1d8fa8b",
+        "0x1d8fa96",
+        "0x1d8fbf9",
+        "0x1d8fc04",
+        "0x1d8fc0f",
+        "0x1d90e7a"
+      ],
+      "secondCallers": [
+        "0x2a06acf",
+        "0x2a06b07",
+        "0x2a06c00",
+        "0x2a06c38",
+        "0x2a06c70",
+        "0x2a06d67",
+        "0x2a06e5c",
+        "0x2a06f53",
+        "0x2a06f8b",
+        "0x2a06fc3",
+        "0x2a070ba",
+        "0x2a071af",
+        "0x2a072a4"
+      ],
+      "firstCallerCount": 46,
+      "secondCallerCount": 13,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x1d8cd10",
+      "second": "0x2c5c340",
+      "columnIndexes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        10
+      ],
+      "siteCount": 23,
+      "exampleSites": [
+        {
+          "first": "0x1d923ec",
+          "second": "0x2c58ec8"
+        },
+        {
+          "first": "0x1d8f8eb",
+          "second": "0x2c596af"
+        },
+        {
+          "first": "0x1d8f8e0",
+          "second": "0x1e5e8bc"
+        },
+        {
+          "first": "0x1d8e69f",
+          "second": "0x1c9c2dd"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x1d8cd10",
+        "fileBacked": true,
+        "rangeStart": "0x1d8cd10",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "sub rsp,imm8"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2c5c340",
+        "fileBacked": true,
+        "rangeStart": "0x2c5c340",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x1d8c074",
+        "0x1d8e6a4",
+        "0x1d8e6af",
+        "0x1d8e6ba",
+        "0x1d8e6c5",
+        "0x1d8e6d0",
+        "0x1d8e6db",
+        "0x1d8f8e5",
+        "0x1d8f8f0",
+        "0x1d8f8fb",
+        "0x1d8fa8b",
+        "0x1d8fa96",
+        "0x1d8fbf9",
+        "0x1d8fc04",
+        "0x1d8fc0f",
+        "0x1d90e7a"
+      ],
+      "secondCallers": [
+        "0x1c9c2e2",
+        "0x1c9c4e3",
+        "0x1c9c9e4",
+        "0x1c9caf4",
+        "0x1c9cc50",
+        "0x1c9cd21",
+        "0x1e552a5",
+        "0x1e5e8c1",
+        "0x1e6071e",
+        "0x2c58ecd",
+        "0x2c596b4"
+      ],
+      "firstCallerCount": 46,
+      "secondCallerCount": 11,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x237a860",
+      "second": "0x2df3b60",
+      "columnIndexes": [
+        2,
+        3,
+        4,
+        8,
+        10,
+        12,
+        14,
+        16
+      ],
+      "siteCount": 19,
+      "exampleSites": [
+        {
+          "first": "0x21fb73b",
+          "second": "0x2dc37b8"
+        },
+        {
+          "first": "0x1e8e865",
+          "second": "0x2dbb474"
+        },
+        {
+          "first": "0x2210cd8",
+          "second": "0x2df49c0"
+        },
+        {
+          "first": "0x2210ce9",
+          "second": "0x2dbbb68"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x237a860",
+        "fileBacked": true,
+        "rangeStart": "0x237a860",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x2df3b60",
+        "fileBacked": true,
+        "rangeStart": "0x2df3b60",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x1b462f0",
+        "0x1b46300",
+        "0x1b46310",
+        "0x1b46320",
+        "0x1b46330",
+        "0x1b46340",
+        "0x1b46350",
+        "0x1b46360",
+        "0x1b73bdd",
+        "0x1b73bf5",
+        "0x1b7a152",
+        "0x1b7a162",
+        "0x1b7a172",
+        "0x1b7a182",
+        "0x1b7a4c0",
+        "0x1b7a4d5"
+      ],
+      "secondCallers": [
+        "0x2dba389",
+        "0x2dbb479",
+        "0x2dbb5c9",
+        "0x2dbbb6d",
+        "0x2dbbba9",
+        "0x2dbc6d5",
+        "0x2dbd379",
+        "0x2dbdb71",
+        "0x2dbf479",
+        "0x2dbf84a",
+        "0x2dbfa3a",
+        "0x2dc37bd",
+        "0x2dc3c90",
+        "0x2dc3d11",
+        "0x2dc4647",
+        "0x2de9473"
+      ],
+      "firstCallerCount": 1228,
+      "secondCallerCount": 24,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x251c210",
+      "second": "0x30d8210",
+      "columnIndexes": [
+        9,
+        13,
+        19,
+        23,
+        26,
+        29,
+        30,
+        33
+      ],
+      "siteCount": 18,
+      "exampleSites": [
+        {
+          "first": "0x1d606c4",
+          "second": "0x3089dc2"
+        },
+        {
+          "first": "0x1d631f4",
+          "second": "0x3088b99"
+        },
+        {
+          "first": "0x1e6eeb4",
+          "second": "0x309113c"
+        },
+        {
+          "first": "0x20eaf34",
+          "second": "0x30989fe"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x251c210",
+        "fileBacked": true,
+        "rangeStart": "0x251c210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x30d8210",
+        "fileBacked": true,
+        "rangeStart": "0x30d8210",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x1b430cc",
+        "0x1baf131",
+        "0x1bfbb99",
+        "0x1c5f95d",
+        "0x1c660e7",
+        "0x1c66118",
+        "0x1c66984",
+        "0x1c66ce1",
+        "0x1c66f89",
+        "0x1c670d4",
+        "0x1c670ef",
+        "0x1c690a3",
+        "0x1c690e8",
+        "0x1c691de",
+        "0x1c6946a",
+        "0x1c699dc"
+      ],
+      "secondCallers": [
+        "0x308095a",
+        "0x3080a79",
+        "0x3081512",
+        "0x3081535",
+        "0x308186e",
+        "0x3081a5f",
+        "0x3081a76",
+        "0x3082338",
+        "0x3082c91",
+        "0x30847b3",
+        "0x3086437",
+        "0x3088b9e",
+        "0x3088f27",
+        "0x3089dc7",
+        "0x308a604",
+        "0x308ad24"
+      ],
+      "firstCallerCount": 130,
+      "secondCallerCount": 149,
+      "bothLookLikeEntries": true
+    },
+    {
+      "first": "0x883d0",
+      "second": "0xfd2f0",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        8,
+        12,
+        16,
+        20,
+        24
+      ],
+      "siteCount": 51,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0xc8b0a"
+        },
+        {
+          "first": "0x223f11",
+          "second": "0x36cef7"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0xc8af5"
+        },
+        {
+          "first": "0x2d65bb",
+          "second": "0x3507e"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0xfd2f0",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x35083",
+        "0x58985",
+        "0x58da1",
+        "0x58eb6",
+        "0x5da2a",
+        "0x5e6da",
+        "0x888d5",
+        "0x888ef",
+        "0xc8ae5",
+        "0xc8afa",
+        "0xc8b0f",
+        "0xc8e2e",
+        "0x10ee7a",
+        "0x10ef7a",
+        "0x10fbcc",
+        "0x17ab7a"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 118,
+      "bothLookLikeEntries": false
+    },
+    {
+      "first": "0x883d0",
+      "second": "0x43555c0",
+      "columnIndexes": [
+        1,
+        4,
+        8,
+        16,
+        20,
+        24,
+        40,
+        55
+      ],
+      "siteCount": 48,
+      "exampleSites": [
+        {
+          "first": "0x21ffa1",
+          "second": "0x1df9100"
+        },
+        {
+          "first": "0x3d5582",
+          "second": "0x1d0ef4f"
+        },
+        {
+          "first": "0x2d65bb",
+          "second": "0x1b3f3d8"
+        },
+        {
+          "first": "0x3baa87",
+          "second": "0x10539b"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x883d0",
+        "fileBacked": true,
+        "rangeStart": "0x883d0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push r15"
+        ]
+      },
+      "secondFacts": {
+        "target": "0x43555c0",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": []
+      },
+      "firstCallers": [
+        "0x878f6",
+        "0x87a3f",
+        "0x87b9c",
+        "0x87bd1",
+        "0x173ff9",
+        "0x174088",
+        "0x17427c",
+        "0x21faa8",
+        "0x21ffa6",
+        "0x22107a",
+        "0x2229d5",
+        "0x223bba",
+        "0x223cc3",
+        "0x223f16",
+        "0x223fbc",
+        "0x2241a4"
+      ],
+      "secondCallers": [
+        "0x4dbb",
+        "0x52ad",
+        "0x574b",
+        "0x6a5c",
+        "0x70f4",
+        "0x7149",
+        "0x719e",
+        "0x71f3",
+        "0x7248",
+        "0x7299",
+        "0x12f8c",
+        "0x13dac",
+        "0x140bc",
+        "0x14103",
+        "0x147f0",
+        "0x149cd"
+      ],
+      "firstCallerCount": 724,
+      "secondCallerCount": 4096,
+      "bothLookLikeEntries": false
+    },
+    {
+      "first": "0x890f0",
+      "second": "0xfd2f0",
+      "columnIndexes": [
+        1,
+        2,
+        4,
+        8,
+        12,
+        16,
+        20,
+        24
+      ],
+      "siteCount": 34,
+      "exampleSites": [
+        {
+          "first": "0x8c628",
+          "second": "0xc8b0a"
+        },
+        {
+          "first": "0x5979",
+          "second": "0x36cef7"
+        },
+        {
+          "first": "0x59e9",
+          "second": "0xc8af5"
+        },
+        {
+          "first": "0x5c99",
+          "second": "0x3507e"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x890f0",
+        "fileBacked": true,
+        "rangeStart": "0x890f0",
+        "atRangeStart": true,
+        "prologueShapes": [
+          "push rsi"
+        ]
+      },
+      "secondFacts": {
+        "target": "0xfd2f0",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": [
+          "mov [rsp+d],reg"
+        ]
+      },
+      "firstCallers": [
+        "0x4f6e",
+        "0x58de",
+        "0x597e",
+        "0x59ee",
+        "0x5a9e",
+        "0x5b4e",
+        "0x5bfe",
+        "0x5c9e",
+        "0x5d5e",
+        "0x5dae",
+        "0x5e3e",
+        "0x5ece",
+        "0x5f7e",
+        "0x601e",
+        "0x60ae",
+        "0x60fe"
+      ],
+      "secondCallers": [
+        "0x35083",
+        "0x58985",
+        "0x58da1",
+        "0x58eb6",
+        "0x5da2a",
+        "0x5e6da",
+        "0x888d5",
+        "0x888ef",
+        "0xc8ae5",
+        "0xc8afa",
+        "0xc8b0f",
+        "0xc8e2e",
+        "0x10ee7a",
+        "0x10ef7a",
+        "0x10fbcc",
+        "0x17ab7a"
+      ],
+      "firstCallerCount": 25,
+      "secondCallerCount": 118,
+      "bothLookLikeEntries": false
+    },
+    {
+      "first": "0x43555c0",
+      "second": "0x4366c08",
+      "columnIndexes": [
+        1,
+        8,
+        16,
+        24,
+        32,
+        40,
+        48,
+        56
+      ],
+      "siteCount": 57,
+      "exampleSites": [
+        {
+          "first": "0x1df9100",
+          "second": "0x432a4c"
+        },
+        {
+          "first": "0x1b3f3d8",
+          "second": "0x4488ad"
+        },
+        {
+          "first": "0x10539b",
+          "second": "0x427e05"
+        },
+        {
+          "first": "0x1022f3",
+          "second": "0x448d65"
+        }
+      ],
+      "firstFacts": {
+        "target": "0x43555c0",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": []
+      },
+      "secondFacts": {
+        "target": "0x4366c08",
+        "fileBacked": true,
+        "rangeStart": null,
+        "atRangeStart": false,
+        "prologueShapes": []
+      },
+      "firstCallers": [
+        "0x4dbb",
+        "0x52ad",
+        "0x574b",
+        "0x6a5c",
+        "0x70f4",
+        "0x7149",
+        "0x719e",
+        "0x71f3",
+        "0x7248",
+        "0x7299",
+        "0x12f8c",
+        "0x13dac",
+        "0x140bc",
+        "0x14103",
+        "0x147f0",
+        "0x149cd"
+      ],
+      "secondCallers": [
+        "0xd729",
+        "0x427e0a",
+        "0x4284dd",
+        "0x4285b4",
+        "0x42d601",
+        "0x42dc9e",
+        "0x42eaee",
+        "0x4302ff",
+        "0x4303a3",
+        "0x431d53",
+        "0x431f5c",
+        "0x432551",
+        "0x432645",
+        "0x432667",
+        "0x432a51",
+        "0x43594f"
+      ],
+      "firstCallerCount": 4096,
+      "secondCallerCount": 338,
+      "bothLookLikeEntries": false
+    }
+  ],
+  "assessedEntries": 32,
+  "registeredOffsetsChanged": false,
+  "disposition": "NO_GO",
+  "reasons": [
+    "candidates-derived-from-call-sites-not-from-any-address-table",
+    "function-identity-and-abi-still-require-argument-and-return-value-verification",
+    "registered-offsets-inspected-unchanged:15"
+  ]
+}

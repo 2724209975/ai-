@@ -4,8 +4,10 @@ import { join } from 'node:path';
 export type ManagedProcess = { ready(): Promise<void>; exited: Promise<void>; stop(): Promise<void> };
 // start must return the owned child promptly; all readiness waits belong in ready().
 export async function superviseLocalStack(options: { names: string[]; start(name: string): Promise<ManagedProcess>;
+  isolatedServices?: string[];
   signal: AbortSignal; log(event: string, service?: string): Promise<void>; delay?(ms: number): Promise<void>;
-  backoffMs?: number; maxBackoffMs?: number }) {
+  backoffMs?: number; maxBackoffMs?: number }): Promise<void> {
+  if (options.isolatedServices?.length) return superviseIndependentStack(options);
   const delay = options.delay ?? (ms => new Promise<void>(resolve => {
     const timer = setTimeout(done, ms);
     function done() { clearTimeout(timer); options.signal.removeEventListener('abort', done); resolve(); }
@@ -60,13 +62,86 @@ export async function superviseLocalStack(options: { names: string[]; start(name
   await options.log('stack_stopped');
 }
 
+/** Bridges restart independently; a dependency failure stops all bridges before the database. */
+async function superviseIndependentStack(options: Parameters<typeof superviseLocalStack>[0]): Promise<void> {
+  const isolated=new Set(options.isolatedServices);
+  if (options.isolatedServices!.some(name=>!options.names.includes(name))) throw new Error('LOCAL_SERVICE_INVALID');
+  const delay=async (ms:number,signal:AbortSignal) => {
+    if (signal.aborted) return;
+    if (options.delay) return options.delay(ms);
+    await new Promise<void>(resolve=>{
+      const done=()=>{ clearTimeout(timer); signal.removeEventListener('abort',done); resolve(); };
+      const timer=setTimeout(done,ms); signal.addEventListener('abort',done,{once:true});
+      if (signal.aborted) done();
+    });
+  };
+  const backoff=(failures:number)=>Math.min(options.maxBackoffMs ?? 30_000,(options.backoffMs ?? 1000)*2**Math.min(failures-1,10));
+  let failures=0;
+  while (!options.signal.aborted) {
+    const round=new AbortController(), roots:{name:string;child:ManagedProcess}[]=[];
+    const abort=()=>round.abort(); options.signal.addEventListener('abort',abort,{once:true});
+    const aborted=new Promise<void>(resolve=>{ round.signal.addEventListener('abort',()=>resolve(),{once:true}); if(options.signal.aborted) round.abort(); });
+    let dependencyExit!:()=>void;
+    const dependencyFailed=new Promise<never>((_,reject)=>{ dependencyExit=()=>reject(new Error('CHILD_EXITED')); });
+    // A handler is attached before any child can exit, including during startup.
+    void dependencyFailed.catch(()=>{});
+    const loops:Promise<void>[]=[];
+    let stopFailed=false;
+    try {
+      for (const name of options.names.filter(name=>!isolated.has(name))) {
+        if (round.signal.aborted) break;
+        const child=await options.start(name); roots.push({name,child});
+        void child.exited.then(dependencyExit,dependencyExit);
+        await Promise.race([child.ready(),dependencyFailed,aborted.then(()=>{throw new Error('STOPPED');})]);
+        await options.log('service_ready',name);
+      }
+      if (!round.signal.aborted) {
+        const firstReady:Promise<void>[]=[];
+        for (const name of options.names.filter(name=>isolated.has(name))) {
+          let ready!:()=>void; firstReady.push(new Promise<void>(resolve=>{ready=resolve;}));
+          const loop=(async()=>{
+            let count=0;
+            while(!round.signal.aborted) {
+              let child:ManagedProcess|undefined; const startedAt=Date.now();
+              try {
+                child=await options.start(name);
+                await Promise.race([child.ready(),child.exited.then(()=>{throw new Error('CHILD_EXITED');}),aborted.then(()=>{throw new Error('STOPPED');})]);
+                await options.log('service_ready',name); ready();
+                await Promise.race([child.exited,aborted]);
+              } catch { if(!round.signal.aborted) await options.log('stack_fault',name); }
+              finally {
+                if(child) { try { await child.stop(); await options.log('service_stopped',name); } catch { stopFailed=true; round.abort(); throw new Error('STACK_STOP_FAILED'); } }
+              }
+              if(!round.signal.aborted) {
+                count=Date.now()-startedAt>=60_000 ? 1 : count+1;
+                await options.log('stack_restart',name); await delay(backoff(count),round.signal);
+              }
+            }
+          })();
+          void loop.catch(()=>round.abort()); loops.push(loop);
+        }
+        await Promise.race([Promise.all(firstReady),dependencyFailed,aborted]);
+        if(!round.signal.aborted) { await options.log('stack_ready'); await Promise.race([dependencyFailed,aborted]); }
+      }
+    } catch { if(!options.signal.aborted) await options.log('stack_fault'); }
+    finally {
+      round.abort(); options.signal.removeEventListener('abort',abort);
+      const results=await Promise.allSettled(loops); if(results.some(r=>r.status==='rejected')) stopFailed=true;
+      for(const {name,child} of roots.reverse()) { try{ await child.stop(); await options.log('service_stopped',name); } catch { stopFailed=true; } }
+    }
+    if(stopFailed) throw new Error('STACK_STOP_FAILED');
+    if(!options.signal.aborted) { failures++; await options.log('stack_restart'); await delay(backoff(failures),options.signal); }
+  }
+  await options.log('stack_stopped');
+}
+
 /** Only fixed supervisor events and service names enter logs; child output is never copied. */
 export function rotatingStackLog(directory: string, maxBytes = 1_048_576, archives = 5) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 128 || !Number.isSafeInteger(archives) || archives < 1 || archives > 20) throw new Error('LOG_CONFIG_INVALID');
   let chain = Promise.resolve();
   return (event: string, service?: string, measurement?: Record<string, unknown>): Promise<void> => {
     if (!['service_ready', 'service_stopped', 'stack_ready', 'stack_fault', 'stack_restart', 'stack_stopped', 'process_output', 'process_error', 'model_call', 'media_model_call'].includes(event)
-      || (service !== undefined && !['postgres', 'core', 'bridge'].includes(service))) return Promise.reject(new Error('LOG_EVENT_INVALID'));
+      || (service !== undefined && !['postgres', 'core', 'bridge','bridge-qq','bridge-wechat'].includes(service))) return Promise.reject(new Error('LOG_EVENT_INVALID'));
     const metrics: Record<string, unknown> = {};
     if ((event === 'model_call' || event === 'media_model_call') && measurement) {
       for (const name of ['callId', 'contextSnapshotId']) if (typeof measurement[name] === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(measurement[name] as string)) metrics[name] = measurement[name];
@@ -75,7 +150,7 @@ export function rotatingStackLog(directory: string, maxBytes = 1_048_576, archiv
       if (event === 'media_model_call') {
         if (measurement.mediaType === 'image' || measurement.mediaType === 'voice') metrics.mediaType = measurement.mediaType;
       } else {
-        if (['reply-candidates-1', 'reply-candidates-2'].includes(String(measurement.promptVersion))) metrics.promptVersion = measurement.promptVersion;
+        if (['reply-candidates-1', 'reply-candidates-2', 'reply-candidates-3'].includes(String(measurement.promptVersion))) metrics.promptVersion = measurement.promptVersion;
         if (['deepseek-flash', 'deepseek-v4-pro'].includes(String(measurement.modelId))) metrics.modelId = measurement.modelId;
       }
     }

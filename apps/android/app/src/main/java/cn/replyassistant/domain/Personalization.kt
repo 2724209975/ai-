@@ -2,10 +2,16 @@ package cn.replyassistant.domain
 
 object Personalization {
     fun samples(archive: ChatArchive): List<ChatMessage> = archive.messages.filter {
-        it.speaker == Speaker.ME && !it.generated && !it.uncertain &&
-            (it.styleExample || it.origin == Origin.MANUAL || it.origin == Origin.ACCESSIBILITY)
+        it.speaker == Speaker.ME && !it.generated && !it.uncertain && !it.orderUncertain &&
+            (it.styleExample || it.origin == Origin.MANUAL)
     }
-    fun prompt(archive: ChatArchive): String = buildString {
+    private fun tokens(value: String): Set<String> {
+        val words = Regex("[a-zA-Z0-9]{2,}|[\\p{IsHan}]{2,}").findAll(value.lowercase()).map { it.value }
+        return words.flatMap { word -> if (word.first() in 'a'..'z' || word.first().isDigit()) sequenceOf(word)
+            else word.windowed(2).asSequence() }.toSet()
+    }
+    fun relevance(text: String, topic: String): Int = tokens(text).intersect(tokens(topic)).size
+    fun prompt(archive: ChatArchive, topic: String = "", exampleLimit: Int = 8): String = buildString {
         val samples = samples(archive)
         if (samples.size >= 10) {
             val average = samples.map { it.text.codePointCount(0, it.text.length) }.average().toInt()
@@ -19,10 +25,14 @@ object Personalization {
             if (habits.isNotEmpty()) appendLine("常用表达：${habits.take(6).joinToString("、")}；不要每句强行添加。")
         }
         val ids = samples.map { it.id }.toSet()
-        val pairs = archive.messages.zipWithNext().filter { (a,b) -> a.speaker == Speaker.OTHER && !a.uncertain && b.id in ids }.takeLast(8)
+        val topicTokens = tokens(topic)
+        val pairs = archive.messages.zipWithNext().filter { (a,b) -> a.speaker == Speaker.OTHER && !a.uncertain && !a.orderUncertain && b.id in ids }
+            .mapIndexed { index, pair -> Triple(pair, tokens(pair.first.text).count { it in topicTokens }, index) }
+            .sortedWith(compareByDescending<Triple<Pair<ChatMessage,ChatMessage>,Int,Int>> { it.second }
+                .thenByDescending { it.third }).take(exampleLimit).map { it.first }.reversed()
         if (pairs.isNotEmpty()) appendLine("本人真实表达示例：")
         pairs.forEach { (a,b) -> appendLine("对方：${a.text.take(300)} → 本人：${b.text.take(300)}") }
-        if (pairs.isEmpty()) samples.takeLast(8).forEach { appendLine("本人真实表达示例：${it.text.take(300)}") }
+        if (pairs.isEmpty()) samples.takeLast(exampleLimit).forEach { appendLine("本人真实表达示例：${it.text.take(300)}") }
     }
     fun rememberDraft(archive: ChatArchive): List<ReplyDraft> {
         val draft = archive.draft ?: return archive.draftHistory
@@ -30,7 +40,11 @@ object Personalization {
             (archive.draftHistory + draft.copy(id = newId())).takeLast(30) else archive.draftHistory
     }
     fun invalidateMemory(archive: ChatArchive, rows: List<ChatMessage>): RelationshipMemory {
-        val changed = archive.messages.filter { old -> rows.find { it.id == old.id } != old }.flatMap { listOf(it.id,it.sourceId) }.toSet()
+        val changed = archive.messages.filter { old ->
+            val kept=rows.find {it.id==old.id}
+            val alias=rows.any {old.id in it.sourceRefs&&it.speaker==old.speaker&&it.text==old.text&&it.uncertain==old.uncertain}
+            !alias&&kept?.copy(sourceRefs=old.sourceRefs)!=old
+        }.flatMap { listOf(it.id,it.sourceId)+it.sourceRefs }.toSet()
         fun valid(entries: List<MemoryEntry>) = entries.filter { it.sourceIds.none(changed::contains) }
         return archive.memory.copy(entries = valid(archive.memory.entries), undo = archive.memory.undo.map(::valid))
     }

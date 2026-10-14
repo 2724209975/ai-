@@ -1,0 +1,178 @@
+{
+  "date": "2026-10-11",
+  "scope": "Real DeepSeek provider calls using 160 current synthetic Chinese scenarios twice; no real desktop chat bodies or platform calls.",
+  "authorization": {
+    "userLimitCny": 10,
+    "allCurrentProjectDataUploadAuthorized": true,
+    "automaticSendAuthorized": false
+  },
+  "model": {
+    "requested": "deepseek-flash",
+    "thinking": "disabled",
+    "outputTokenLimit": 1024,
+    "declaredVersionIsNotGuaranteedWeights": true
+  },
+  "tariff": {
+    "verifiedAt": "2026-10-11",
+    "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+    "ceiling": {
+      "inputPerMillion": 2,
+      "outputPerMillion": 8
+    },
+    "offPeakEstimate": {
+      "cacheHitInputPerMillion": 0.02,
+      "cacheMissInputPerMillion": 1,
+      "outputPerMillion": 4
+    }
+  },
+  "runs": [
+    {
+      "promptVersion": "decision-json-v2.1",
+      "datasetKind": "synthetic",
+      "datasetHash": "87e9cae5e2d9fd9a0667bb3cc4924bc26a2a9b4b8f9514bbba4a101b91eda6b8",
+      "requested": 160,
+      "completed": 160,
+      "calls": 312,
+      "knownUsageCalls": 312,
+      "decisionSchemaValid": 158,
+      "rawActionMatches": 59,
+      "rawRiskMatches": 94,
+      "effectiveActionMatches": 72,
+      "v1Generated": 120,
+      "v2Generated": 32,
+      "blindPairs": 32,
+      "candidateQualityBlocked": 0,
+      "boundary": {
+        "samples": 20,
+        "effectiveSkips": 20,
+        "generationCalls": 0
+      },
+      "missingFacts": {
+        "samples": 20,
+        "effectiveAskUser": 20
+      },
+      "tokenTotals": {
+        "input": 162886,
+        "output": 36532,
+        "cached": 76160
+      },
+      "peakCacheMissCostCeilingCny": 0.618028,
+      "offPeakCacheAwareCostEstimateCny": 0.2343772,
+      "budgetHalted": false,
+      "unknownUsageCalls": 0,
+      "latency": {
+        "samples": 160,
+        "p50Ms": 2220.279300000002,
+        "p95Ms": 3465.6839,
+        "maxMs": 4343.254299999997
+      },
+      "platformCalls": 0,
+      "automaticSendAuthorized": false,
+      "metadataLimitation": "Initial batch did not store prompt/model versions on every call; its original v2.1 source and run chronology identify the decision revision."
+    },
+    {
+      "promptVersion": "decision-json-v2.2",
+      "datasetKind": "synthetic",
+      "datasetHash": "87e9cae5e2d9fd9a0667bb3cc4924bc26a2a9b4b8f9514bbba4a101b91eda6b8",
+      "requested": 160,
+      "completed": 160,
+      "calls": 400,
+      "knownUsageCalls": 400,
+      "decisionSchemaValid": 160,
+      "rawActionMatches": 146,
+      "rawRiskMatches": 131,
+      "effectiveActionMatches": 160,
+      "v1Generated": 120,
+      "v2Generated": 120,
+      "blindPairs": 120,
+      "candidateQualityBlocked": 0,
+      "boundary": {
+        "samples": 20,
+        "effectiveSkips": 20,
+        "generationCalls": 0
+      },
+      "missingFacts": {
+        "samples": 20,
+        "effectiveAskUser": 20
+      },
+      "tokenTotals": {
+        "input": 272789,
+        "output": 43277,
+        "cached": 165888
+      },
+      "peakCacheMissCostCeilingCny": 0.891794,
+      "offPeakCacheAwareCostEstimateCny": 0.28332676,
+      "budgetHalted": false,
+      "unknownUsageCalls": 0,
+      "latency": {
+        "samples": 160,
+        "p50Ms": 3101.5362999999925,
+        "p95Ms": 3740.87950000001,
+        "maxMs": 4118.705800000002
+      },
+      "platformCalls": 0,
+      "automaticSendAuthorized": false,
+      "metadataLimitation": "Every call records requested model and prompt versions; provider source hash is stored privately."
+    }
+  ],
+  "total": {
+    "calls": 712,
+    "knownUsageCalls": 712,
+    "peakCacheMissCostCeilingCny": 1.509822,
+    "offPeakCacheAwareCostEstimateCny": 0.51770396,
+    "withinUserBudget": true,
+    "invoiceVerified": false
+  },
+  "fullGate": {
+    "passed": 926,
+    "failed": 0,
+    "skipped": 0,
+    "groups": {
+      "unit": 427,
+      "app": 33,
+      "tools": 225,
+      "contracts": 11,
+      "integration": 181,
+      "e2e": 49
+    },
+    "testDatabaseStopped": true
+  },
+  "strictTypecheck": {
+    "scope": "selected v2 files",
+    "files": 59,
+    "passed": true
+  },
+  "humanReview": {
+    "completePairs": 120,
+    "shortlist": 12,
+    "ratings": 0,
+    "providerLabelsHidden": true,
+    "automaticVotes": false
+  },
+  "browser": {
+    "widths": [
+      1440,
+      390,
+      320
+    ],
+    "horizontalOverflow": false,
+    "initialVotes": 0,
+    "exportDisabledWithoutVotes": true,
+    "navigationPassed": true,
+    "networkFromPageDisabled": true
+  },
+  "limitations": [
+    "Synthetic text tests real models but is not a real-chat evaluation",
+    "Replay uses cutoff-scoped facts without historical DB summaries/styles/memory",
+    "Raw cloud action and risk still have errors; local rules and manual approval remain necessary",
+    "Human naturalness/factual ratings are pending",
+    "Provider balance updates were inconsistent; estimates are not confirmed invoices"
+  ],
+  "runtime": {
+    "dailyDeploymentChanged": false,
+    "prereleaseCloudEnabled": false,
+    "realPlatformConnected": false,
+    "automaticSendEnabled": false
+  },
+  "releaseReady": false
+}

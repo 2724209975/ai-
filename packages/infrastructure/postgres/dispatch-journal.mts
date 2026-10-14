@@ -58,10 +58,10 @@ export async function withDispatchLease(pool: PgPool, input: DispatchClaim, auth
 }
 
 /** A committed SUBMITTING intent is ambiguous after crash; it is never replayed. */
-export async function recoverAmbiguous(tx: PgClient): Promise<number> {
+export async function recoverAmbiguous(tx: PgClient, accountId?: string): Promise<number> {
   await tx.query('SELECT pg_advisory_xact_lock($1)', [DISPATCH_BOUNDARY_LOCK]);
   const rows = await tx.query<{ send_key: string }>(`UPDATE dispatch_attempts SET status='RESULT_UNKNOWN',updated_at=now()
-    WHERE status='SUBMITTING' RETURNING send_key`);
+    WHERE status='SUBMITTING' AND ($1::text IS NULL OR account_id=$1) RETURNING send_key`, [accountId ?? null]);
   return rows.rows.length;
 }
 

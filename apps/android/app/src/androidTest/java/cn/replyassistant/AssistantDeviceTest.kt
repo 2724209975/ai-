@@ -22,13 +22,14 @@ import org.junit.runner.RunWith
 class AssistantDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     @Test fun navigationAndArchiveCreation() {
+        val name="合成测试对象-${newId().take(6)}"
         compose.onNodeWithText("聊天档案").performClick()
         compose.onNodeWithText("新建聊天档案").performClick()
-        compose.onNodeWithText("名称，例如小王").performTextInput("合成测试对象")
+        compose.onNodeWithText("名称，例如小王").performTextInput(name)
         compose.onNodeWithText("创建").performClick()
-        compose.onNodeWithText("合成测试对象 · 通用截图").assertExists()
-        compose.onNodeWithText("设置").performClick()
-        compose.onNodeWithText("多模态回复模型").assertExists()
+        compose.onNodeWithText("$name · 通用截图").assertExists()
+        compose.onNodeWithText("模型配置").performClick()
+        compose.onNodeWithText("低成本模型").assertExists()
     }
     @Test fun sqliteSnapshotsAndDraftsSurviveReopen() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

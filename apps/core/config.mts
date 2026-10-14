@@ -4,10 +4,11 @@
  * outbox pump. It never dispatches: platform sending stays with the per-account bridge, which is
  * the only process that holds 02's dispatch lease. Configuration therefore fails closed:
  *  - the HTTP surface binds loopback unless an operator explicitly widens it;
- *  - a non-loopback origin must be HTTPS;
+ *  - HTTP on a private IPv4 origin requires explicit LAN opt-in;
  *  - the process starts paused unless an operator explicitly opts out;
  *  - the intelligence provider must be named, so nobody can assume a real model is wired in.
  */
+import { isIP } from 'node:net';
 import { isLogLevel, type LogLevel } from '../../packages/infrastructure/observability/logger.mts';
 import { isPasswordHash } from '../../packages/infrastructure/auth/password.mts';
 import { readDeepSeekEnv } from '../../packages/ai/generation/deepseek-env.mts';
@@ -77,7 +78,14 @@ function integer(env: EnvLike, name: string, fallback: number, min: number, max 
 /** Loopback means the process is reachable only from the machine itself; anything else is a choice. */
 export function isLoopbackHost(host: string): boolean {
   const value = host.trim().toLowerCase().replace(/^\[|\]$/g, '');
-  return value === 'localhost' || value === '127.0.0.1' || value === '::1' || value.startsWith('127.');
+  return value === 'localhost' || value === '::1' || (isIP(value) === 4 && value.startsWith('127.'));
+}
+
+/** RFC1918 addresses only: no DNS names, link-local, public IPs or IPv6. */
+export function isPrivateIPv4(host: string): boolean {
+  if (isIP(host) !== 4) return false;
+  const [a, b] = host.split('.').map(Number);
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
 
 export function readCoreConfig(env: EnvLike): CoreConfig {
@@ -93,8 +101,10 @@ export function readCoreConfig(env: EnvLike): CoreConfig {
   let origin: URL;
   try { origin = new URL(publicOrigin); } catch { throw invalid('PUBLIC_ORIGIN'); }
   if (origin.protocol !== 'https:' && origin.protocol !== 'http:') throw invalid('PUBLIC_ORIGIN');
-  if ((origin.pathname !== '/' && origin.pathname !== '') || origin.search || origin.hash) throw invalid('PUBLIC_ORIGIN');
-  if (origin.protocol === 'http:' && !isLoopbackHost(origin.hostname)) throw new Error('INSECURE_ORIGIN');
+  if ((origin.pathname !== '/' && origin.pathname !== '') || origin.search || origin.hash || origin.username || origin.password) throw invalid('PUBLIC_ORIGIN');
+  const allowLanHttp = flag(env, 'ALLOW_LAN_HTTP', false);
+  if (origin.protocol === 'http:' && !isLoopbackHost(origin.hostname)
+    && !(allowLanHttp && isPrivateIPv4(origin.hostname))) throw new Error('INSECURE_ORIGIN');
 
   const host = text(env, 'HOST', '127.0.0.1');
   if (!isLoopbackHost(host) && !flag(env, 'ALLOW_NON_LOOPBACK_BIND', false)) throw new Error('NON_LOOPBACK_BIND_REFUSED');

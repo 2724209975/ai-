@@ -5,6 +5,16 @@
  */
 export type BridgeRunMode = { outboundEnabled: boolean; workerEnabled: boolean };
 
+/** Same flag vocabulary/default as core, so all entries honor START_PAUSED consistently. */
+export function readBridgeStartPaused(env: Record<string,string|undefined>): boolean {
+  const raw=env.START_PAUSED;
+  if (raw===undefined || raw==='') return true;
+  const value=raw.trim().toLowerCase();
+  if (['1','true','yes','on'].includes(value)) return true;
+  if (['0','false','no','off'].includes(value)) return false;
+  throw new Error('INVALID_ENV:START_PAUSED');
+}
+
 function resolveRunMode(env: Record<string, string | undefined>, outboundVar: string): BridgeRunMode {
   const outbound = env[outboundVar]?.trim();
   const worker = env.WORKER_ENABLED?.trim();

@@ -67,7 +67,7 @@ export interface OwnerConnectionRecovery {
   unresolvedSendCount?: number; gaps?: string[];
 }
 export interface OwnerConnection {
-  accountId: string; platform: 'wechat' | 'qq'; connectionState: PlatformConnectionState;
+  accountId: string; platform: 'wechat' | 'qq' | 'unknown'; connectionState: PlatformConnectionState | 'unknown' | 'probe_healthy';
   capabilitySnapshotId?: string; verificationStatus?: 'documented' | 'tested' | 'unsupported' | 'unknown';
   lastReconciledAt?: string; limitations?: string[]; recovery?: OwnerConnectionRecovery;
 }
@@ -155,8 +155,8 @@ export function assertOwnerOverview(value: unknown): asserts value is OwnerOverv
   for (const key of ['connections', 'faults']) if (o[key] !== undefined && !Array.isArray(o[key])) throw new Error('VALIDATION_FAILED');
   for (const connection of (o.connections ?? []) as Record<string, unknown>[]) {
     if (typeof connection.accountId !== 'string' || !connection.accountId.trim()
-      || !['wechat', 'qq'].includes(connection.platform as string)
-      || !(platformConnectionStates as readonly string[]).includes(connection.connectionState as string)) throw new Error('VALIDATION_FAILED');
+      || !['wechat', 'qq','unknown'].includes(connection.platform as string)
+      || ![...platformConnectionStates,'unknown','probe_healthy'].includes(connection.connectionState as PlatformConnectionState)) throw new Error('VALIDATION_FAILED');
     const recovery = connection.recovery as Record<string, unknown> | undefined;
     if (recovery !== undefined && (recovery === null || typeof recovery !== 'object'
       || typeof recovery.historyComplete !== 'boolean' || !['complete', 'partial', 'none', 'unknown'].includes(recovery.status as string))) throw new Error('VALIDATION_FAILED');
@@ -169,6 +169,8 @@ export function assertOwnerOverview(value: unknown): asserts value is OwnerOverv
 export function assertLiveSend(mode: Mode): asserts mode is 'live' {
   if (mode !== 'live') throw new Error('POLICY_BLOCKED');
 }
+export { validateDecisionV2 } from './decision-v2.mts';
+export type {DecisionResultV2,ModelRouteConfigV2,ModelUsageV2,ModelPriceV2,QualityResultV2} from './decision-v2.mts';
 export function assertEventEnvelope(value: unknown): asserts value is EventEnvelope {
   if (!value || typeof value !== 'object') throw new Error('VALIDATION_FAILED');
   const e = value as Record<string, unknown>;

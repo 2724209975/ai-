@@ -8,6 +8,7 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
 import { PgConfirmedService } from '../../packages/orchestration/postgres/confirmed-service.mts';
+import { embeddingFromEnv } from '../../packages/data/memory-v2/embedding.mts';
 import { createDispatchWorker } from '../../packages/orchestration/postgres/worker.mts';
 import { createPgPersistentFakeIntelligence, type PersistentIntelligence } from '../../packages/ai/index.mts';
 import { createPgReceptionPort, type RawEventStore } from '../../packages/infrastructure/postgres/reception.mts';
@@ -90,6 +91,7 @@ export function createQqBridge(options: QqBridgeOptions) {
     selfId: options.selfId, media: options.media, understanding: options.imageUnderstanding }) : undefined;
   const echoLedger = createQqSendEchoLedger(options.pool);
   const service = new PgConfirmedService({
+    ownerId:process.env.OWNER_ID,embedding:embeddingFromEnv(process.env),
     pool: options.pool, data, intelligence: options.intelligence ?? createPgPersistentFakeIntelligence({ pool: options.pool, data }), platform: reportingPlatform, authority, now,
     aggregationWindowMs: options.aggregationWindowMs ?? 0, maxAggregationMs: options.maxAggregationMs ?? 30_000,
     images: imagePreparation?.port,
@@ -97,6 +99,7 @@ export function createQqBridge(options: QqBridgeOptions) {
   const reception = createPgReceptionPort({
     pool: options.pool, store: options.rawStore, accountId: options.accountId,
     adapterVersion: QQ_BRIDGE_ADAPTER_VERSION, now,
+    mapSelfToConversation: true,
     // Enrollment gate owned by 02: only explicitly enrolled conversations are processed.
     async resolveConversation(externalContactRef) {
       const row = await options.pool.connect().then(async client => {
@@ -109,8 +112,8 @@ export function createQqBridge(options: QqBridgeOptions) {
     async onEvent(event) { await service.ingestPlatformEvent(event); },
     async onUnmappedSelf(tx, input) { await service.pauseAccountForUnmappedSelf(tx, input.accountId, input); },
     // Same transaction as the inbox row: a proven own-send echo records private evidence and a
-    // dedupe row, then stays inert instead of pausing the account. No verifier is wired here, so an
-    // unproven self message still falls back to the account pause.
+    // dedupe row, then stays inert. Unproven self messages pause a mapped contact; only an
+    // unmatched peer falls back to the account-wide pause.
     classifySelf: async (tx, observation) => {
       const origin = await classifyQqSelfMessage({ ...observation, externalAccountRef: options.accountId },
         { ledger: echoLedger, tx });
@@ -127,7 +130,7 @@ export function createQqBridge(options: QqBridgeOptions) {
   // worker interval is the older implicit form and keeps working, so existing callers are unaffected.
   const wantsWorker = Boolean(options.dispatch) || options.workerIntervalMs !== undefined;
   const worker = wantsWorker
-    ? createDispatchWorker({ pool: options.pool, service,
+    ? createDispatchWorker({ pool: options.pool, service, accountId: options.accountId,
         intervalMs: options.dispatch?.workerIntervalMs ?? options.workerIntervalMs ?? 2_000,
         onError: (error, phase) => report(error, `worker-${phase}`) })
     : undefined;
@@ -211,12 +214,13 @@ export function createQqBridge(options: QqBridgeOptions) {
     async start(): Promise<void> {
       // A restart (or an explicit paused start) must not let a queued send out before an operator
       // has seen the account state; the watchdog records the first health row itself.
-      if (options.startPaused || watchdog) await service.recordAccountHealth({ accountId: options.accountId, healthy: false, faultCode: 'BRIDGE_RESTARTED' });
+      if (options.startPaused) await service.recordAccountHealth({ accountId: options.accountId, healthy: false, faultCode: 'BRIDGE_RESTARTED' });
       // Recovery first: no new send may happen before ambiguous attempts are reconciled.
       await service.recover();
       if (watchdog) {
         await watchdog.tick();
         if (watchdog.state().status === 'fatal') throw new Error('WATCHDOG_PERSISTENCE_FAILED');
+        if (!options.startPaused && watchdog.state().status === 'pending') throw new Error('WATCHDOG_NOT_READY');
         watchdog.start();
       }
       await outbox.tick();

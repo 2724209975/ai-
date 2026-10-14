@@ -73,7 +73,7 @@ export class PgOwnerDataPort {
     const rows = await this.#perContact(scope, async (tx, contactId) => {
       const result = await tx.query<Record<string, never>>(
         `SELECT ${FACT_COLUMNS} FROM data_facts
-         WHERE (scope='global' OR scope=$1) AND deletion_status='active'
+         WHERE (scope='global' OR scope=$1) AND deletion_status='active' AND memory_owner_id IS NULL
          ORDER BY scope,updated_at DESC,id`, [contactId]);
       return result.rows as never[];
     });
@@ -107,7 +107,7 @@ export class PgOwnerDataPort {
     for (const contactId of scope.contactIds) {
       await setContactScope(tx, contactId);
       const found = await tx.query<{ scope: string; version: number | string; source_category: string; deletion_status: string }>(
-        `SELECT scope,version,source_category,deletion_status FROM data_facts WHERE id=$1 AND (scope='global' OR scope=$2)`, [factId, contactId]);
+        `SELECT scope,version,source_category,deletion_status FROM data_facts WHERE id=$1 AND (scope='global' OR scope=$2) AND memory_owner_id IS NULL`, [factId, contactId]);
       const row = found.rows[0];
       if (row) return { contactId: row.scope === 'global' ? contactId : row.scope, scope: row.scope, version: Number(row.version), sourceCategory: row.source_category, deletionStatus: row.deletion_status };
     }

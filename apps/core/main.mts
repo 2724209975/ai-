@@ -11,6 +11,8 @@ import { readCoreConfig } from './config.mts';
 import { conversationSchemaProbe } from './health.mts';
 import { createCoreRuntime, type CoreRuntime } from './runtime.mts';
 import { createCoreImages } from './media-wiring.mts';
+import {configureUnifiedMoneyEnv} from '../../packages/ai/generation/unified-budget.mts';
+configureUnifiedMoneyEnv(process.env);
 
 let config: ReturnType<typeof readCoreConfig>;
 try {

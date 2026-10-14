@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { createHealthHandler, createReadinessProbe, type ReadinessReport } from './health.mts';
+import { createHealthHandler, createReadinessProbe, conversationSchemaProbe, type ReadinessReport } from './health.mts';
 import type { PgClient, PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
 
 const readyReport: ReadinessReport = { status: 'ready', checks: [{ name: 'database', status: 'ok' }] };
@@ -76,7 +76,7 @@ test('the readiness probe reports fixed check names and never echoes a driver er
   assert.deepEqual(report, { status: 'ready', checks: [
     { name: 'database', status: 'ok' }, { name: 'schema', status: 'ok' }, { name: 'control', status: 'ok' }, { name: 'recovery', status: 'ok' },
   ] });
-  assert.deepEqual(statements, ['SELECT 1', 'SELECT collection_due_at,paused_inbound_unreviewed_count FROM orch_conversations LIMIT 0', 'SELECT paused FROM dispatch_global_control WHERE singleton=true']);
+  assert.deepEqual(statements, ['SELECT 1', conversationSchemaProbe, 'SELECT paused FROM dispatch_global_control WHERE singleton=true']);
 
   const brokenPool: PgPool = {
     async connect(): Promise<PgClient> {

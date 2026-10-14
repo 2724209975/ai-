@@ -1,0 +1,2835 @@
+{
+  "date": "2026-10-11",
+  "scope": "Source/config/test inventory; excludes dependencies and generated build/cache files. Metadata scan is not a line-by-line correctness proof.",
+  "fileCount": 471,
+  "lineCount": 46391,
+  "testFileCount": 176,
+  "files": [
+    {
+      "path": ".github/workflows/verify.yml",
+      "lines": 51,
+      "sha256": "b16c4c5640111678af9dd2f0df1822ead6122afc3ebe2bc28cf1ced6fdf8ed7a",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/build.gradle.kts",
+      "lines": 56,
+      "sha256": "6083349798d6b5ed3c612d870d2f2263163b1d4cb00d3f9f670b3c91c94a701d",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/AssistantDeviceTest.kt",
+      "lines": 64,
+      "sha256": "f7ce97c5f259b785515d400f2a1b8317721af77d71fcb890f386fb6598b1a768",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/ConnectedInputDeviceTest.kt",
+      "lines": 31,
+      "sha256": "cf1d87d7c08bb8a3548a98dd8ba4db84384a13671b9f8d8105242c1c540c297f",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/ControllerDeviceTest.kt",
+      "lines": 171,
+      "sha256": "5a2de116e90762e7210e68226e5f6532efe4043befa4ec0f7cab57fbfdc7f4ac",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/CrossAppDeviceTest.kt",
+      "lines": 282,
+      "sha256": "5aa12d4aa629e47ff25767f000e63092e82dcd7021134c9f7c1c8c15f86c6c54",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/HistoryRepairUiTest.kt",
+      "lines": 52,
+      "sha256": "5ff28a02d12c2a80bc6214c4c2de5bea5b0b3c56ddc13f7af6529e6da5bac66a",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/HistoryUiTest.kt",
+      "lines": 73,
+      "sha256": "2a204c2d78727d50037fa73d368c0a4cb194e746cb911e4199aac1d081e92ba6",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/LinkDeviceTest.kt",
+      "lines": 105,
+      "sha256": "91a82c8790079f51c39475ee33f9618a4205dd8b8da202a997ca1ab87b33e505",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/LinkUxDeviceTest.kt",
+      "lines": 96,
+      "sha256": "e927ad38e0732114b7a59416ded559e29d9dad754f1f4affbfbff21836ef8cb6",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/LinkUxUiTest.kt",
+      "lines": 113,
+      "sha256": "7ff5adb0f26c31d3e64f72208bc8b92b8bcfe57b3ebfad7e12645605916acbc2",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/MobileReplyFlowUiTest.kt",
+      "lines": 97,
+      "sha256": "326b66fb2daaa5b06b6703294cbdaa536a6ad0a2d4486c092e8c3f3e407e4c30",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/MultimodalDeviceTest.kt",
+      "lines": 360,
+      "sha256": "0b3a5d178bb7a834b778bcb726ffbdd53b5229d92f409b4d8e52eb5c4db2ce39",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/PersonalAdvisorDeviceTest.kt",
+      "lines": 253,
+      "sha256": "12edbc4e50d0e0aa39270a86bf46dd66cfd56ce9482ccacdb4b58e03b863a87c",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/androidTest/java/cn/replyassistant/PersonalAdvisorUiTest.kt",
+      "lines": 164,
+      "sha256": "ad7c3336b118239c8f640359ec60480eb59639ce7671a494112b0759931ff91d",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/main/AndroidManifest.xml",
+      "lines": 44,
+      "sha256": "a9840d578f0ea9ea53995e68e3b93fbbb25cbbd2fa76a71be93497d467041512",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/assets/goutoujunshi/manifest.json",
+      "lines": 233,
+      "sha256": "854762cec96629c86ee02f18f43250e4fd0e5fac66d31b681971444523e42bd4",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/ai/ModelClient.kt",
+      "lines": 207,
+      "sha256": "88e017f7c31d90472a759f8d10ab17907dc3db731c05f5e7b56de31b8699e1a5",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/ai/SkillBundle.kt",
+      "lines": 41,
+      "sha256": "ca2e39516f9bd4eb6c9492c0b630618e6ae3ce953d8295dbbf7ceaef512e93d5",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/AssistantApplication.kt",
+      "lines": 11,
+      "sha256": "c4527161d5b6f721c750a7fcf6b98092c335698c415f49b97097d81501d5b408",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/data/AssistantController.kt",
+      "lines": 690,
+      "sha256": "02d9253c7a77468c0ede0764821dce2564c6113d88eeb9e596cdb706186158c8",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/data/LinkClient.kt",
+      "lines": 80,
+      "sha256": "93b000602efe0706deca5495f541cd55ae39be498ac2be38ce2004b799eb1253",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/data/LocalStore.kt",
+      "lines": 42,
+      "sha256": "743b7df253bc6c5b53d0494b2372937b48c958d1c44135ef5b5aa5a0e46d701f",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/data/SecureSettings.kt",
+      "lines": 41,
+      "sha256": "94f3b410fd96eafc4fd0fc2e12112e242e099185c75c21d8d4828026116ef01f",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/domain/ChatHistory.kt",
+      "lines": 28,
+      "sha256": "5f06807360a2d1ce355837a2bb61ca73eb65a81ecf0e01a3283507ce672bbc40",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/domain/ContextEngine.kt",
+      "lines": 114,
+      "sha256": "06c174f4705b4a5e0714285be15e22c6196c0f9ceae5c0eb86fcaeda80a72bc1",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/domain/LinkModels.kt",
+      "lines": 61,
+      "sha256": "ffd945b67af434676e7fda0ae9743dcce2cd73c3dfdd2ce508266c99359ddbaf",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/domain/Models.kt",
+      "lines": 114,
+      "sha256": "62fc1a96fd703d24b6b1fb5b072f999ad5c7d85ba3125e36b1525c3578b72e2c",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/domain/NotificationIdentity.kt",
+      "lines": 17,
+      "sha256": "aa3df546b2b854ed8646788166e53e7adc84a86a86e6442df8c596b8c0e50426",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/domain/Personalization.kt",
+      "lines": 65,
+      "sha256": "30f4e989ee6899f9f38a535d14775c02688a21c737784eec62da15deeedb2b6b",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/domain/ScreenshotStitcher.kt",
+      "lines": 70,
+      "sha256": "916e24b6c8b1b963c0e25df8dfddae6098b823505d090baa354cc14fe7fb945a",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/MainActivity.kt",
+      "lines": 111,
+      "sha256": "25ab6a1e47929c684f66d32a19dbb82e8958b05d2ad81554803392ecc9c18566",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/platform/CaptureActivity.kt",
+      "lines": 31,
+      "sha256": "515c17db149e3a6cf8d19f63bcc2b6e88f9b55235d805e1c6e976329d7e384d6",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/platform/CaptureService.kt",
+      "lines": 151,
+      "sha256": "c57db4e42b7f8cb88adb1597637a3841abe7ca313c9be0ecd6f07cc81a0626ee",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/platform/ChatAccessibilityService.kt",
+      "lines": 90,
+      "sha256": "bddeff5f88c493fa6e65db901ba48b4402a07ae7dab9eba66608247fa09ed371",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/platform/ChatNotificationService.kt",
+      "lines": 84,
+      "sha256": "d09d5ce0368b9b1498f2715003093c5fd7d9e8cd25928407fd32ae71389b1136",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/platform/ImageImporter.kt",
+      "lines": 80,
+      "sha256": "d1aaff728dd30187baa3d18c7a436894a4a899e066c9bc645941c553e176cf2c",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/platform/OverlayService.kt",
+      "lines": 206,
+      "sha256": "4ef4e2c4528488b25429c60d009098437f580f3531da53c0f09c66c0ff4bc7f7",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/platform/ServiceNotifications.kt",
+      "lines": 22,
+      "sha256": "b3da3ded085765be73d7ba77bd86d33497079db0eb878edc1adba89082006fc2",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/ui/AdvisorUi.kt",
+      "lines": 133,
+      "sha256": "449b7e8bba62e4e46d3e6e569a22b3d58e788eab60f821ce734fc8b02d5d9282",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/ui/AssistantUi.kt",
+      "lines": 286,
+      "sha256": "bedd20b03ca5f41edb0f9d8a89b0d3e33a398d1a7727e153142f81e7b7c3445e",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/ui/HistoryUi.kt",
+      "lines": 99,
+      "sha256": "856826d3db238c8bbf9e3627217493b5d4770d2a54158cf4c903d9ad0d99b610",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/ui/LinkUi.kt",
+      "lines": 128,
+      "sha256": "dfc1957fa11231b83e4b6e6d3e87852e29621428f449578e83f652b087b28b72",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/java/cn/replyassistant/ui/QuickReplyPanel.kt",
+      "lines": 312,
+      "sha256": "1429f19641afd25d1a069cf1194fe189c9b466311f0fe8323d41d311200f2639",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/res/drawable/ic_assistant.xml",
+      "lines": 6,
+      "sha256": "47f8b7c2bd1e91ffcef9b7b801713692d07d35be1c93f904e0f8fd34839d3f96",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/strings.xml",
+      "lines": 5,
+      "sha256": "6900e54d653f2c9e975bda44f46ddb89dcbc2df65d9ae87101a2365daff0c452",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/res/values/styles.xml",
+      "lines": 11,
+      "sha256": "2b91492d5f5b3d2fdf37740b43bdc66442470dd3be3bd924b50507d96ce217c8",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/res/xml/accessibility_service.xml",
+      "lines": 8,
+      "sha256": "fe9f94781feabb20f4973fba0886c5450c6a6ae1e802c0f01de25109091d2135",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/res/xml/data_extraction_rules.xml",
+      "lines": 11,
+      "sha256": "4f539dab2263d7b660d7b799f0dafee8f1b1aaae2fe46d7774d72cae16708257",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/main/res/xml/pairing_paths.xml",
+      "lines": 5,
+      "sha256": "765ddf588b37184d7c34ad58e8312f62928750bfc5cb8681cc7576d6fe1d8456",
+      "test": false
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/ai/ModelClientTest.kt",
+      "lines": 183,
+      "sha256": "89fea6f8507749764bc7bd549797695b0076e773bbe632c23884aabf94907b39",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/ChatHistoryTest.kt",
+      "lines": 24,
+      "sha256": "c1b2591dff6b9bc1f71ec2962a477ada0d4e22130de97d8521f3e115c04f14b7",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/domain/ContextEngineTest.kt",
+      "lines": 126,
+      "sha256": "ad69fe63f72f756271b0f89c07df4588ff2b5d0dc894b4c449974eab0d1885fa",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/domain/LinkUxTest.kt",
+      "lines": 44,
+      "sha256": "0ace7b8fef478e5277c4de32d119f85e24c16467b7b221a5fdd4cdc20abd6f3a",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/domain/MobileReplyFlowTest.kt",
+      "lines": 49,
+      "sha256": "603cc0aec24b01c47862ab9f037c4da104a3c6707470f1411afcff966892fc4c",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/domain/NotificationIdentityTest.kt",
+      "lines": 28,
+      "sha256": "4cb30b7d811a1cfd2df9dd715b3f360f818c968f46734665b288641d95778f6f",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/domain/PersonalizationTest.kt",
+      "lines": 65,
+      "sha256": "6f5143b29fff4202684b9eeffead764268b789cf506d9c771e49842643b2421d",
+      "test": true
+    },
+    {
+      "path": "apps/android/app/src/test/java/cn/replyassistant/domain/ScreenshotStitcherTest.kt",
+      "lines": 63,
+      "sha256": "0fe2c2e22088b79df87a8e73f8604582aada55af63394c9feb941e53197d690f",
+      "test": true
+    },
+    {
+      "path": "apps/android/build.gradle.kts",
+      "lines": 7,
+      "sha256": "786580cef13b0207e470ee3358102b3d2d9ae91c7951f534664d80556c4589c6",
+      "test": false
+    },
+    {
+      "path": "apps/android/fixture/build.gradle.kts",
+      "lines": 10,
+      "sha256": "08f605269f696754537d571d3965554676b0c529436c8907f2f01ba05410eab0",
+      "test": false
+    },
+    {
+      "path": "apps/android/fixture/src/main/AndroidManifest.xml",
+      "lines": 8,
+      "sha256": "94c09ed42fed463f8d4e092ea947c621b7d91633ac74a6ac2858865c27dd664e",
+      "test": false
+    },
+    {
+      "path": "apps/android/fixture/src/main/java/cn/replyassistant/fixture/FixtureActivity.kt",
+      "lines": 37,
+      "sha256": "fc38e1d0100951d59e347f410552941c649e557cdd528efb998bfd15f025cbc7",
+      "test": false
+    },
+    {
+      "path": "apps/android/settings.gradle.kts",
+      "lines": 9,
+      "sha256": "26a247e563c677313e87e1864d1d4f0350eea73f5e047921a85c9caa128c3688",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/bridge.mts",
+      "lines": 238,
+      "sha256": "8225f070a85a49bf1d62abd17253d2f32d2d9963de246b1c31ed9ecca4506b9b",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/image-preparation.mts",
+      "lines": 124,
+      "sha256": "91ebec9afc76c70663d0b3dae61625d408dd79ac04e9dae1cc87ad10bc3efa7d",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/image-preparation.test.mts",
+      "lines": 29,
+      "sha256": "61c824585ab915ce16950a8b4ac976f0c6c856c95e195725f7bf015e99bd6f87",
+      "test": true
+    },
+    {
+      "path": "apps/bridge/main.mts",
+      "lines": 133,
+      "sha256": "2947ec6e4c01f483619ee2d1e20ad5bd719d32ad4df9bf1d2d8244bb3885eeea",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/outbox-pump.mts",
+      "lines": 76,
+      "sha256": "dd927c0f87294aa0efe1ecbfb683043189826cbf46c0fc42f4c6bc212fa26c9a",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/run-mode.mts",
+      "lines": 35,
+      "sha256": "3ae800d9a3840bd4abd9fa4728220cc5151bd5368dc366584ee6ae9d9044c997",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/start-paused.test.mts",
+      "lines": 14,
+      "sha256": "62f4c114b9ebedadd7dee329e227d5ac1c50047795f8f9ff2cbd33f2be4f9ffd",
+      "test": true
+    },
+    {
+      "path": "apps/bridge/watchdog.mts",
+      "lines": 56,
+      "sha256": "fe85f9defad5844abbba2eee5776430035a593acbde4f454bc175f79122fd999",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/watchdog.test.mts",
+      "lines": 50,
+      "sha256": "fcfd583073e5dd36470ef3c92a306808f80a3ff524adda0e1a5f14e77d454e81",
+      "test": true
+    },
+    {
+      "path": "apps/bridge/wechat-binary.test.mts",
+      "lines": 48,
+      "sha256": "774e760fbc83fc4e3557dd68c87940bad7996b8fe5bb6425b835c8ae3dd88433",
+      "test": true
+    },
+    {
+      "path": "apps/bridge/wechat-bridge.mts",
+      "lines": 268,
+      "sha256": "4bf7372289806f5d4380287b414300cc8ab44d8d1a90df8f4b3aedde45691d2b",
+      "test": false
+    },
+    {
+      "path": "apps/bridge/wechat-main.mts",
+      "lines": 121,
+      "sha256": "00bdae7b97392fefe5f197290f9bc15c76721d115925102553418fd6c6539314",
+      "test": false
+    },
+    {
+      "path": "apps/core/config.mts",
+      "lines": 147,
+      "sha256": "2a48fd3c6c525a461e974c7633c976bc7a32ee7242c1faf8707e1d9a87034b86",
+      "test": false
+    },
+    {
+      "path": "apps/core/config.test.mts",
+      "lines": 111,
+      "sha256": "e1ac4cf1b7ebf2ae2057af01e8b2a2eccf1b0af1a920dee703019be40e58e34d",
+      "test": true
+    },
+    {
+      "path": "apps/core/health.mts",
+      "lines": 72,
+      "sha256": "ca4a9fb5ea1c655a99036a94847714b16cbb6227ac1f9263f0b0939999969355",
+      "test": false
+    },
+    {
+      "path": "apps/core/health.test.mts",
+      "lines": 111,
+      "sha256": "f334bb8ae7404058e5b5cea3dcd6682aba0f76cebdea92a8ef1c398e09b06bec",
+      "test": true
+    },
+    {
+      "path": "apps/core/main.mts",
+      "lines": 84,
+      "sha256": "f8680c685d7077f087f69481344de5a6f1602e7b7eadc953b073f6e9dd5022b1",
+      "test": false
+    },
+    {
+      "path": "apps/core/media-wiring.mts",
+      "lines": 25,
+      "sha256": "8a5559e2085d250ef1dd238441b79712d2d222b1715a73812fd1254324b4f35f",
+      "test": false
+    },
+    {
+      "path": "apps/core/media-wiring.test.mts",
+      "lines": 19,
+      "sha256": "6fa40f1ebffaad5f92bff8b52f20cd99f1437191360fc52591b2bf7ee6dbd72e",
+      "test": true
+    },
+    {
+      "path": "apps/core/runtime.mts",
+      "lines": 209,
+      "sha256": "70772c0a0ee670a68e36a44b3e49adb9bdc12af6fe2bbf1ec677a9336fdea7ba",
+      "test": false
+    },
+    {
+      "path": "apps/web/package-lock.json",
+      "lines": 1897,
+      "sha256": "baab4b11b8d7a47565c12df002ee754f69fae1eda95f4f1cceaebcbaf96dde32",
+      "test": false
+    },
+    {
+      "path": "apps/web/package.json",
+      "lines": 24,
+      "sha256": "c5a3146e2874f0b3334a49628a4f9519275bae94b592dfb15390d4d1746f8b68",
+      "test": false
+    },
+    {
+      "path": "apps/web/server/browser-crypto.test.mts",
+      "lines": 18,
+      "sha256": "519519526bdd4ce6db07ff685d0c45171412cc8c38ec66762282f5a92aca9d9e",
+      "test": true
+    },
+    {
+      "path": "apps/web/server/g2-mobile-browser.test.mts",
+      "lines": 158,
+      "sha256": "8e170dca350116fa55a587cda79ce5aef0f6bf6ebc178f2eab3a9fed19043931",
+      "test": true
+    },
+    {
+      "path": "apps/web/server/main.mts",
+      "lines": 118,
+      "sha256": "6649ee5c138f9593627cfead9c23a4d43bd223fda4017cdbf7b084bd493ed280",
+      "test": false
+    },
+    {
+      "path": "apps/web/server/owner-http.mts",
+      "lines": 385,
+      "sha256": "347db32fdaadaaedc360143bcd2d9f2b989d47400a588077ff698e9da2412b5a",
+      "test": false
+    },
+    {
+      "path": "apps/web/server/owner-http.test.mts",
+      "lines": 228,
+      "sha256": "865a105928f7e580ed5c6b096344d1c9724969577c31c12dccb2cef1d9e5f1b6",
+      "test": true
+    },
+    {
+      "path": "apps/web/server/owner-server.mts",
+      "lines": 94,
+      "sha256": "42b24528ec7bdb41f69df18cf163ee9896bcd4713a2a4ae3dde7f5c6cdd1f38e",
+      "test": false
+    },
+    {
+      "path": "apps/web/server/owner-session-http.mts",
+      "lines": 84,
+      "sha256": "7b5f4ed9bcc74a0441d821f76bbe7d254a5dfb8c3b2e4114ae493ff9664f31ee",
+      "test": false
+    },
+    {
+      "path": "apps/web/server/pg-owner-browser.integration.mts",
+      "lines": 157,
+      "sha256": "b16b4da9646e83913ab93368820fcfab243f245cf45f433d8942d2edc44f108c",
+      "test": true
+    },
+    {
+      "path": "apps/web/server/pg-owner-port.mts",
+      "lines": 65,
+      "sha256": "7289347ab239d3d07f51d49b672ab6ccfe051d5d9bcd5a816ad8d64768e90911",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/api.ts",
+      "lines": 83,
+      "sha256": "fcc3b56c2ce6dc7d902b61f1143f88bb94d7321c10028fe92c03c7e0ec2871f1",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/App.tsx",
+      "lines": 181,
+      "sha256": "5e505486fce7154fbe4c621a88654510b043b56bc8a611c3e2f54b3ed89582b1",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/browser-crypto.ts",
+      "lines": 16,
+      "sha256": "ef26c9a228678363776614eb56aa3529484e96030908948fc466ab60e87328bd",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/controls.tsx",
+      "lines": 99,
+      "sha256": "cfa3c55a39661cbf99a3265284c8aac7c29f53738e91effa68a06101af0f48b0",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/main.tsx",
+      "lines": 11,
+      "sha256": "60d0dcfdd9591e78900501c88b4824a28d7f759aef727bdb49330a81926afae6",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/MobileLink.tsx",
+      "lines": 53,
+      "sha256": "1da103b09bd350ea01c26cd9101bee2c1844e37974223828af0eadafbff57617",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/workspace/CandidateEditor.tsx",
+      "lines": 67,
+      "sha256": "11803db5a8f2f37172617313c403ab8b190aa5a9cc8c237523a1eeacc8a20ad9",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/workspace/MemoryPanel.tsx",
+      "lines": 63,
+      "sha256": "c152e5b92ebefdacccc29a1b09c2410bc506b16348724cbe9dcacf80dde3a92c",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/workspace/MessageTimeline.tsx",
+      "lines": 61,
+      "sha256": "e428e33ffef438dd1c8d5bc8a3835b556366981f0db34de3e657962626ae5f68",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/workspace/ModelPanel.tsx",
+      "lines": 39,
+      "sha256": "8e3bd97950858869e7de7bc6b1cdea72a126613ba7974fffcc1eff5aada20d77",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/workspace/ReplyJobPanel.tsx",
+      "lines": 26,
+      "sha256": "dd4b92a0c328f275467e50ff273e2710dc0a677eac0a9b682bd21c4f15fe5d56",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/workspace/usePolling.ts",
+      "lines": 27,
+      "sha256": "9fb4cd8509e4f00f8a50daba7b61ae26ca5103185ea7630160f209f28e9ee307",
+      "test": false
+    },
+    {
+      "path": "apps/web/src/workspace/Workspace.tsx",
+      "lines": 158,
+      "sha256": "abba4fc9401ea30bdc249e854c486e0cae3d10a1a2a19e50795b31285e978c5b",
+      "test": false
+    },
+    {
+      "path": "apps/web/tsconfig.json",
+      "lines": 15,
+      "sha256": "f9025347b82631f2f8288e0c0f8dd01258154d101d865bd1fbbf11ac28fd9783",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0001_core.sql",
+      "lines": 80,
+      "sha256": "29d901e25ea79b7b923792954087da84d81b3235b441610f3f58dfcdfdb773e3",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0002_data.sql",
+      "lines": 243,
+      "sha256": "8809d17bd66181120ed6c81069c43be513958fcc27a7d512d16353df4949d2a1",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0003_data_scope_fix.sql",
+      "lines": 13,
+      "sha256": "63904fcaec8d830a1509b6c0405f4b24333b392f1c613d9aba88685f400ebbb1",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0004_orchestration.sql",
+      "lines": 102,
+      "sha256": "4f4e8d5fcec51bb9d9315156e85454e6c7f6ebb45bde6c7c97254c637d9d740a",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0005_orchestration_states.sql",
+      "lines": 10,
+      "sha256": "1a340da0fdada88cc60595f8b040932acb6b79085bad693d2e340af03f98dfe0",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0006_orchestration_scheduling.sql",
+      "lines": 10,
+      "sha256": "be568c1c71a4464cd2b47815a7a83ce72c3effbf7f6945da5df622fdae5411ca",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0007_mock_auto_approval.sql",
+      "lines": 12,
+      "sha256": "ab829f693cab0365b51c3299d6f312b093997834ce5303174f94d20769c526ab",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0008_platform_message_mutations.sql",
+      "lines": 35,
+      "sha256": "0a6951d57cd9ee9862006af77cb6fc9b78a3a3fc9cdfe8cf06c334486058d76b",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0009_skills.sql",
+      "lines": 94,
+      "sha256": "ead851faaa870d9c61ddc84cb90a8669894a1e30b1237f363d6cc9b56480e498",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0010_paused_inbound_review.sql",
+      "lines": 5,
+      "sha256": "7ab264b6b1a4343113800a2b75ab4be70366029d7d0bc4b5d021e118765ea722",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0011_plan_generation_versions.sql",
+      "lines": 4,
+      "sha256": "1a8afd60836f7c9371a3b762c5f85ecd9f00815587c91f9aacc070867910f17a",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0012_account_health.sql",
+      "lines": 9,
+      "sha256": "e15716d7e3bdd7385558c598b20f5b592576ca7b10f7ba2c22e2e7db1c030c2e",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0013_platform_accounts.sql",
+      "lines": 19,
+      "sha256": "e0ec6c44716ed262a7e1c4ab4509aef3cb5eead8baf88d7a251fac5079d50869",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0014_mobile_link.sql",
+      "lines": 7,
+      "sha256": "f86759c256d565fce563799390f12169b0f093ac8a133e4b1c77cef6987f95db",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0015_reply_pipeline_v2.sql",
+      "lines": 50,
+      "sha256": "2ff32e8fa936dcef95896ca681abbb9d9c5e953f0e89fc120247d2f9c41264be",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0016_context_memory_v2.sql",
+      "lines": 150,
+      "sha256": "46cc584fcccb4816fe1be8af368eec12069ee93e062b8ad54acba739a748508c",
+      "test": false
+    },
+    {
+      "path": "db/migrations/0017_decision_models_v2.sql",
+      "lines": 43,
+      "sha256": "b349e66150b9603e7612276ad2582d4eb9ae4dd2b7a3da30a619d4c8ae173937",
+      "test": false
+    },
+    {
+      "path": "deploy/compose.test.yml",
+      "lines": 20,
+      "sha256": "7ae424231255b97aa36d145d1b836815d56fad0be70451e3e267cc75959f4c18",
+      "test": true
+    },
+    {
+      "path": "deploy/lan-access.example.ps1",
+      "lines": 14,
+      "sha256": "e0effd376fa2a1167a7e2978e2ff79ea774a56c8240a3589a16d5523141a83cf",
+      "test": false
+    },
+    {
+      "path": "deploy/models-v2.example.json",
+      "lines": 16,
+      "sha256": "059ee25133fb333da5f896130406e285e347d7f079fc3fbf4252083049a5f803",
+      "test": false
+    },
+    {
+      "path": "deploy/workspace-stack.example.ps1",
+      "lines": 11,
+      "sha256": "d1b0362ce370b94372d7dc61810eee9eff85c85a40ef530626b2f9ff92dcf078",
+      "test": false
+    },
+    {
+      "path": "packages/ai/analysis/draft-analysis.mts",
+      "lines": 51,
+      "sha256": "50399c79e189732f365b916ff8b92dc3d2d788497c73a24586e9dd62b9917e49",
+      "test": false
+    },
+    {
+      "path": "packages/ai/checks/reply-check.mts",
+      "lines": 26,
+      "sha256": "6ec34b2cea61344004c2b13d8766399ed86804b5096d4a52860d258d0cb9a757",
+      "test": false
+    },
+    {
+      "path": "packages/ai/eval/prompt-replay.mts",
+      "lines": 89,
+      "sha256": "c6414f19a00194d9631d9a63e00fd50e1d69a70db6bb206990f6ac8528ef445f",
+      "test": false
+    },
+    {
+      "path": "packages/ai/eval/prompt-replay.test.mts",
+      "lines": 87,
+      "sha256": "3daabcf0b0f7d2c2d86510e0d2f6e054b69c9b82f39ab9b47d38cb8bcc68e580",
+      "test": true
+    },
+    {
+      "path": "packages/ai/eval/replay-samples.mts",
+      "lines": 65,
+      "sha256": "e24a74f4dca0312d7f56fbd079894743d4c06999b877c6f2a81e3c46afa330c9",
+      "test": false
+    },
+    {
+      "path": "packages/ai/eval/samples/synthetic-text.json",
+      "lines": 16,
+      "sha256": "c54b3995611cc20884b4e3de4b3da34cde1cf92e3df1a152944adbaa6ec9d7d5",
+      "test": false
+    },
+    {
+      "path": "packages/ai/eval/time-cutoff.mts",
+      "lines": 44,
+      "sha256": "067d98c41a837b48df7dde2095df5f4658d62d5f67d192b7729f03259af8d00e",
+      "test": false
+    },
+    {
+      "path": "packages/ai/eval/trial-report-postgres.mts",
+      "lines": 35,
+      "sha256": "43222eab47e5e28f6a2370b271d63ab04809792f20af321a9e2125d9e5c3d093",
+      "test": false
+    },
+    {
+      "path": "packages/ai/eval/trial-report.mts",
+      "lines": 155,
+      "sha256": "9a234d49e80b2f61ddf95bfc0ac833c99601fab645eeaa7b74d3d3de33fe274c",
+      "test": false
+    },
+    {
+      "path": "packages/ai/eval/trial-report.test.mts",
+      "lines": 95,
+      "sha256": "b0a12c5794db734376a0f4dbec71f6550162fde09190097f3bf74c111e0ed0e5",
+      "test": true
+    },
+    {
+      "path": "packages/ai/eval/typecheck.mts",
+      "lines": 23,
+      "sha256": "e0e9f98ed1e7c43f1a7a7887bee836109a152875a4e2d61159f0162ed121b1af",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/deepseek-env.mts",
+      "lines": 85,
+      "sha256": "0c76e474ccdd148b9dbf62a78788b3fc1f77c47ce86f1c4f604ce7237a209059",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/deepseek-provider.mts",
+      "lines": 226,
+      "sha256": "161e2d93384e348aa0db2bfb3d2e6807978f690d50f5b4d51f0b4f87a6cdcce2",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/deepseek-provider.test.mts",
+      "lines": 154,
+      "sha256": "2fdc78d052db2e7d60e1ce3726cd11727f99842806cb7badd234e5977336aa7c",
+      "test": true
+    },
+    {
+      "path": "packages/ai/generation/fake-provider.mts",
+      "lines": 76,
+      "sha256": "e04cb9f6c1a68a3e061211903cfcd4939d214f285f26dac80fc15bbe875b7a28",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/humanlike.mts",
+      "lines": 129,
+      "sha256": "3453574d5f73ee116d753ee0a8c4a7c0c43ebd162f6e2cb1e4cf9f19a2dd2cee",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/humanlike.test.mts",
+      "lines": 163,
+      "sha256": "915b486e63e612439a1e09619c03e343a9091a16e31450533d9a2e3fcef8f7cd",
+      "test": true
+    },
+    {
+      "path": "packages/ai/generation/model-budget.mts",
+      "lines": 77,
+      "sha256": "0f55298ce791cd56f8200d2b37c3a0f2b7b144214257f5a9f3ed7c74552d9371",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/model-budget.test.mts",
+      "lines": 66,
+      "sha256": "bbe57e12215111c0c9596334597afab7bbbfa7fd70dceaf14fa38cec85b5b210",
+      "test": true
+    },
+    {
+      "path": "packages/ai/generation/persistent-budget.mts",
+      "lines": 44,
+      "sha256": "b0bf047bdbdf9812faa46bcf65ad55a0905c920f1e090747bab75cd138a66a18",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/persistent-budget.test.mts",
+      "lines": 23,
+      "sha256": "9b286e00e6d9057c158334761a62b6043d38e5b6c74d93315d9795d55e37baeb",
+      "test": true
+    },
+    {
+      "path": "packages/ai/generation/prompt-versions.mts",
+      "lines": 22,
+      "sha256": "8cf5533654848bef541823d6a3f50753ee6379148043336cafefa52ccd7d5d13",
+      "test": false
+    },
+    {
+      "path": "packages/ai/generation/text-provider-contract.mts",
+      "lines": 59,
+      "sha256": "c54d0417cb94ae86f71dac8ea8f6603ae0371f3744091ac4e5d467ae9ff13851",
+      "test": false
+    },
+    {
+      "path": "packages/ai/index.mts",
+      "lines": 58,
+      "sha256": "f4823e4bfff131acca0f485041aed39a3309d6b68d46aa96fd1e2bf8bd5c30b2",
+      "test": false
+    },
+    {
+      "path": "packages/ai/index.test.mts",
+      "lines": 441,
+      "sha256": "d0b08d0058437046cd7cc257f2fd46aa4ea0c90c1465838c2ee6e6b03ddd3a3e",
+      "test": true
+    },
+    {
+      "path": "packages/ai/pipeline-v2/compatible-provider.mts",
+      "lines": 54,
+      "sha256": "9d99e938c24e2dbf21f18e6e6cbd4eec1971bddb7b3638f3848d12a1c55b7723",
+      "test": false
+    },
+    {
+      "path": "packages/ai/pipeline-v2/model-service.mts",
+      "lines": 78,
+      "sha256": "e133c60b59601610d183a3335324f3f49959db24aca70960856eab164a188d9d",
+      "test": false
+    },
+    {
+      "path": "packages/ai/pipeline-v2/pipeline.mts",
+      "lines": 84,
+      "sha256": "f892623aaf14d25aeb944eb7e3ea3c57e1c3baad05c6a9b4aa7dfc5b8011bf6e",
+      "test": false
+    },
+    {
+      "path": "packages/ai/pipeline-v2/pipeline.test.mts",
+      "lines": 63,
+      "sha256": "f8e6c8405064bc482564704f36616364615b4a4d25b5577bb0d6467cd1ee98a1",
+      "test": true
+    },
+    {
+      "path": "packages/ai/pipeline-v2/providers.mts",
+      "lines": 69,
+      "sha256": "06782d8c5bc4f13c9716a9c22c22b422043cc94812f8d1c702e8fdbb2414e549",
+      "test": false
+    },
+    {
+      "path": "packages/ai/pipeline-v2/quality.mts",
+      "lines": 41,
+      "sha256": "547e0f7f5052a57fd42129e77b1789f0deb84c26359e91f055a5313c2104e523",
+      "test": false
+    },
+    {
+      "path": "packages/ai/pipeline-v2/usage.mts",
+      "lines": 8,
+      "sha256": "173ad79b8f906194ecb57abd1ff3ce30c11190ebbd3e3fbe23ad5d17305f60e0",
+      "test": false
+    },
+    {
+      "path": "packages/ai/strategy/fake-decision.mts",
+      "lines": 101,
+      "sha256": "94d4bf33008dbe39add9ddc5c8e9ee41dca2c04ad9b0623d3f55bc7140916715",
+      "test": false
+    },
+    {
+      "path": "packages/ai/strategy/orchestration-handoff.mts",
+      "lines": 33,
+      "sha256": "c00f0d576b82977b99167b60b6d8140ba8a3eeee249a7910ded0f7646804725b",
+      "test": false
+    },
+    {
+      "path": "packages/ai/strategy/persistent-fake.mts",
+      "lines": 94,
+      "sha256": "701c7157319c7ca051c0329b023f27b5b80c7d07bb6cd0562f4800c0e13d0007",
+      "test": false
+    },
+    {
+      "path": "packages/ai/strategy/persistent-fake.pg.integration.mts",
+      "lines": 62,
+      "sha256": "56aa76cec3973c6d122882307163fec5cadcb6f63a68f413a2d562cf8b705465",
+      "test": true
+    },
+    {
+      "path": "packages/ai/strategy/persistent-fake.test.mts",
+      "lines": 79,
+      "sha256": "75a8c0d7b5a0265c6f953e5984d995a8520a17e87ff720dda27aecb270d34039",
+      "test": true
+    },
+    {
+      "path": "packages/ai/types.mts",
+      "lines": 193,
+      "sha256": "a8af375502f06f3e1cd77b9f9e341835798806f1368e284537b211e8d472a6c0",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/context-adapter.mts",
+      "lines": 75,
+      "sha256": "1cef45d305bb9c62ae3bdc189e5b06baf919ff1155f2072f457e04280552c6cb",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/context-adapter.test.mts",
+      "lines": 54,
+      "sha256": "2a6b1f0c7a6b06bb85464f9572810efd70e3d890a56d3cbd12000933bb5df1ca",
+      "test": true
+    },
+    {
+      "path": "packages/ai/understanding/image-format.mts",
+      "lines": 32,
+      "sha256": "76ddfd38acddfa561cd3276a3e6a323ae0236f580e5b51ced0a4b60f77b69abb",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/media-budget.mts",
+      "lines": 101,
+      "sha256": "ce7fd7fff55052221b88e4c2011099e5a8eb399efef6818d134fe873749b8c0f",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/media-env.mts",
+      "lines": 161,
+      "sha256": "b897195cecd3bc71ada09f426074b87c3ebe91166af585550760716c423b3c43",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/media-gateway.mts",
+      "lines": 55,
+      "sha256": "df1cf5cf9eeab8d11f48299ca7235c52e3b9034e142163e54fc343b02edcd47e",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/media-provider-real.test.mts",
+      "lines": 313,
+      "sha256": "0ef087e16cdbcce89feb6880cebf92835e678822ad82211446f32902d1468084",
+      "test": true
+    },
+    {
+      "path": "packages/ai/understanding/media-provider.mts",
+      "lines": 168,
+      "sha256": "0afbb795eba6e55b8f350522df18d12b7a526b916c06e2daec7aedabc56b4d89",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/media-provider.test.mts",
+      "lines": 307,
+      "sha256": "33e75478e77225224a58d596668099bf7c4fa429fb6b228889cc25e3ca588cf1",
+      "test": true
+    },
+    {
+      "path": "packages/ai/understanding/media.mts",
+      "lines": 26,
+      "sha256": "a36bb640dcdd63db9fa20f9e55503b7b343133f3b0d23632314c4b8c434fb98c",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/persistent-media.mts",
+      "lines": 18,
+      "sha256": "0032b77c0ac51aab358b586f4af9fff311fd41549cb06fcce62f474cd85d7168",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/vision-provider.mts",
+      "lines": 177,
+      "sha256": "86ecfe0d21fda34934d734f0acb3ff17b2408aa95b643bb23f522eb7e7dd510a",
+      "test": false
+    },
+    {
+      "path": "packages/ai/understanding/voice-provider.mts",
+      "lines": 124,
+      "sha256": "2f174330d9a54496484b8be4011df5e4a40c5803a39757bea8608e5b5a5034cf",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/context-memory-v2.mts",
+      "lines": 31,
+      "sha256": "9d3d28cd9e9e9d309823f8095a18c4b2a01040570134232b10c1b12ae9336803",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/decision-v2.mts",
+      "lines": 45,
+      "sha256": "b29d8127a29c08ed92582c785e0ad0238d733c5aa72a0c794e32468e273f6d54",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/index.mts",
+      "lines": 181,
+      "sha256": "00b30772444ca4d8499d7a99ec9187de849d01a7e9ab2e79424ca1a22711ac73",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/index.test.mts",
+      "lines": 47,
+      "sha256": "685255e29db450507ff25e6d941d3c7797f3c0a146798448cd1789270cef7e6f",
+      "test": true
+    },
+    {
+      "path": "packages/contracts/reply-pipeline-v2.mts",
+      "lines": 29,
+      "sha256": "0f748521fc8e7e687fcae51201c7c2c0eab8b85fe3ad48deedd5e649772b3c4e",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/reply-pipeline-v2.test.mts",
+      "lines": 20,
+      "sha256": "ffc7cf8d217f892c6b6edabd44e67e151989ab8d7bc435a060f5f67310e204d4",
+      "test": true
+    },
+    {
+      "path": "packages/contracts/schemas/confirm-plan.schema.json",
+      "lines": 16,
+      "sha256": "80a24a70fea503e605298191fe5ab1bb4718a6a1659fdbc02b321b3fc4a318ff",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/schemas/decision-v2.schema.json",
+      "lines": 15,
+      "sha256": "4db29e3eb095fe6701d42e7299d3a0dd6aeaca68f7002ebf1838176942113924",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/schemas/event-envelope.schema.json",
+      "lines": 19,
+      "sha256": "0d1c0920be886351540e1a7e7074a7aa9ef0ef685f3e78a70e308c2e3b7b7754",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/schemas/owner-overview.schema.json",
+      "lines": 62,
+      "sha256": "df9b8c3f3d3c8da9da067bdeb2917a7982662279e19910fbf683eccbdff9387e",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/schemas/platform-capability-snapshot.schema.json",
+      "lines": 41,
+      "sha256": "d3aa97ccc7343af8b5f30a8f93312160d704cc956ab0b0544b1fdc45e6f39c0e",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/schemas/recovery-report.schema.json",
+      "lines": 22,
+      "sha256": "5e389d83e5ea4be5d519148119bd62025394002df11d96cebfde63946e1f847f",
+      "test": false
+    },
+    {
+      "path": "packages/contracts/schemas/self-message-unattributed.schema.json",
+      "lines": 25,
+      "sha256": "32182df4d0025ea24ff376932fdc68c8b1eaffdd91a404aa96e7914a0f0c6e21",
+      "test": false
+    },
+    {
+      "path": "packages/data/context/store.mts",
+      "lines": 231,
+      "sha256": "b6cce92df8d1b787d8a667dd04273300de3b3b07e229fabc8ec3c9b6527deae5",
+      "test": false
+    },
+    {
+      "path": "packages/data/context/store.test.mts",
+      "lines": 139,
+      "sha256": "136b1a0eae8248da1dc63d710453d589299a45c4531b2e18088ed4dcac5a73e8",
+      "test": true
+    },
+    {
+      "path": "packages/data/feedback/file-journal.mts",
+      "lines": 45,
+      "sha256": "10495acc11d3c734fb041c461b9252c1deb4c72d0f52bf3b4b0d594186fc8573",
+      "test": false
+    },
+    {
+      "path": "packages/data/feedback/file-journal.test.mts",
+      "lines": 23,
+      "sha256": "ce4cc2e55ceea4ea6b5f7476bb585de5d42b9dd5a740bcc6e142f7693ce42b6d",
+      "test": true
+    },
+    {
+      "path": "packages/data/feedback/pg-candidate-journal.mts",
+      "lines": 80,
+      "sha256": "fd7c9a19c7ebcf3f6740d8dcc83204cd8592d1a676c06cf732506bbd86c39d0c",
+      "test": false
+    },
+    {
+      "path": "packages/data/imports/service.mts",
+      "lines": 65,
+      "sha256": "2c95c6ce5f2a4645f66c472b876bff9fd088d951b35af38f3a457b4e2ffb8627",
+      "test": false
+    },
+    {
+      "path": "packages/data/imports/service.test.mts",
+      "lines": 23,
+      "sha256": "43918773d4086b90cef72e813a58f105f8751c92a836f96be6b35cf2983add7a",
+      "test": true
+    },
+    {
+      "path": "packages/data/media/bounded-image-file.mts",
+      "lines": 30,
+      "sha256": "b936ac61dbb36f0c63a4f261b22469d10d093b78a376e4648349259d7ace595f",
+      "test": false
+    },
+    {
+      "path": "packages/data/media/file-store.mts",
+      "lines": 59,
+      "sha256": "6f3b9cde3851e803f50d760be0dba69167485f6ac99ecb7f03eac147afa84fe0",
+      "test": false
+    },
+    {
+      "path": "packages/data/media/file-store.test.mts",
+      "lines": 26,
+      "sha256": "886fbcf30d87932cc0e61eec89cc6c65d8d40a27da06bc6e9d98d85ab08a149d",
+      "test": true
+    },
+    {
+      "path": "packages/data/media/image-validation.mts",
+      "lines": 130,
+      "sha256": "5c295074a1451b7d5cb430027dc64a73e4b850b6b3542195e76f5226b7d7fb27",
+      "test": false
+    },
+    {
+      "path": "packages/data/media/image-validation.test.mts",
+      "lines": 70,
+      "sha256": "b41fd714829c04e919b6a22b6773d82e970c39d83360f58e05f66bb192153800",
+      "test": true
+    },
+    {
+      "path": "packages/data/media/pg-private-reader.mts",
+      "lines": 41,
+      "sha256": "1cb01fe81ef439188355ab99005a6805b7618cc604d4eb113d95a94adf1a34fd",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/cloud-policy.mts",
+      "lines": 9,
+      "sha256": "9d62ab241aa2ee272cebf98db5d32cc1a6d06d5eb0df92311f95996ee300f993",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/context-builder.mts",
+      "lines": 74,
+      "sha256": "a90b1ae48453862aca473bfb7e5c1fa02ddc296195d347f3492442a94960fc6c",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/context-memory.test.mts",
+      "lines": 68,
+      "sha256": "16656dd61d69ab64440c24612f9f9e575d0bcb2578edca87954d879d3253e873",
+      "test": true
+    },
+    {
+      "path": "packages/data/memory-v2/embedding.mts",
+      "lines": 18,
+      "sha256": "b411bf3991d77975d726ff32d1f81c3928fa5fca52e5320ed5033d6bea7225f9",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/extraction.mts",
+      "lines": 34,
+      "sha256": "79782dbe3f4f3189e55a669238abff452155b1f783ad0c361879756c3a417b24",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/loop.mts",
+      "lines": 11,
+      "sha256": "53dab5c24b630120899fd46c10c06583d2f2eca6199a510b6cdf274c52410eae",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/repository.mts",
+      "lines": 203,
+      "sha256": "77fb0bcafa87173e270584379c726864cf3375d6f8b7c9468d9268e41d6f1018",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/service.mts",
+      "lines": 80,
+      "sha256": "9676cb9b0dbfdf4d8cc6f58e285c9ba6222723cd5265d463adebfd6d564e7f5f",
+      "test": false
+    },
+    {
+      "path": "packages/data/memory-v2/worker.mts",
+      "lines": 128,
+      "sha256": "77815fbf150221cf335efcf3298acf0a001653a9a00dc77b03fed32b01d9f24e",
+      "test": false
+    },
+    {
+      "path": "packages/data/postgres/0003_data_facts_scope.proposed.sql",
+      "lines": 14,
+      "sha256": "d2e20cd01b5ab5a0d616d2726e942f845f7e65a1b65e8d95c79a7d169a21fdc5",
+      "test": false
+    },
+    {
+      "path": "packages/data/postgres/context-repository.mts",
+      "lines": 81,
+      "sha256": "97bc85e45d2d4ebffc36ebdad5d5b981751f2a760e254e49a87be67a4c864db1",
+      "test": false
+    },
+    {
+      "path": "packages/data/postgres/context-repository.test.mts",
+      "lines": 20,
+      "sha256": "512ce1e59ccd5c73396e9b01042b2773595ce5832361a89ec906787be6f90484",
+      "test": true
+    },
+    {
+      "path": "packages/data/postgres/media-repository.mts",
+      "lines": 192,
+      "sha256": "08a710b0a9564dc8d015820d764bc37daf9c68ff9e688782ff422a0e649750da",
+      "test": false
+    },
+    {
+      "path": "packages/data/postgres/owner-data-port.mts",
+      "lines": 270,
+      "sha256": "718db2643c274a59b01a98f995379b68ca9f4fe309770e6ee8bb4c932f001dd6",
+      "test": false
+    },
+    {
+      "path": "packages/data/postgres/owner-data-port.test.mts",
+      "lines": 28,
+      "sha256": "466bd69bfd38847fade40028b361c7cf80dda9ed99e8cbc7eff20219b934b05d",
+      "test": true
+    },
+    {
+      "path": "packages/data/postgres/provider.integration.mts",
+      "lines": 169,
+      "sha256": "2df87104e613058c7badcd2fd20a012fb71e19045bc533b0f31259f6a20b19c7",
+      "test": true
+    },
+    {
+      "path": "packages/data/postgres/provider.mts",
+      "lines": 488,
+      "sha256": "299a681011f13141c669e1fc816572fbdf19592272d5fd762a2af604f267e520",
+      "test": false
+    },
+    {
+      "path": "packages/data/postgres/provider.test.mts",
+      "lines": 81,
+      "sha256": "358ff70f4f10bf17d62e4171a66a0eeb170b5321871f8c644d2d8ee3049cc76a",
+      "test": true
+    },
+    {
+      "path": "packages/data/postgres/qq-g2.integration.mts",
+      "lines": 162,
+      "sha256": "8d742d01bcbee91cfc1551ceb46a916655e40b8dcf068e8e75a806e406c65f2c",
+      "test": true
+    },
+    {
+      "path": "packages/data/postgres/rls-proposal.integration.mts",
+      "lines": 60,
+      "sha256": "249a4e8757612ef3a923296cced6359dd485f094570862070eedc7da7d3d5a6e",
+      "test": true
+    },
+    {
+      "path": "packages/data/postgres/schema.proposed.sql",
+      "lines": 174,
+      "sha256": "a82d47cb9b9754db1a784305ee49329f70ce92387deb452d659e815d6550b14b",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/auth/owner-auth.mts",
+      "lines": 205,
+      "sha256": "cd3c2fa84353f9ce594a2a784c34125448e045360eabe9a1de33976362f8519c",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/auth/owner-auth.test.mts",
+      "lines": 201,
+      "sha256": "b1c87d09b33ed157054c7144294b0cd83edf3c8c48deae94cc8788bbaa05092e",
+      "test": true
+    },
+    {
+      "path": "packages/infrastructure/auth/password.mts",
+      "lines": 71,
+      "sha256": "6faeeae0ea3b6f50df9d65c3515bbdda28f73de8c3bb44654dd2b577bc68889d",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/auth/session-store.mts",
+      "lines": 91,
+      "sha256": "d86ac3ea4d50a36ec14806e061eab7f51babf91da8b60768f5d540711aede5a2",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/observability/logger.mts",
+      "lines": 114,
+      "sha256": "18f2f33052efafe62da83fba5dd11f3107208e670e589c1e41b2e9fd2c5ac4c8",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/observability/logger.test.mts",
+      "lines": 113,
+      "sha256": "7ba720c22bb494d7f810d6a1598566cbb7bf93522881ae1f5ccd58b1a07bfd8a",
+      "test": true
+    },
+    {
+      "path": "packages/infrastructure/observability/request-id.mts",
+      "lines": 28,
+      "sha256": "506d6970cb2129a6444d771df39b4fc9692108ec6e7187c06b0a3a1eea41bf45",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/observability/request-id.test.mts",
+      "lines": 30,
+      "sha256": "0eeb670a7b56db82870ffdc015f20a6575701285a0b496d7c5c8a5e9353e001f",
+      "test": true
+    },
+    {
+      "path": "packages/infrastructure/postgres/dispatch-journal.mts",
+      "lines": 117,
+      "sha256": "08a31035546615cce2b48732d842a5c1870142aa7691b70349e165b02d6de72d",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/postgres/event-store.mts",
+      "lines": 53,
+      "sha256": "f66bb49d135ddd6efcf32970065a29d58fbce778e0286698b284dce71fb78a43",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/postgres/migrate.mts",
+      "lines": 41,
+      "sha256": "c8d8e211aa2db53b40ac47437c79764f8346966c6a32d688b81321474a562579",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/postgres/reception.mts",
+      "lines": 171,
+      "sha256": "e76d01f82fca7b7397309c65e94e26967a8a543868054b9919595c8211392150",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/postgres/skill-outbox-pump.mts",
+      "lines": 64,
+      "sha256": "6d5f7a260d96092f17f875f24762c0ed9ab1b76f24c1b8c0ec3335699e26a909",
+      "test": false
+    },
+    {
+      "path": "packages/infrastructure/postgres/transaction.mts",
+      "lines": 29,
+      "sha256": "c2d5b1b5c2b037498fe02977d14e720813e49eaa74a5aad99daef8a1dc8b0fae",
+      "test": false
+    },
+    {
+      "path": "packages/link/context.mts",
+      "lines": 22,
+      "sha256": "2eca1dc3d52be1e6277657057cf1ee86e4412913122ea97daa74250642c1d193",
+      "test": false
+    },
+    {
+      "path": "packages/link/context.test.mts",
+      "lines": 30,
+      "sha256": "730df7c88b8160e6407e3db2ed28f600a75453e1a4fce871a70e603c91ccb214",
+      "test": true
+    },
+    {
+      "path": "packages/link/desktop.mts",
+      "lines": 15,
+      "sha256": "ad75c90b36b7daf19cf6b75277efb75ee6da35240d97107a1d1876f781d1c0e8",
+      "test": false
+    },
+    {
+      "path": "packages/link/desktop.test.mts",
+      "lines": 19,
+      "sha256": "9aa7dbadac8897c6bb6dab2ae4416b19652b00a85d7b373fe5fc248fc468b42b",
+      "test": true
+    },
+    {
+      "path": "packages/link/http.mts",
+      "lines": 28,
+      "sha256": "8c0c7b27e3b6b33a6cea8134ad9c740e834dc587ba40828d0d2e7f09b84d701b",
+      "test": false
+    },
+    {
+      "path": "packages/link/http.test.mts",
+      "lines": 31,
+      "sha256": "75f3ea36d21b5a41c97f6af9a57d3fd0ce0c77b0881095daf951b62e97a03898",
+      "test": true
+    },
+    {
+      "path": "packages/link/model-summary.mts",
+      "lines": 31,
+      "sha256": "710687fd20da1a059045b2b69731ed09c42aa8e45dbddf21c9e76da7701dcaaf",
+      "test": false
+    },
+    {
+      "path": "packages/link/model-summary.test.mts",
+      "lines": 13,
+      "sha256": "9cf202bb43ab5b24d0270d9ef2a3b01a00628fb4644e1d3fa1fabb9000255cad",
+      "test": true
+    },
+    {
+      "path": "packages/link/portal.mts",
+      "lines": 13,
+      "sha256": "9c94842c064f1b0618a55d9feb38c76c3600ac1a81b6c9154b01fb0916bf62e2",
+      "test": false
+    },
+    {
+      "path": "packages/link/runtime.mts",
+      "lines": 28,
+      "sha256": "ccb108c74e174c6336e2e558cfeee31500221918d4243bf644ed91d19ba01f52",
+      "test": false
+    },
+    {
+      "path": "packages/link/service.mts",
+      "lines": 42,
+      "sha256": "7d52fefbcc7a4ff57353d5610ac1ee78d48017614029c23478f60150a6f9b4f0",
+      "test": false
+    },
+    {
+      "path": "packages/link/service.test.mts",
+      "lines": 16,
+      "sha256": "3ed9996c4353360f4d8fe6dd71c2835ef5964a40a54877f890099c888b3f423e",
+      "test": true
+    },
+    {
+      "path": "packages/link/store.mts",
+      "lines": 19,
+      "sha256": "461ad3d8ceb7aaeef41eca169beb042d03ce5958e90c9c9ff48175f84c60e2ad",
+      "test": false
+    },
+    {
+      "path": "packages/link/types.mts",
+      "lines": 10,
+      "sha256": "45bfbde4f43a43139385194cc505951cbef6aaafb65546d5bebb06e1d903ff52",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/conversations/engine.mts",
+      "lines": 244,
+      "sha256": "8c54bb4c0f1f4c313e506754c6d49a7e7004fc7613a3f8d8cd559243136307cf",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/conversations/engine.test.mts",
+      "lines": 247,
+      "sha256": "568ba90459075a8cb3a5e9e1b7863ccce1bf432fbd419646f22c81f97a00d6e2",
+      "test": true
+    },
+    {
+      "path": "packages/orchestration/integration/mock-ports.mts",
+      "lines": 115,
+      "sha256": "aa70f1eadc884dad751f10b7c15fbf7b50207780857e2bfe7788bfbefdee8570",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/integration/mock-ports.test.mts",
+      "lines": 72,
+      "sha256": "c7c2c9adebda8781fcc6e123082e170c90fa92b0f93252308a8fd1bbf512685d",
+      "test": true
+    },
+    {
+      "path": "packages/orchestration/policy/evaluate.mts",
+      "lines": 38,
+      "sha256": "0c896f2c2576fd624ff735dba588cbaba9d3e96f824e1d1eeec1b8f40b663fdf",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/confirmed-service.mts",
+      "lines": 1378,
+      "sha256": "e608af19d7975219e993a548f612bd0b7939d5718f46726fa651697d948f04e3",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/ids.mts",
+      "lines": 13,
+      "sha256": "e69596568513d7cc958e0a2c13cffd042516bf5936f8c6182b9a9c7bd0b548f0",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/media-preparation.mts",
+      "lines": 95,
+      "sha256": "fcdc926e8c3eb41f6df31e50018864f30953c1ed0515d9b831e8821cf55a2fec",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/platform-accounts.mts",
+      "lines": 11,
+      "sha256": "a149f2cc1e3b8137e12a8dfbae7126ee48ee5ee9b1e63b4e61efebe2cbb06955",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/reply-jobs.mts",
+      "lines": 89,
+      "sha256": "84f824ff17b29e0ca06795a1deb87ca041e7d54a1497a89befa46e2c983e4e8b",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/schema.proposed.sql",
+      "lines": 84,
+      "sha256": "c6eacbc17fc3e4c6c51f7a6d1aeb50209a07e3a40ad70ec3f6b15db51694713a",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/worker.mts",
+      "lines": 82,
+      "sha256": "f78e16ecf841b0dea8d6683762ffa522cf6236dfc9a19660c8cfcd377f1d1ee8",
+      "test": false
+    },
+    {
+      "path": "packages/orchestration/postgres/worker.test.mts",
+      "lines": 45,
+      "sha256": "a85f16009d824be9de88def9bbd5045afaeffeb6a18cad67b5f63f346da77927",
+      "test": true
+    },
+    {
+      "path": "packages/orchestration/postgres/workspace-query.mts",
+      "lines": 78,
+      "sha256": "3f2005b468312185a1af3c6ba231f97904133061ed1c3851b71241d50b042ea0",
+      "test": false
+    },
+    {
+      "path": "packages/platform/config.example.json",
+      "lines": 9,
+      "sha256": "aae7b4165cc8ad02bafcda0a544f33d08ed383c6a4f7b96b0a5e940e6b289211",
+      "test": false
+    },
+    {
+      "path": "packages/platform/mock/adapter.mts",
+      "lines": 221,
+      "sha256": "bf45d51dbfe14652c66e6fc2b995d7b0a96795c85889855b80b3471573854049",
+      "test": false
+    },
+    {
+      "path": "packages/platform/mock/adapter.test.mts",
+      "lines": 176,
+      "sha256": "24245108c7a8081f9570604a02ebbd608e9f6fcfcb2a066689083653a0cc8459",
+      "test": true
+    },
+    {
+      "path": "packages/platform/mock/events.example.json",
+      "lines": 218,
+      "sha256": "ddf3c7c6890cbbc566dd48371068b3971efce613d210022f36ce3d27612d1097",
+      "test": false
+    },
+    {
+      "path": "packages/platform/mock/examples.mts",
+      "lines": 15,
+      "sha256": "7307a578a64382eb5d872c5daa811b5ac4bdc5d386cba8c37ed6ddb121290fb1",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/bridge-run-mode.test.mts",
+      "lines": 16,
+      "sha256": "667f6d77d23e6a13872f73a500bb65c3db7cd46c1d95445e3757fa0fb5dcde6a",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/media-acquisition.mts",
+      "lines": 83,
+      "sha256": "5cd192ed6f5898a232befc9e5f82a231e26ada77af444f4512394719bcb2f837",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/media-acquisition.test.mts",
+      "lines": 99,
+      "sha256": "95157483ba6bd8cf70e8f6cfc03d637f5162623863931f7a12e8682e01d28c91",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/napcat-bridge.mts",
+      "lines": 92,
+      "sha256": "5feca9049c75e63779d07aef3958c83f0cfc233e4287b981c74142a8f8ef1199",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/normalize.mts",
+      "lines": 100,
+      "sha256": "4baf7ec0c368fb95015e5c3910dc5143f5ab60793cbd7888701a4f649ac36852",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/normalize.test.mts",
+      "lines": 100,
+      "sha256": "d35112814a7c4922e1120b5eb4ee235cf57ea537932220b27bf1bc3f7ca24822",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/onebot-codec.mts",
+      "lines": 177,
+      "sha256": "e0d08c51881929c51a2cd0914312a488c7789475ef1cf6f07128b893b8921c75",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/onebot-codec.test.mts",
+      "lines": 157,
+      "sha256": "f8c2f316b69fee7223d7c47ba0fc477fc6b9c8bc0305cb9c6f9181736828d035",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/onebot-http-transport.mts",
+      "lines": 53,
+      "sha256": "136b75135963f4b69991494373db503d378ea195219b24fb8da423cbde21bfac",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/onebot-http-transport.test.mts",
+      "lines": 75,
+      "sha256": "97a212d7be1cec24aff6a2f239bc7efa22253da8e981c494ced0423f97bd7c2d",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/onebot-media-source.mts",
+      "lines": 95,
+      "sha256": "d472d2acfde057327463c4e8971a5ab8e559b142bada2a1da3491b1561aae97d",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/onebot-media-source.test.mts",
+      "lines": 79,
+      "sha256": "01735ee348575bbe7e56bded437578e9e5d84d62855c1d0d83dae30cc256b4e5",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/onebot-probe.mts",
+      "lines": 87,
+      "sha256": "cec81f8e541ae50bf3f51da4884c959cf817b55fbea95081592239b07a059d89",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/onebot-probe.test.mts",
+      "lines": 121,
+      "sha256": "02ed0cf0c2fcaa111154f708b87a149ea18607470cbd8cce67b85750e747fd02",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/pg-echo-ledger.mts",
+      "lines": 49,
+      "sha256": "7494c5edcc9f6a703428a67b26915d417e65168f123e45d3ca7010b77d281b37",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/pg-echo-ledger.test.mts",
+      "lines": 20,
+      "sha256": "96a605e9168f2917c6b789862d2428851e06f3afbfce46c9ae662193a653b950",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/raw-shape.mts",
+      "lines": 84,
+      "sha256": "2abb9d1b8292f51750ff5873bc72aaa965a1f9e9b203cea2200079ac2d8dc66d",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/raw-shape.test.mts",
+      "lines": 63,
+      "sha256": "db7b97e64c893649450aa3cf3bfacf5fd85b0d2ccdfc0bb27dfc8b7d1f2fafc4",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/recovery-assessment.mts",
+      "lines": 76,
+      "sha256": "5f1915926b14e57db3f551a24fa176be91a4e12e9b45588cff57b6bd2197d174",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/recovery-assessment.test.mts",
+      "lines": 64,
+      "sha256": "e2e1891705542252d995c04691d92886471516f1f87d0dcb11d44f235213f385",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/self-origin.mts",
+      "lines": 42,
+      "sha256": "e934fc97fc9b934ea365cd0bf8abe24f1260342d42317394380cb1992823b970",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/self-origin.test.mts",
+      "lines": 47,
+      "sha256": "526662c4d0358808b8fe91ae994766cb9ad782d234d6c30ea43cdae58d35385b",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/send-executor.mts",
+      "lines": 117,
+      "sha256": "bdd45079e9412e41b87d360d56532c174e7512c79c8baa8382f3e97e76471755",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/send-executor.test.mts",
+      "lines": 97,
+      "sha256": "945a5c9f8d978f87f55a11d027b253c5e562ec0c33ea4589f06df920b17fd334",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/spike-evidence.mts",
+      "lines": 174,
+      "sha256": "196fe434a76251d7f7bfc1f099b7f50552150d2a08069ffb1339dde23d11e68b",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/spike-evidence.test.mts",
+      "lines": 40,
+      "sha256": "88821a9f0eee0c2158fcde43d97e4cd86f22be18138edad12ce2fa8981e7e853",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/spike-report.mts",
+      "lines": 90,
+      "sha256": "45d256a48beebdcb3005ed2bb98ac9ed1744a66ff8126d2fd7e0396af99cef71",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/spike-report.test.mts",
+      "lines": 55,
+      "sha256": "b8e5d5aee381932d4e89724ad7099de24c84601be79705089a8503b012c175ec",
+      "test": true
+    },
+    {
+      "path": "packages/platform/qq/webhook-ingress.mts",
+      "lines": 76,
+      "sha256": "f3e14a803d826c3e54507b326b8a01d5906ec72d7caff922243a32d3ede459f2",
+      "test": false
+    },
+    {
+      "path": "packages/platform/qq/webhook-ingress.test.mts",
+      "lines": 73,
+      "sha256": "41ed7ac700d0e9731c8bace5f33f92c776e2e89a1c30fd3053a8b046c73af99d",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/binary-preflight.mts",
+      "lines": 35,
+      "sha256": "e9f4b9caa8da55bb72b03f0845289f65173564ee50444083185bb6002aa6bbd2",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/binary-preflight.test.mts",
+      "lines": 38,
+      "sha256": "f1ba2aec739e19d2b0eaf12fd8e03f2967c5faaa60e4c060dd1a41bee7e5d11d",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/media-acquisition.mts",
+      "lines": 170,
+      "sha256": "d7ccfa0ea2c34eb961aaa27e9ad9c7372afa34ef60fe5fbc9043c9ce5f59a553",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/media-acquisition.test.mts",
+      "lines": 227,
+      "sha256": "4122dedf556eeb4811118eed18df7357fe96e61479362dd15bea37c1fca03e0e",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/media-dat.mts",
+      "lines": 40,
+      "sha256": "485a9995e6b36bd462cab0d5aa7f2260111647d7ccdd329f1ebded30645048cb",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/media-dat.test.mts",
+      "lines": 112,
+      "sha256": "ebc18fb77bbfa191484077f1d209b835c53d0bedaa624238078c7235943fcac2",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/origin-audit.mts",
+      "lines": 43,
+      "sha256": "02b6f22d1e3c901c807faf869432299851d50816cb3bf3a4a0165d018206b777",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/origin-audit.test.mts",
+      "lines": 42,
+      "sha256": "9c78620ef5e32a2659c7f5cb031f3d3a684c8b2e9aa4d57dbad2e142715012fb",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/receipt-evidence.mts",
+      "lines": 53,
+      "sha256": "85f9597171bc718fa02626e8d33f022037e56a026e691676d7055e84b3d2eb88",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/receipt-evidence.test.mts",
+      "lines": 60,
+      "sha256": "32f4a8a74b7d6f8d3d9f80c9eb2a6f17782fc09205ea1f95f27e3866754f2d2a",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/reception.mts",
+      "lines": 88,
+      "sha256": "babc537d725b3e27d00b856363abb727fdbb384dfccc3e618db4318d00dcc8e9",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/wx-bridge-run-mode.test.mts",
+      "lines": 31,
+      "sha256": "b2c90ef5cc9492764f08b8ab21a68ad391e7c5d55dd5e038ea8bfd0d33b3c565",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/wxhelper-codec.mts",
+      "lines": 162,
+      "sha256": "cdfa8aea104e62ef682342ee4d2d7786dc754f0fbc0a741d0f973bedefb7482a",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/wxhelper-codec.test.mts",
+      "lines": 75,
+      "sha256": "08982a4706a7b6734fe0b56e7e95cce50ba364c05cb2f80c44fe33689d2eac8d",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/wxhelper-http-transport.mts",
+      "lines": 44,
+      "sha256": "2cf35b8be17a8480414175d0d5273ebf17e8dc950e619cde73893924cafc1a6d",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/wxhelper-http-transport.test.mts",
+      "lines": 34,
+      "sha256": "b5bf2cdf06188689696ccd5f0be366ff63864cbc9f50b4660080f267f787ca55",
+      "test": true
+    },
+    {
+      "path": "packages/platform/wechat/wxhelper-media-transport.mts",
+      "lines": 67,
+      "sha256": "2486ae8c2bc3371aaca8c2fcfc9732ce876a7096d9e70f2701e2ccdd6ddec79d",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/wxhelper-send-port.mts",
+      "lines": 68,
+      "sha256": "42ce02eac41eb94f6a539800a2dbdcdfd1ef1a8db317e905d88e31f57b17eb86",
+      "test": false
+    },
+    {
+      "path": "packages/platform/wechat/wxhelper-send-port.test.mts",
+      "lines": 64,
+      "sha256": "88a3b59bd7ccf6f11d5318e28d5fef4c03254a0ff7fe714829de202f08045a71",
+      "test": true
+    },
+    {
+      "path": "packages/skills/execution/invoke.mts",
+      "lines": 78,
+      "sha256": "9328a70d46a7293c266848b7aa8f5670c95ff7fb2f8af5692745f6c1f6867860",
+      "test": false
+    },
+    {
+      "path": "packages/skills/registry/0011_skills_scope.proposed.sql",
+      "lines": 32,
+      "sha256": "c0456a23d51527be5b24d7afbec865a723c31a6242457a25a0e6200676778e43",
+      "test": false
+    },
+    {
+      "path": "packages/skills/registry/builtins.mts",
+      "lines": 13,
+      "sha256": "904e6629394b32708d5e2a7a61d3da97d786bfb9ee2548c672e942f1ab21a97d",
+      "test": false
+    },
+    {
+      "path": "packages/skills/registry/pg-store.mts",
+      "lines": 195,
+      "sha256": "2041f1ef28d00c65b896cbf92244803c708cf91b75f277a3d21382a6567db14c",
+      "test": false
+    },
+    {
+      "path": "packages/skills/registry/pg-store.real.test.mts",
+      "lines": 242,
+      "sha256": "1f412c5f6561d79d6691f67aa23d50fc8227842ef947a57510fa85a3a17a71b3",
+      "test": true
+    },
+    {
+      "path": "packages/skills/registry/pg-store.test.mts",
+      "lines": 147,
+      "sha256": "c3bfb4ceaaadb5ecf42f759d37e4a9eb07583636730a04e2eb541abdb68268fc",
+      "test": true
+    },
+    {
+      "path": "packages/skills/registry/registry.mts",
+      "lines": 97,
+      "sha256": "edfc853b7d81cff0c4300e99b740438401890663bf6e82c39d17eff6a73034e3",
+      "test": false
+    },
+    {
+      "path": "packages/skills/registry/registry.test.mts",
+      "lines": 166,
+      "sha256": "c8b3aa498dab548d64de574805ff14e13f3410d9f4013a4fc7bb6d79322303da",
+      "test": true
+    },
+    {
+      "path": "packages/skills/registry/types.mts",
+      "lines": 39,
+      "sha256": "b2097817079eacbd7fcf5e960609413fb91018eec7fd60c44e547479aee68660",
+      "test": false
+    },
+    {
+      "path": "packages/skills/selection/integration.test.mts",
+      "lines": 58,
+      "sha256": "1d6ed5ed6998fd0e3bbbf2e9b431a2e3c3530fc21db13bcd7f65bbab49e37b89",
+      "test": true
+    },
+    {
+      "path": "packages/skills/selection/select.mts",
+      "lines": 47,
+      "sha256": "01f618cd77995ef49058dd6dd505dcf68d58fd2ff55eeb90daf6886fd32cd536",
+      "test": false
+    },
+    {
+      "path": "packages/skills/trials/trial.mts",
+      "lines": 14,
+      "sha256": "b617fc7b599fc6b81aa1d7f90f3ee88b65c9ac587ab267644193ebacd5071b3a",
+      "test": false
+    },
+    {
+      "path": "scripts/backup-workspace-activation.mts",
+      "lines": 40,
+      "sha256": "bb8e4d69a89b86cadc0c8bec04f1b12072e593a8af0448dc06d649ddbd2ffd19",
+      "test": false
+    },
+    {
+      "path": "scripts/build-android.ps1",
+      "lines": 43,
+      "sha256": "c9fc04396a3552682ce1c7f943eda6156fc2cb1e0edfa4a9c8a3630a7a9e5668",
+      "test": false
+    },
+    {
+      "path": "scripts/deepseek-candidate-smoke.mts",
+      "lines": 78,
+      "sha256": "47a055bca986e72925be8f90ba5d6b4cecb816cba679bc7aca70a8539a15857a",
+      "test": false
+    },
+    {
+      "path": "scripts/deepseek-smoke.mts",
+      "lines": 73,
+      "sha256": "d1c449b39ee12604e642b8cb4678bc6f5d8af53beaf1020b63e145b2e77a0dd9",
+      "test": false
+    },
+    {
+      "path": "scripts/deploy-mobile-link.py",
+      "lines": 38,
+      "sha256": "7535003d0339047841755d62b8d93e7807b443ce8ac532e2fa4b27e616ed46c0",
+      "test": false
+    },
+    {
+      "path": "scripts/dev-seed.mts",
+      "lines": 86,
+      "sha256": "38313d9eba3c0988d5719f21bfadcde4c847e29be48e3401c9bca4a5c15c0f3a",
+      "test": false
+    },
+    {
+      "path": "scripts/enable-lan-access.ps1",
+      "lines": 17,
+      "sha256": "26627175a18547d35ad7e04db378b1bfe49125508f7b1bf9c45bbf7842ad2776",
+      "test": false
+    },
+    {
+      "path": "scripts/enable-mobile-link.ps1",
+      "lines": 24,
+      "sha256": "e90f01687a13f3b71d5769a0727a1e0f3b90d8d23ba9c0cc7f0a4fed95388128",
+      "test": false
+    },
+    {
+      "path": "scripts/finalize-workspace-release.py",
+      "lines": 56,
+      "sha256": "99ea816f1d55acdca912572be60bc67a1aebac65763e754a8cbbd6d1e0b9acd5",
+      "test": false
+    },
+    {
+      "path": "scripts/local-stack-driver.mts",
+      "lines": 176,
+      "sha256": "1c2f85fee9deed4d667dfdcfb5bb5feeaa4cbf044200bf81b7375dfda9701dc0",
+      "test": false
+    },
+    {
+      "path": "scripts/local-stack-driver.test.mts",
+      "lines": 106,
+      "sha256": "c65602219e1798a35be41da5db4c4c2d5ccadc1791c49d388078c049ec96f619",
+      "test": true
+    },
+    {
+      "path": "scripts/local-stack.mts",
+      "lines": 19,
+      "sha256": "0a46e378be5eb473aadb77fdcbd2400adb6ab6ea1b8009f121e1ec43822e9d8f",
+      "test": false
+    },
+    {
+      "path": "scripts/local-supervisor.mts",
+      "lines": 175,
+      "sha256": "7bb60651801a461c34815ab18d2ab5d2fc3f1ef0af8fb0840a3ee3f6f1b7ca6a",
+      "test": false
+    },
+    {
+      "path": "scripts/local-supervisor.test.mts",
+      "lines": 137,
+      "sha256": "0791ef05725c07d6fc56d9245352efd580ee8accc3fb0e42aafcc020a6712cc6",
+      "test": true
+    },
+    {
+      "path": "scripts/mainline-rehearsal.mts",
+      "lines": 142,
+      "sha256": "06ee37f62526e8f505a445dbfb971d55c2d1f9bb143ee6d4293a40e61782589c",
+      "test": false
+    },
+    {
+      "path": "scripts/migrate.mts",
+      "lines": 15,
+      "sha256": "5d0c4c5eed08cb87a6f263b39d2ea33a51516e6ea07f222f830cb566fd3d232c",
+      "test": false
+    },
+    {
+      "path": "scripts/native-offline-tools.mts",
+      "lines": 48,
+      "sha256": "7c28b569ee52597efe8da3f5604b20df9a219710d388cc7f98237b834775686a",
+      "test": false
+    },
+    {
+      "path": "scripts/owner-password.mts",
+      "lines": 16,
+      "sha256": "b491a8d2a1cc01d1ac6cd171a0a0bb4329f77136d2017c437c896c7902b3d301",
+      "test": false
+    },
+    {
+      "path": "scripts/owner-resolve-send.mts",
+      "lines": 58,
+      "sha256": "cb6dfb1bb1682f6de4ed68c7f5019d39581d072fb2f289da75fb445f90e8f1a7",
+      "test": false
+    },
+    {
+      "path": "scripts/p1-mainline-audit.mts",
+      "lines": 120,
+      "sha256": "ed807965874dd6ca230002cdd45daaa9c6c006abb3c9f9d46cf3a4e523fff015",
+      "test": false
+    },
+    {
+      "path": "scripts/p1-mainline-audit.test.mts",
+      "lines": 77,
+      "sha256": "84badd78b21c5dfdd90a24d19fa50e0d25fda8c820317ef9a6687db4c82f4262",
+      "test": true
+    },
+    {
+      "path": "scripts/prepare-test-vector.mts",
+      "lines": 5,
+      "sha256": "9d3462e5597c34cc7bf2532d2cbcc4f1c40cb520c2df3964926368ea35e52839",
+      "test": false
+    },
+    {
+      "path": "scripts/prepare-workspace-release.py",
+      "lines": 63,
+      "sha256": "59c45d68ae0e856eeb4342c1a3f7a70364f421543846d320b3e4fc84ab12ec80",
+      "test": false
+    },
+    {
+      "path": "scripts/probe-workspace-activation.mts",
+      "lines": 40,
+      "sha256": "9abda648d2e209f42bce69d24793cac31e0a925c12386069fc8d8287a3085a90",
+      "test": false
+    },
+    {
+      "path": "scripts/qq-mainline-audit.mts",
+      "lines": 165,
+      "sha256": "cf07011cfaf022046e54d4597fc861a708f8faa7eec66e4c97c42efd0d65c50a",
+      "test": false
+    },
+    {
+      "path": "scripts/qq-mainline-audit.test.mts",
+      "lines": 64,
+      "sha256": "eefb20014f30b1a0b00a9b4aba0ebeb75e93e2845126aa1589a07b6ab18a7b35",
+      "test": true
+    },
+    {
+      "path": "scripts/qq-raw-shape.mts",
+      "lines": 41,
+      "sha256": "299e6d80505279d8b8f6b52fb60da560baf1864fb3aeae5fc932499ecd38ff55",
+      "test": false
+    },
+    {
+      "path": "scripts/qq-spike-enroll.mts",
+      "lines": 55,
+      "sha256": "b832cc1d320bb60410625e07924064479030189d69d110c76f354e242e777266",
+      "test": false
+    },
+    {
+      "path": "scripts/qq-spike-manifest.mts",
+      "lines": 14,
+      "sha256": "4975f0d6ab4e2e0388a2226114e96e051304248288b8da33e2cc13f111abe7f6",
+      "test": false
+    },
+    {
+      "path": "scripts/qq-spike-preflight.mts",
+      "lines": 124,
+      "sha256": "c73001dfdfa006763f10cfb01bd32a53d938f12974b9525a9510a6f522911114",
+      "test": false
+    },
+    {
+      "path": "scripts/qq-spike-report.mts",
+      "lines": 70,
+      "sha256": "1c6d56ad11ef7e17a37a9b3d388e14115b9f60d52dbc1497efdcdb1045a7829d",
+      "test": false
+    },
+    {
+      "path": "scripts/qq-spike-summary.mts",
+      "lines": 34,
+      "sha256": "b94def326c9d34f20f90ad9da1bb78d4a157729836fca693ead3b99196deb529",
+      "test": false
+    },
+    {
+      "path": "scripts/restore-workspace-runtime-state.mts",
+      "lines": 40,
+      "sha256": "550f169887c11de918ee45520e5461c68bb72f2ff88b43960f5fb76516d564a0",
+      "test": false
+    },
+    {
+      "path": "scripts/trial-report.mts",
+      "lines": 41,
+      "sha256": "f07c6157dbd38d65ea5738c24043b828c6ed7b23ce3a4d997e0663fd98ec962f",
+      "test": false
+    },
+    {
+      "path": "scripts/trial-report.test.mts",
+      "lines": 17,
+      "sha256": "317866a32134cabc3584598c076426b3f0b9aecc8f8e3c50a241fc2e9bd6e3f5",
+      "test": true
+    },
+    {
+      "path": "scripts/verify-connected-mobile-link.mts",
+      "lines": 24,
+      "sha256": "306bee3011a08535678b1f6b0722847c74de8b1cee8bcc2188ea18dc1af19d63",
+      "test": false
+    },
+    {
+      "path": "scripts/wechat-capture.mts",
+      "lines": 173,
+      "sha256": "dda8cec20e11f67ce4e80bfbec53bad264fb137399a4d99fe958b695390de72f",
+      "test": false
+    },
+    {
+      "path": "scripts/wechat-origin-audit.mts",
+      "lines": 28,
+      "sha256": "3ac5f3c43d90a6639482fdc6edf25573f326c59aef00f961103b92d81d9f3c82",
+      "test": false
+    },
+    {
+      "path": "scripts/wechat-origin-probe.mts",
+      "lines": 42,
+      "sha256": "64e4165cd9e28732532e5e6130ec751337e21c39cb83701a28a88b06c5b14fd5",
+      "test": false
+    },
+    {
+      "path": "scripts/wechat-receipt-evidence.mts",
+      "lines": 34,
+      "sha256": "61869c73fbab76b6088e1860ac3a6e2041c40e302bb14297e7ae659e059b0e29",
+      "test": false
+    },
+    {
+      "path": "scripts/wechat-receipt-evidence.test.mts",
+      "lines": 43,
+      "sha256": "b551ac28f9daef585f00a5935f8562f5b52eba6f4d354c0fa40662e5be3f51ae",
+      "test": true
+    },
+    {
+      "path": "scripts/wechat-send-binary-preflight.mts",
+      "lines": 51,
+      "sha256": "e99b48a6da02dafa1f072c4b3f165ba4fc8a3439c7f27c1a8ea163882b0bce43",
+      "test": false
+    },
+    {
+      "path": "scripts/wechat-send-once.mts",
+      "lines": 88,
+      "sha256": "14c30d069509e9102998f723922c10fc6ffb4c053b3299a38f5b0b21e04828f9",
+      "test": false
+    },
+    {
+      "path": "scripts/wechat-spike-enroll.mts",
+      "lines": 33,
+      "sha256": "66e6404432b30fefb309d220f2bd0a496c3236e8683838048c497f847b7413bb",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-column-family.mts",
+      "lines": 135,
+      "sha256": "df957615bfb137d66452f8da4bb861e9acad2b0aff26855cccbf225341b12839",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-column-family.test.mts",
+      "lines": 139,
+      "sha256": "74f67303ae52de86a133d981d9737f58c76b8f5a8671888d7ef31ca70803796f",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-candidates.mts",
+      "lines": 220,
+      "sha256": "4a7c6bec2f5e4ef727a7078ec50fbed1e9992f71d8d2f0b7d89915ae269336da",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-candidates.test.mts",
+      "lines": 178,
+      "sha256": "57b79a4458818125d6459dfbbb6f6ed625cf9f3b544c43c2d078cdf056820e45",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-chain.mts",
+      "lines": 96,
+      "sha256": "4bef3d47364bb9baee05226810c7eebd96f84786392b166e4f625addeb228a99",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-chain.test.mts",
+      "lines": 71,
+      "sha256": "0e6b0fd156b75bbf8e8616aa7225f49f5043e2ebf19c4436851d7de939ed232d",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-cli.test.mts",
+      "lines": 13,
+      "sha256": "5aeb0e557b3e8f98f6ffbf0789d0dc20eae718c1f54ac8ba1218997e8dd839e6",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-scan.mts",
+      "lines": 213,
+      "sha256": "ff9aa8256b9686bb1b87f68ea7348729bde3f142f344c529da7b58ff70964af1",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-scan.test.mts",
+      "lines": 93,
+      "sha256": "76f0d1a076fdb77ee8ecceb49f24aa136e3e49b9de3f1c3cbbb1fa6a1eb8cfb6",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-structure.mts",
+      "lines": 169,
+      "sha256": "1873f52acaa3f8faac7a290a1bf7f481d0d3fbede5c837dce9b72d134328ec30",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-structure.test.mts",
+      "lines": 173,
+      "sha256": "e8608161590e94b40543b5503d491a8703bf60e8d0157477cb95534daa344718",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-unwind.mts",
+      "lines": 166,
+      "sha256": "712cafe324b47dfe1254f7e3764f67dc0fba48b0a849f3904e18fa6ab9ad3bc0",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-unwind.test.mts",
+      "lines": 130,
+      "sha256": "c739e495bc94ca528b6505e9889d6e03db1cff381f8e927a9b6a596e1b685fb9",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-verify.mts",
+      "lines": 132,
+      "sha256": "2eb2eccc70e24baa17050afcdd7d72265b633a294ca40598098fec19ebb24841",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-db-entry-verify.test.mts",
+      "lines": 134,
+      "sha256": "63af77d5e7bd92cc8e8917f72ad0aa938735b5b82b456a534414345f03e85172",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-source-audit.mts",
+      "lines": 166,
+      "sha256": "635745a5b647667f773eced26ca610fb68bf615eccd053f762ebf84ac26312c4",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-db-source-audit.test.mts",
+      "lines": 165,
+      "sha256": "ba76950b96768dbe906deb786a3331e2d45037658f76e883c7b545205c20a43a",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-db-xref-audit.mts",
+      "lines": 133,
+      "sha256": "a560f9102f750b03e29124b040f64f2b8db545f4ae1cab01732431ec8a648a57",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-fixture-endpoint.mts",
+      "lines": 55,
+      "sha256": "b305d75746f621ee999583f1d44a6abd013ecfdd68b2ee0782034f4e7d467276",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-receive-only-build.mts",
+      "lines": 130,
+      "sha256": "bb5e24716ec59aebb5112abecd6749206f367eb6a144b7c4e65a796896a119d6",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-receive-only-client.mts",
+      "lines": 128,
+      "sha256": "3b5998b2ff00f70c5985fc0dae7c91ccdbc9214f42b2e1acb5f1cb578b2fc0cf",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-receive-only-client.test.mts",
+      "lines": 61,
+      "sha256": "a4aab9308a501ade6ae4beaeef0b3f419a4f546dcde41c9fa30d60c348f3dc8c",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-receive-only.test.mts",
+      "lines": 55,
+      "sha256": "c233cfca78a8aeb54bd48327b4b97497ec4f53d2d2d340e3ea6bcb8d3ef77078",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-receive-only/attach-by-owner.ps1",
+      "lines": 46,
+      "sha256": "da23fd5fc37d17d09b5ed82c33d7e80d66bd899cc298f8b146cd22aeb6ddee57",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-receive-only/build-pin.mts",
+      "lines": 7,
+      "sha256": "3f36c6409758df68ca5ec1d57ae39e6d262aaa92417454215d161d4108384163",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-receive-only/receive_endpoint.h",
+      "lines": 12,
+      "sha256": "ed552418a98c0e307e8e19a90c46c2379f427eb7068b967360080574cf4b5b5f",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-receive-only/receive_policy.h",
+      "lines": 73,
+      "sha256": "39cbf6738ddd79346d2a3627117e3427ce224c1a75d40f6947b65e67bb9d77eb",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-sqlite-version.mts",
+      "lines": 139,
+      "sha256": "e45728b78d184595af883ff2b183e5d140a7a398cd4af0ace00be7e82ccfd4a8",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-sqlite-version.test.mts",
+      "lines": 137,
+      "sha256": "1ed09f71114b1489acd99dec770b62a9e8396ca20d023d1c93204299b5b76831",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-string-map.mts",
+      "lines": 144,
+      "sha256": "20b9795d222cfe8f7813e1bbfb082fd563d7e7b20f5f239db7d3212211a0dbf8",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-string-map.test.mts",
+      "lines": 144,
+      "sha256": "a0a76c8d0adedcdbc2b91a5ea4417c5ac7d39082e8f3866ccc94a7757b0bb337",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-string-xref.mts",
+      "lines": 122,
+      "sha256": "29529a21f317fc1977b8c5ad74a8848fdf309f5139d68bb44b2f5f71fa446acd",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-string-xref.test.mts",
+      "lines": 121,
+      "sha256": "77a7511a1ed43d21e80b2a454087f84840a58f090d06d45d9be7eb0cc104ea33",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-vdbe-opcodes.mts",
+      "lines": 126,
+      "sha256": "ce47bb3715d6ed4e89bb2fc476b082273bb90105589839bf08e6720cd3e1e1cf",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-vdbe-opcodes.test.mts",
+      "lines": 125,
+      "sha256": "b069afe40fac77dc9d1ac36bbdc01ea5b24014b00d5c23f1286a0aa75ac846f9",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-voice-db.test.mts",
+      "lines": 108,
+      "sha256": "537614eaf456e412cb4efe12c3cf1bbb4dfda6e41e9f6df14504cf5c05ca7289",
+      "test": true
+    },
+    {
+      "path": "scripts/wxhelper-voice-db/upstream_voice_method.cc.txt",
+      "lines": 45,
+      "sha256": "d051ecefe1371f30df220ad2c888bee30d00350575cd7626e21f536b3704c83d",
+      "test": false
+    },
+    {
+      "path": "scripts/wxhelper-voice-db/voice_candidate.h",
+      "lines": 98,
+      "sha256": "fd0166a35a1733b2132a4db1d08d2a310f5cfaa85c6ba0a42b5c0e1344ff5eab",
+      "test": false
+    },
+    {
+      "path": "tests/contracts/acceptance-matrix.test.mts",
+      "lines": 25,
+      "sha256": "a62a0ff21c851bef9a485d4064bc2140377c5dbf8716c4ebf620a77dd35cd87d",
+      "test": true
+    },
+    {
+      "path": "tests/contracts/architecture.test.mts",
+      "lines": 75,
+      "sha256": "be44170e73996eadcd3c977ea56f5838d2e4355090f345820b74f8ffccc3b378",
+      "test": true
+    },
+    {
+      "path": "tests/contracts/capability-snapshot.test.mts",
+      "lines": 151,
+      "sha256": "78897b154f5a7989a63313300ccc2d3bc7cd9b19c04afad1b296d476ec81925a",
+      "test": true
+    },
+    {
+      "path": "tests/contracts/secrets.test.mts",
+      "lines": 28,
+      "sha256": "b73246103ae1c0abd72ce29a729a3fe3da8c1396c18b5bcfa0bbca4035a96141",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/core-server.test.mts",
+      "lines": 9,
+      "sha256": "cd6329b7d0a6c5eca390b3eabbe79aafe06d979f05884f7c3cef342ce5b29200",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/lan-mobile-browser.test.mts",
+      "lines": 129,
+      "sha256": "0857cb819e157811ef0c3cdd9c07d9d0cecb70c8cb61faa0d847d887e6a34a22",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/mobile-link-browser.test.mts",
+      "lines": 53,
+      "sha256": "3775ac83221bbde777cfd510c0a73dcdbece7846b2e2ee91ff2ee981296ae594",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/mock-confirmation.test.mts",
+      "lines": 68,
+      "sha256": "7148fb9c061a8e0905b7973d5cd63fa1b76b680c1bf1501457c5ee966e7c18d3",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/mock-mobile-browser.test.mts",
+      "lines": 106,
+      "sha256": "57e6624bdb18d950169ae03b921d1af5c9cb34593001d93bc610f92e0d26753d",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/owner-auth-http.test.mts",
+      "lines": 155,
+      "sha256": "029e856abe97ed8cc5978fb4ad767d6371f562c1d616d98d1b900ba0d3c98215",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/owner-http-security.test.mts",
+      "lines": 81,
+      "sha256": "8dd7a476e11efdb2c8136947daec79301cae056945712b02fb3434ccac6031dc",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/pg-owner-browser.test.mts",
+      "lines": 11,
+      "sha256": "61a6ce61a6f9ee9bd5b48bf48b81a51779a8be259f7f466f4253661c803dd254",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/web-server.test.mts",
+      "lines": 15,
+      "sha256": "d6b4e2035b7562dd0cf9781e521f97a2db9668658732aaf20ad29c38f8c661d4",
+      "test": true
+    },
+    {
+      "path": "tests/e2e/workspace-browser.test.mts",
+      "lines": 204,
+      "sha256": "7371eab22a4444016b7e41a7301d0d9799e6f56fe6d193de2f59dc75eb306fd1",
+      "test": true
+    },
+    {
+      "path": "tests/fixtures/local-stack-bind.mts",
+      "lines": 8,
+      "sha256": "46e34e4b21a03a2417a174abe4f2fb7fea72d9a8311c3ffe7d5ec163c0b3ac6f",
+      "test": true
+    },
+    {
+      "path": "tests/fixtures/local-stack-bridge.mts",
+      "lines": 71,
+      "sha256": "576d81b550852bc0529ccc74989165e8217bf2be2489a00d2d5aa8ccd7215fd6",
+      "test": true
+    },
+    {
+      "path": "tests/fixtures/local-stack-helper.mts",
+      "lines": 87,
+      "sha256": "97cfc3ece71ba4cfe8c10494e033716d0063bb51a4017dec3d424aeb321f6a69",
+      "test": true
+    },
+    {
+      "path": "tests/fixtures/local-stack-wait.mts",
+      "lines": 4,
+      "sha256": "760441881b5ad33cbbdda83a9250e7f76a9345645ba0ba202c7e4182bbe85973",
+      "test": true
+    },
+    {
+      "path": "tests/fixtures/media-images.mts",
+      "lines": 32,
+      "sha256": "97acafbd629907dc6b24772ac7f9a6e5b41762f0e7c3794368a56e2c676c07a5",
+      "test": true
+    },
+    {
+      "path": "tests/fixtures/qq-audit-log-child.mts",
+      "lines": 6,
+      "sha256": "b6214433fff135ba8d5093938b6abadbb4539a09452e95c0a1fc22bc27e06c04",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-account-watchdog.test.mts",
+      "lines": 117,
+      "sha256": "89f91161bc9a0a37bd95deeef9e777ca92620abe9f34b007398b479cb1783bf6",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-backup-restore.test.mts",
+      "lines": 129,
+      "sha256": "3259d758ec8268ea932595d3bb1e8e6798555aba7cb2eb26b948a4b232cbae1d",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-candidate-feedback.test.mts",
+      "lines": 113,
+      "sha256": "088287c3930d8cedb46ed04b79b62f50d405eb1291f024867b44f3d77857f148",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-confirmed-flow.test.mts",
+      "lines": 130,
+      "sha256": "7981ca4ff140b5a2b3617b6cc40ab458423bf75eaffb5d2d167aa379be62314d",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-context-memory-v2.test.mts",
+      "lines": 229,
+      "sha256": "d9755f413a9cb7cff08348a89feb23ac80a42400df604c5eaa34c717989c9336",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-core-runtime.test.mts",
+      "lines": 208,
+      "sha256": "77d28cf4f0b281ceb9872b5824a48f4d82e59e276da97e902124dc72ae893da1",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-data-provider.test.mts",
+      "lines": 12,
+      "sha256": "86a673445fa032a3486c36bae9d596c9e7351e25ca586fc6d5f9a71d8ad5fa1d",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-decision-models-v2.test.mts",
+      "lines": 120,
+      "sha256": "cf51a4650dc069b008c6097c9c9fee19c60d94d85069e01fb5cd02448740441c",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-fake-intelligence.test.mts",
+      "lines": 69,
+      "sha256": "c88b89d75c8564c593cabc86aff70e0c475ee550627e0a794f858252369b427a",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-local-stack.test.mts",
+      "lines": 390,
+      "sha256": "1d33f1ad95658a7a34a67ca1215a60bce92d8516fcc421638632a3ad9bd58502",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-media-interpretation.test.mts",
+      "lines": 400,
+      "sha256": "fe01bb7e1ad3ff878ae23d624e6c7272b670c2c00745709040d2a7865ffc05b1",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-mobile-link.test.mts",
+      "lines": 22,
+      "sha256": "1ae1f7f2c6ce53f443aea0d3ae1e67958c77f7acc6839c99ac5415d18fea3dd7",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-mock-auto.test.mts",
+      "lines": 209,
+      "sha256": "39bc07f952c4debb4ac1c51a51608ab6948fdfe84e1d749a3cca79c9bcd9c08b",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-outbox-pump.test.mts",
+      "lines": 66,
+      "sha256": "5fee9232d74a55b46814a9ef14acb6d311fe2f6dfbcb9f8134a006c94cd9dc3f",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-owner-api.test.mts",
+      "lines": 327,
+      "sha256": "14195cf2814875eab041ea122099727897c0fcf53a3889444bee28d35b834d55",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-owner-overview.test.mts",
+      "lines": 70,
+      "sha256": "faa70b5fbb8adc5983008ec3aca800f6c0bb7e1f1eb1179e4a54191037786df1",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-platform-mutation.test.mts",
+      "lines": 120,
+      "sha256": "4246042523a4497dcadd61ef37281ce88866db61503e30f9dd7867933546278e",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-prompt-versions.test.mts",
+      "lines": 50,
+      "sha256": "9f7f75764d7543fab49ba14e816f9e2726915dade221ea4b9f1d47d3b0f2abf8",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-qq-bridge.test.mts",
+      "lines": 673,
+      "sha256": "e55807ded3f9bd7a6507b66bc50ab419baa6cefc541fb6d820fa49277ec6c02e",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-qq-mainline-audit.test.mts",
+      "lines": 119,
+      "sha256": "4fe2f5663eed6532ed22161ffa2beda321976800eef283ade1333097d39f6a92",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-qq-media.test.mts",
+      "lines": 162,
+      "sha256": "6587264d7f9053925514a8a9420d2d0f74a52d403dca216fd84f691dcf9549e6",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-qq-watchdog.test.mts",
+      "lines": 170,
+      "sha256": "65d54fd2990b1adea16f3134ff12855ddd3d2845b7d00205cb23e30d60e672a7",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-recovery.test.mts",
+      "lines": 157,
+      "sha256": "951a657dd53c5a27cab1069e585a81a45da182f28fbf6562bfc7ca69ebcdd571",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-reply-pipeline-v2.test.mts",
+      "lines": 264,
+      "sha256": "3506a184e0c5e8f767f78cc4739a3a83601b94e7bcbcdfddd027c218174f7c38",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-scheduling.test.mts",
+      "lines": 118,
+      "sha256": "cd22ba83a147f4b164ea1bcd51206f8a1a9793ab1bbd047deb098c7d3d434b34",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-skill-invalidation.test.mts",
+      "lines": 100,
+      "sha256": "f3e975c9e76b2b1d2f4306b6ea9b2094d19542be27b2415158b5e00f226afd15",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-skill-outbox-pump.test.mts",
+      "lines": 90,
+      "sha256": "00a3f00be9d2709e5823d8a03be1374074920e3d5c826a4dee3c0d63f37c2539",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-trial-report.test.mts",
+      "lines": 79,
+      "sha256": "2412c30fa8785082542cc4a8b41f42d28e0991dae11a959c42473ca73c3c0883",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-unknown-resolution.test.mts",
+      "lines": 158,
+      "sha256": "5ee5676072f933b3f0ce5e00d52b285a79f61758fe137cad589bc9355b2cbbec",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-wechat-bridge-dispatch.test.mts",
+      "lines": 149,
+      "sha256": "9f43206c7110310cec8b141220ec646778b9d80888c5255fd6b06b13a5be719d",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-wechat-bridge.test.mts",
+      "lines": 107,
+      "sha256": "4d58323beb375e5bde323e78bd67a2d3ae29ebdbb676b3c6fe7c30d32f5c4cd2",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-wechat-media-fetch.test.mts",
+      "lines": 521,
+      "sha256": "c7e2a24d95513b0bd964f4f838f5e4f2dc79097dad2257b8148a39cfe5ba4bf3",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-wechat-send-candidate.test.mts",
+      "lines": 87,
+      "sha256": "e5d5232c8403c52e3edb6f2e2ec0a462be3cfca631fd03231b7ba88e6178f0cd",
+      "test": true
+    },
+    {
+      "path": "tests/integration/postgres-workspace.test.mts",
+      "lines": 86,
+      "sha256": "8dbe80511a74b8863ea2665ac074fa989f4856a0c740778296e67a624b55795d",
+      "test": true
+    }
+  ]
+}

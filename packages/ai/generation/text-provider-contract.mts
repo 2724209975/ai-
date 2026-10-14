@@ -12,7 +12,7 @@ export interface TextModelProvider {
   readonly retentionPolicy: string;
   invoke(input: { context: ScopedContext; decision: ReplyDecision; policy: PolicyProjection; signal: AbortSignal }): Promise<{
     alternatives: unknown;
-    usage?: { inputTokens?: number; outputTokens?: number };
+    usage?: { inputTokens?: number; outputTokens?: number; reasoningTokens?:number;cachedInputTokens?:number };
   }>;
 }
 

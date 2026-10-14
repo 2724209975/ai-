@@ -1,0 +1,81 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID,randomBytes} from 'node:crypto';
+import {resolve} from 'node:path';
+import {applyMigrations} from '../../packages/infrastructure/postgres/migrate.mts';
+import {withTransaction} from '../../packages/infrastructure/postgres/transaction.mts';
+import {PgDataProvider} from '../../packages/data/postgres/provider.mts';
+import {MemoryWorker} from '../../packages/data/memory-v2/worker.mts';
+import {MemoryRepository} from '../../packages/data/memory-v2/repository.mts';
+import {PgConfirmedService} from '../../packages/orchestration/postgres/confirmed-service.mts';
+import {MockPlatformAdapter} from '../../packages/platform/mock/adapter.mts';
+import {LinkService} from '../../packages/link/service.mts';
+import {PgLinkStore} from '../../packages/link/store.mts';
+import {DesktopLinkCollector} from '../../packages/link/desktop.mts';
+import type {LinkMemoryV2,LinkContextV2} from '../../packages/link/types.mts';
+import {clearTrialContent} from '../../packages/link/cleanup.mts';
+const url=process.env.TEST_DATABASE_URL;
+test('phone history enters scoped v2 data; full memories and deletions sync without live reply jobs',{skip:!url&&!process.env.CI,timeout:120000},async()=>{
+ if(!url)throw new Error('TEST_DATABASE_URL_REQUIRED');
+ const {Client,Pool}=await import('pg'),schema='mobile_v2_'+randomBytes(8).toString('hex'),admin=new Client({connectionString:url});await admin.connect();let pool:InstanceType<typeof Pool>|undefined;
+ try{
+  await admin.query(`CREATE SCHEMA ${schema}`);await admin.query(`SET search_path TO ${schema}`);await applyMigrations(admin,resolve('db/migrations'));
+  pool=new Pool({connectionString:url,options:`-c search_path=${schema}`,max:8});const db=pool,ownerId='synthetic-mobile-owner',data=new PgDataProvider(),contactId=randomUUID(),conversationId=randomUUID(),accountId=randomUUID(),authority={};
+  await withTransaction(db,tx=>data.createContact(tx,{id:contactId,conversationId,platformAccountId:accountId,externalContactRef:'synthetic-contact',displayName:'合成联系人',enrollmentStatus:'enrolled'}));
+  const platform=new MockPlatformAdapter({platform:'qq',accountId,authority});const confirmed=new PgConfirmedService({pool:db,data,platform,authority,ownerId,aggregationWindowMs:0,intelligence:{async propose(){throw new Error('MOBILE_HISTORY_MUST_NOT_GENERATE');},async checkEdited(){return {allowed:true,reasons:[]};}}});
+  await confirmed.enrollContact({contactId,conversationId,accountId,externalContactRef:'synthetic-contact',timezone:'Asia/Shanghai',goal:'自然聊天'});
+  await confirmed.setPipelineVersion(conversationId,{version:2,expectedVersion:(await confirmed.ownerContacts(contactId)).items[0]!.version,idempotencyKey:randomUUID()});
+  const service=new LinkService(new PgLinkStore(db,ownerId)),pair=await service.pair(await service.invite(),'合成手机'),group=await service.bind(pair.deviceId,'archive',{name:'合成',platform:'qq',relationship:'',style:'简短',preferences:[],memory:{consent:false,paused:false,profile:'',entries:[]}},contactId),collector=new DesktopLinkCollector(db,service,undefined,ownerId);
+  const id=`phone:${pair.deviceId}:one`,body={speaker:'OTHER' as const,text:'我喜欢饺子',timestamp:Date.now()-10000,uncertain:false,generated:false,styleExample:false,sourceId:'page'};
+  await service.sync(pair.deviceId,group.id,[{id,kind:'message',body,deleted:false,expectedVersion:0}],0);await collector.refresh();await collector.refresh();
+  const imported=(await db.query(`SELECT * FROM data_messages WHERE provenance->>'source'='mobile-link-history-v2'`)).rows;assert.equal(imported.length,1);assert.equal(imported[0].actor,'contact');assert.equal(imported[0].mode,'import');assert.equal(imported[0].contact_id,contactId);
+  assert.equal((await confirmed.ownerReplyJobs(conversationId)).items.length,0);assert.equal((await confirmed.ownerTasks(contactId)).items.length,0);
+  const unmarked=`phone:${pair.deviceId}:owner`,generated=`phone:${pair.deviceId}:generated`;
+  await service.sync(pair.deviceId,group.id,[{id:unmarked,kind:'message',body:{...body,speaker:'ME',text:'嗯嗯，晚点聊呀',sourceId:'unmarked'},deleted:false,expectedVersion:0},{id:generated,kind:'message',body:{...body,speaker:'ME',text:'不该学习的候选',sourceId:'generated',generated:true,styleExample:true},deleted:false,expectedVersion:0}],0);await collector.refresh();
+  const worker=new MemoryWorker({pool:db,data,ownerId});await worker.runOnce();
+  assert.equal((await withTransaction(db,tx=>new MemoryRepository(tx,{ownerId,contactId},data).style())).examples.length,0);
+  await service.sync(pair.deviceId,group.id,[{id:unmarked,kind:'message',body:{...body,speaker:'ME',text:'嗯嗯，晚点聊呀',sourceId:'unmarked',styleExample:true},deleted:false,expectedVersion:1}],0);await collector.refresh();await worker.runOnce();
+  const style=await withTransaction(db,tx=>new MemoryRepository(tx,{ownerId,contactId},data).style());assert.deepEqual(style.examples,['嗯嗯，晚点聊呀']);assert.ok(!JSON.stringify(style).includes('不该学习的候选'));
+  const memory=await withTransaction(db,async tx=>{const repo=new MemoryRepository(tx,{ownerId,contactId},data);return repo.create({memoryType:'boundary',subject:'contact',predicate:'avoid_address',object:'地址',content:'不要询问我的地址',evidenceType:'user_confirmed',evidenceRefs:[{id:imported[0].id,version:1}],confidence:1,importance:.9,locked:true},true);});
+  await collector.refresh();let records=(await service.sync(pair.deviceId,group.id,[],0)).records;
+  const exported=records.find(r=>r.id===`desktop:memory:${memory.id}`)!.body as LinkMemoryV2;assert.equal(exported.evidenceValid,true);assert.equal(exported.locked,true);assert.deepEqual(exported.evidenceRefs,[{id:imported[0].id,version:1}]);assert.equal(exported.accountId,accountId);
+  const context=records.find(r=>r.kind==='context_v2')!.body as LinkContextV2;assert.equal(context.contactId,contactId);assert.equal(context.retentionDays,90);assert.ok(context.relationship);assert.ok(context.personalStyle);
+  const noteInput={recordId:id,expectedVersion:1,content:'对方喜欢饺子',memoryType:'preference' as const,subject:'contact' as const,idempotencyKey:randomUUID()};
+  const fromSource=await collector.remember((await service.store.read()).groups[0],noteInput);assert.deepEqual(fromSource.evidenceRefs,[{id:imported[0].id,version:1}]);assert.equal(fromSource.status,'active');
+  assert.equal((await collector.remember((await service.store.read()).groups[0],noteInput)).id,fromSource.id);await collector.refresh();
+  await assert.rejects(collector.remember((await service.store.read()).groups[0],{...noteInput,recordId:generated}),/FORBIDDEN/);
+  const evidenceGroup=(await service.store.read()).groups[0],memoryRecordId=`desktop:memory:${memory.id}`;
+  const trace=await collector.evidence(evidenceGroup,memoryRecordId);assert.equal(trace.memoryId,memory.id);assert.equal(trace.sources.length,1);
+  assert.deepEqual(trace.sources[0],{id:imported[0].id,version:1,status:'current',speaker:'OTHER',text:body.text,timestamp:body.timestamp,origin:'phone',uncertain:false,generated:false});
+  const otherContact=randomUUID(),otherConversation=randomUUID();
+  const otherMessage=await withTransaction(db,async tx=>{await data.createContact(tx,{id:otherContact,conversationId:otherConversation,platformAccountId:accountId,externalContactRef:'other-synthetic',displayName:'另一个合成对象',enrollmentStatus:'enrolled'});return data.appendObservedMessage(tx,{contactId:otherContact,conversationId:otherConversation,platformAccountId:accountId,platformMessageId:'other-source',platformEventId:'other-event',actor:'contact',type:'text',contentRef:'另一个对象的私有原文',sentAt:new Date().toISOString(),receivedAt:new Date().toISOString(),provenance:{source:'fixture'},isAgentGenerated:false,mode:'import'},randomUUID());});
+  await db.query("UPDATE data_evidence SET source_id=$2 WHERE owner_kind='fact' AND owner_id=$1",[memory.id,otherMessage.id]);
+  assert.deepEqual((await collector.evidence(evidenceGroup,memoryRecordId)).sources,[{id:otherMessage.id,version:1,status:'unavailable'}]);
+  await db.query("UPDATE data_evidence SET source_id=$2 WHERE owner_kind='fact' AND owner_id=$1",[memory.id,imported[0].id]);
+  // Read during a source-update race: revised/deleted rows must not masquerade as the cited version.
+  await db.query('UPDATE data_messages SET version=version+1,content_ref=$2 WHERE id=$1',[imported[0].id,'已修改的合成原文']);
+  assert.deepEqual((await collector.evidence(evidenceGroup,memoryRecordId)).sources,[{id:imported[0].id,version:1,status:'updated'}]);
+  await db.query("UPDATE data_messages SET version=1,deletion_status='deleted',content_ref='' WHERE id=$1",[imported[0].id]);
+  assert.deepEqual((await collector.evidence(evidenceGroup,memoryRecordId)).sources,[{id:imported[0].id,version:1,status:'deleted'}]);
+  await db.query("UPDATE data_messages SET deletion_status='active',content_ref=$2 WHERE id=$1",[imported[0].id,body.text]);
+  const forged=structuredClone(evidenceGroup);(forged.records[memoryRecordId].body as LinkMemoryV2).evidenceRefs=[{id:randomUUID(),version:1}];
+  assert.deepEqual((await collector.evidence(forged,memoryRecordId)).sources,trace.sources); // Only repository evidence is authoritative.
+  (forged.records[memoryRecordId].body as LinkMemoryV2).ownerId='other-owner';await assert.rejects(collector.evidence(forged,memoryRecordId),/FORBIDDEN/);
+  const foreignContact=structuredClone(evidenceGroup);(foreignContact.records[memoryRecordId].body as LinkMemoryV2).contactId=randomUUID();await assert.rejects(collector.evidence(foreignContact,memoryRecordId),/FORBIDDEN/);
+  const staleMemory=structuredClone(evidenceGroup);(staleMemory.records[memoryRecordId].body as LinkMemoryV2).version=memory.version+1;await assert.rejects(collector.evidence(staleMemory,memoryRecordId),/STALE_VERSION/);
+  const stable=await service.sync(pair.deviceId,group.id,[],0);await collector.refresh();await collector.refresh();
+  const repeated=await service.sync(pair.deviceId,group.id,[],stable.cursor);
+  assert.equal(repeated.revision,stable.revision);assert.deepEqual(repeated.records,[]);assert.deepEqual(repeated.conflicts,[]);
+  // Correcting source content replaces its evidence version without triggering platform ingress.
+  await service.sync(pair.deviceId,group.id,[{id,kind:'message',body:{...body,text:'我不喜欢饺子'},deleted:false,expectedVersion:1}],0);await collector.refresh();await collector.refresh();
+  const messages=(await db.query(`SELECT * FROM data_messages WHERE provenance->>'source'='mobile-link-history-v2' AND provenance->>'sourceId'='page' ORDER BY created_at`)).rows;assert.equal(messages.length,2);assert.equal(messages[0].deletion_status,'deleted');assert.equal(messages[1].content_ref,'我不喜欢饺子');assert.equal(messages[1].provenance.linkVersion,2);
+  records=(await service.sync(pair.deviceId,group.id,[],0)).records;assert.notEqual((records.find(r=>r.id===`desktop:memory:${memory.id}`)!.body as LinkMemoryV2)?.evidenceValid,true);
+  await assert.rejects(collector.evidence((await service.store.read()).groups[0],memoryRecordId),/NOT_FOUND/); // Source invalidation tombstones the dependent memory.
+  const current=await withTransaction(db,tx=>new MemoryRepository(tx,{ownerId,contactId},data).get(memory.id));if(current.status!=='deleted')await withTransaction(db,tx=>new MemoryRepository(tx,{ownerId,contactId},data).change(memory.id,{action:'delete',expectedVersion:current.version}));await collector.refresh();
+  assert.equal((await service.sync(pair.deviceId,group.id,[],0)).records.find(r=>r.id===`desktop:memory:${memory.id}`)?.deleted,true);
+  await service.deleteGroup(pair.deviceId,group.id);await collector.refresh();assert.equal((await db.query(`SELECT count(*) FROM data_messages WHERE provenance->>'source'='mobile-link-history-v2' AND deletion_status='active'`)).rows[0].count,'0');
+  assert.equal((await confirmed.ownerReplyJobs(conversationId)).items.length,0);assert.equal((await db.query('SELECT count(*) FROM orch_send_tasks')).rows[0].count,'0');
+  const configBefore=(await db.query('SELECT config FROM ai_model_configs_v2')).rows;
+  await withTransaction(db,clearTrialContent);assert.equal((await db.query("SELECT count(*) FROM data_messages WHERE deletion_status='active'")).rows[0].count,'0');assert.equal((await db.query("SELECT count(*) FROM data_style_profiles WHERE examples<>'[]'::jsonb")).rows[0].count,'0');assert.deepEqual((await db.query('SELECT config FROM ai_model_configs_v2')).rows,configBefore);
+ }finally{await pool?.end();await admin.query('SET search_path TO public');await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}
+});

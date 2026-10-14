@@ -1,0 +1,19 @@
+{
+  "registryAdditions": [
+    {"key":"decision-luna","providerId":"openai","modelId":"gpt-6-luna","modelVersion":"operator-verified","protocol":"openai-responses","baseUrl":"https://api.openai.com/v1/","apiKeyEnv":"AI_V2_OPENAI_KEY","dataRegion":"operator-verified","retentionPolicy":"operator-verified","tasks":["decision"],"contextTokens":16384,"outputTokens":2048,"thinking":"disabled"},
+    {"key":"decision-haiku","providerId":"anthropic","modelId":"claude-haiku-5-5","modelVersion":"operator-verified","protocol":"anthropic-messages","baseUrl":"https://api.anthropic.com/v1/","apiKeyEnv":"AI_V2_ANTHROPIC_KEY","dataRegion":"operator-verified","retentionPolicy":"operator-verified","tasks":["decision"],"contextTokens":16384,"outputTokens":2048,"thinking":"disabled"},
+    {"key":"emotion-opus","providerId":"anthropic","modelId":"claude-opus-5-5","modelVersion":"operator-verified","protocol":"anthropic-messages","baseUrl":"https://api.anthropic.com/v1/","apiKeyEnv":"AI_V2_ANTHROPIC_KEY","dataRegion":"operator-verified","retentionPolicy":"operator-verified","tasks":["analysis"],"contextTokens":32768,"outputTokens":4096}
+  ],
+  "routeConfigPatch": {
+    "decisionEngineV21": {
+      "mode":"shadow",
+      "classifierProvider":"decision-luna",
+      "classifierFallbackProvider":"decision-haiku",
+      "analysisProvider":"emotion-opus",
+      "minConfidence":0.8,
+      "contactIds":[],
+      "cohortPercent":100,
+      "experimentKey":"decision-v2.1-A"
+    }
+  }
+}

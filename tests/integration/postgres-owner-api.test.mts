@@ -106,7 +106,7 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     await service.pauseContact(contactId, { expectedVersion: currentVersion, idempotencyKey: 'pause-contact-2' });
     const pausedRow = (await service.ownerConversations()).items.find(item => item.contactId === contactId)!;
     assert.deepEqual(pausedRow.pauseReasons, ['OWNER_PAUSE']);
-    assert.deepEqual(pausedRow.allowedActions, ['resumeContact']);
+    assert.deepEqual(pausedRow.allowedActions, ['resumeContact','resumeRoutine']);
     const plansBeforePausedInbound = (await service.getConversation(conversationId)).plans.length;
     const pausedInbound = inbound('paused-message-1', '暂停期间的来信');
     assert.equal(await service.ingestPlatformEvent(pausedInbound), undefined);
@@ -114,7 +114,7 @@ test('real PostgreSQL: owner API covers reject, resume, policy, facts, media and
     assert.equal(await service.ingestPlatformEvent(inbound('paused-message-2', '另一条来信')), undefined);
     const pausedWithMessages = (await service.ownerConversations()).items.find(item => item.contactId === contactId)!;
     assert.equal(pausedWithMessages.unreviewedPausedInboundCount, 2);
-    assert.deepEqual(pausedWithMessages.allowedActions, ['resumeContact', 'acknowledgePausedInbound']);
+    assert.deepEqual(pausedWithMessages.allowedActions, ['resumeContact','resumeRoutine', 'acknowledgePausedInbound']);
     await assert.rejects(service.requestPausedReply(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'draft-while-paused' }), { message: 'POLICY_BLOCKED' });
     assert.equal((await service.getConversation(conversationId)).plans.length, plansBeforePausedInbound, 'paused inbound creates no plan');
     const resumed = await service.resumeContact(contactId, { expectedVersion: pausedWithMessages.version, idempotencyKey: 'resume-contact-1' });

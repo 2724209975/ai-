@@ -1,0 +1,223 @@
+{
+  "protocol": "p4-5d-column-family-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "clientBytes": 100449384,
+  "guard": "0x3a24060",
+  "exceptionUsable": true,
+  "callerCount": 26,
+  "memberCount": 21,
+  "members": [
+    {
+      "entry": "0x2527800",
+      "callerSites": [
+        "0x2527e41",
+        "0x2527f0d",
+        "0x2527fc8"
+      ],
+      "prologue": "48895c24085556574154415541564157488d6c24d94881ec",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3a24220",
+      "callerSites": [
+        "0x3a24245"
+      ],
+      "prologue": "48895c240848896c2410488974241848897c242041574883",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3a24330",
+      "callerSites": [
+        "0x3a24355"
+      ],
+      "prologue": "48895c240848896c2410488974241848897c242041564883",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3a24457",
+      "callerSites": [
+        "0x3a2445c"
+      ],
+      "prologue": "48895c2440e8fffbffff8bd885c075724885f674598d45ff",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3a24510",
+      "callerSites": [
+        "0x3a2452c"
+      ],
+      "prologue": "48895c24084889742410574883ec300f297424208bf20f28",
+      "argumentRegistersUsed": [
+        "RDX"
+      ],
+      "impliedArgumentCount": 2
+    },
+    {
+      "entry": "0x3a24590",
+      "callerSites": [
+        "0x3a245af"
+      ],
+      "prologue": "48895c240848896c24104889742418574883ec204863ea49",
+      "argumentRegistersUsed": [
+        "RDX"
+      ],
+      "impliedArgumentCount": 2
+    },
+    {
+      "entry": "0x3a24620",
+      "callerSites": [
+        "0x3a2462d"
+      ],
+      "prologue": "48895c2408574883ec20488bf9e82efaffff8bd885c07514",
+      "argumentRegistersUsed": [
+        "RCX"
+      ],
+      "impliedArgumentCount": 1
+    },
+    {
+      "entry": "0x3a24660",
+      "callerSites": [
+        "0x3a24688"
+      ],
+      "prologue": "48895c240848896c2410488974241848897c242041564883",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3a247b0",
+      "callerSites": [
+        "0x3a247fa"
+      ],
+      "prologue": "48895c2410574883ec408bfa488bd9410fb74808488d15ed",
+      "argumentRegistersUsed": [
+        "RDX",
+        "RCX"
+      ],
+      "impliedArgumentCount": 2
+    },
+    {
+      "entry": "0x3a2488e",
+      "callerSites": [
+        "0x3a248a0"
+      ],
+      "prologue": "4889742450488bcb0f29742430f2410f1030e8bbf7ffff8b",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3a24910",
+      "callerSites": [
+        "0x3a2492f"
+      ],
+      "prologue": "48895c240848896c24104889742418574883ec204863da41",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3ab4e50",
+      "callerSites": [
+        "0x3ab4ec6"
+      ],
+      "prologue": "48895c24084889742410574883ec40418bd9498bf04533c9",
+      "argumentRegistersUsed": [
+        "R8"
+      ],
+      "impliedArgumentCount": 3
+    },
+    {
+      "entry": "0x3ab55c0",
+      "callerSites": [
+        "0x3ab56dc"
+      ],
+      "prologue": "48895c240848896c24104889742418574883ec40498bf149",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3ab9860",
+      "callerSites": [
+        "0x3ab99b3"
+      ],
+      "prologue": "4c8d04b500000000488bcbe8b0108a00ebbb8b8c24c00000",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3ac7051",
+      "callerSites": [
+        "0x3ac70da"
+      ],
+      "prologue": "4c89a42490000000488d1cc508000000e8ea28fdff85c00f",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3ad7dc0",
+      "callerSites": [
+        "0x3ad7e42"
+      ],
+      "prologue": "48897c2440752c488b11488d0d2fcc6c014c8b4210488b52",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3ad8dcc",
+      "callerSites": [
+        "0x3ad8ef5"
+      ],
+      "prologue": "49837f4000498d7f400f85ce000000498b17488d0d1bbc6c",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3adbbf0",
+      "callerSites": [
+        "0x3adbd02"
+      ],
+      "prologue": "48895c240844894424184889542410555657415441554156",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3adddf7",
+      "callerSites": [
+        "0x3adde58"
+      ],
+      "prologue": "448b4b684585c97e064c8b4360eb074c8d05233a3301498b",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    },
+    {
+      "entry": "0x3ade67f",
+      "callerSites": [
+        "0x3adee69"
+      ],
+      "prologue": "488958080f57c0488968f0488bea488978e833ff4c8960e0",
+      "argumentRegistersUsed": [
+        "RDX"
+      ],
+      "impliedArgumentCount": 2
+    },
+    {
+      "entry": "0x3adf0d0",
+      "callerSites": [
+        "0x3adf689",
+        "0x3adfd77",
+        "0x3adfe2b",
+        "0x3ae017e"
+      ],
+      "prologue": "4c894c2420555356574154415541564157488d6c24a84881",
+      "argumentRegistersUsed": [],
+      "impliedArgumentCount": 0
+    }
+  ],
+  "disposition": "NO_GO",
+  "reasons": [
+    "family-derived-from-the-shared-misuse-guard",
+    "function-name-attribution-still-requires-upstream-source-comparison"
+  ]
+}

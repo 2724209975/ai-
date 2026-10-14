@@ -14,6 +14,7 @@ import { pendingContactBatch } from '../../packages/ai/strategy/fake-decision.mt
 import { PgPrivateImageReader } from '../../packages/data/media/pg-private-reader.mts';
 import type { ImagePreparationPort } from '../../packages/orchestration/postgres/media-preparation.mts';
 import { PgConfirmedService, type DispatchPlatform, type PersistentIntelligence } from '../../packages/orchestration/postgres/confirmed-service.mts';
+import { embeddingFromEnv } from '../../packages/data/memory-v2/embedding.mts';
 import { createDispatchWorker } from '../../packages/orchestration/postgres/worker.mts';
 import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
 import { setContactScope, withTransaction } from '../../packages/infrastructure/postgres/transaction.mts';
@@ -38,6 +39,8 @@ function sameSecret(actual: string | null, expected: string): boolean {
 export function createWxBridge(options: {
   pool: PgPool; accountId: string; selfRef: string; ingressToken: string; rawStore: RawEventStore;
   maxBodyBytes?: number; outboxIntervalMs?: number; onError?(phase: string): void;
+  /** Waits this long after the last contact message so a burst gets one reply; 0 replies at once. */
+  aggregationWindowMs?: number; maxAggregationMs?: number;
   /** Production startup supplies this only after hashing the pinned files; fixtures may omit it. */
   binaryFingerprint?: WxBinaryFingerprint;
   /** 04's provider. Defaults to the persistent fake; a real model is supplied here, not fetched. */
@@ -123,8 +126,10 @@ export function createWxBridge(options: {
       observe: options.imageUnderstanding.observe }),
   } : undefined;
   const service = new PgConfirmedService({ pool: options.pool, data,
+    ownerId:process.env.OWNER_ID,embedding:embeddingFromEnv(process.env),
     intelligence: options.intelligence ?? createPgPersistentFakeIntelligence({ pool: options.pool, data }),
-    platform, authority, aggregationWindowMs: 0, images });
+    platform, authority, aggregationWindowMs: options.aggregationWindowMs ?? 0,
+    ...(options.maxAggregationMs !== undefined ? { maxAggregationMs: options.maxAggregationMs } : {}), images });
   const resolvePeer = async (peerRef: string) => {
     const client = await options.pool.connect();
     try {
@@ -146,7 +151,7 @@ export function createWxBridge(options: {
     onError: () => report('outbox-error') });
   // Same lease, ledger and per-part preflight as every other adapter; only creation differs.
   const worker = options.dispatch
-    ? createDispatchWorker({ pool: options.pool, service, intervalMs: options.dispatch.workerIntervalMs ?? 2_000,
+    ? createDispatchWorker({ pool: options.pool, service, accountId: options.accountId, intervalMs: options.dispatch.workerIntervalMs ?? 2_000,
         onError: (error, phase) => report(`worker-${phase}-${error instanceof Error ? error.message : 'unknown'}`) })
     : undefined;
   const workerEnabled = Boolean(options.dispatch) && options.dispatch?.workerEnabled !== false;
@@ -249,10 +254,10 @@ export function createWxBridge(options: {
 
   return { server, service, outbox, worker, watchdog,
     async start() {
-      if (options.startPaused || watchdog) await service.recordAccountHealth({ accountId: options.accountId, healthy: false, faultCode: 'BRIDGE_RESTARTED' });
+      if (options.startPaused) await service.recordAccountHealth({ accountId: options.accountId, healthy: false, faultCode: 'BRIDGE_RESTARTED' });
       // Recovery first: no new send may happen before ambiguous attempts are reconciled.
       await service.recover();
-      if (watchdog) { await watchdog.tick(); if (watchdog.state().status === 'fatal') throw new Error('WATCHDOG_PERSISTENCE_FAILED'); watchdog.start(); }
+      if (watchdog) { await watchdog.tick(); if (watchdog.state().status === 'fatal') throw new Error('WATCHDOG_PERSISTENCE_FAILED'); if (!options.startPaused && watchdog.state().status === 'pending') throw new Error('WATCHDOG_NOT_READY'); watchdog.start(); }
       await outbox.tick();
       outbox.start();
       if (workerEnabled) worker?.start();

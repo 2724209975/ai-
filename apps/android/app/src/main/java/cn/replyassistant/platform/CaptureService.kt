@@ -21,10 +21,10 @@ class CaptureService : Service() {
         private var instance = WeakReference<CaptureService>(null)
         const val STOP = "cn.replyassistant.STOP_CAPTURE"
         fun active() = instance.get()?.projection != null
-        fun captureIfActive(): Boolean {
+        fun captureIfActive(append: Boolean = true): Boolean {
             val service = instance.get() ?: return false
             if (service.projection == null) return false
-            service.requestFrame()
+            service.requestFrame(append)
             return true
         }
     }
@@ -33,6 +33,8 @@ class CaptureService : Service() {
     private var display: VirtualDisplay? = null
     private var pending = false
     private var processing = false
+    private var appendCapture = true
+    private var captureArchive: String? = null
     private var stopping = false
     private var idle: Job? = null
     private var timeout: Job? = null
@@ -62,7 +64,7 @@ class CaptureService : Service() {
             resize(bounds.width(), bounds.height())
             display = projection!!.createVirtualDisplay("reply-screenshot", bounds.width(), bounds.height(), resources.displayMetrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, null, null, handler)
-            requestFrame()
+            requestFrame(intent.getBooleanExtra("append", true))
         } catch (_: Exception) { endSession("无法截取画面，请用系统截图后分享给回复助手") }
         return START_NOT_STICKY
     }
@@ -89,7 +91,12 @@ class CaptureService : Service() {
             if (bitmap == null) return@setOnImageAvailableListener
             if (padded !== bitmap) padded?.recycle()
             scope.launch {
-                try { controller.addCapturedPage(ImageImporter(this@CaptureService).fromBitmap(bitmap)) }
+                try {
+                    val page = ImageImporter(this@CaptureService).fromBitmap(bitmap)
+                    if (controller.state.value.selectedArchiveId != captureArchive) {
+                        java.io.File(page.path).delete(); controller.reportError("聊天对象已变化，请在正确对象中重新截屏")
+                    } else controller.addCapturedPage(page, appendCapture)
+                }
                 catch (e: CancellationException) { throw e }
                 catch (_: Exception) { controller.reportError("截图保存失败，请重试或分享截图") }
                 finally { bitmap.recycle(); processing = false; if (!stopping) { OverlayService.showPanel(); armIdle() } }
@@ -100,8 +107,10 @@ class CaptureService : Service() {
         previous?.setOnImageAvailableListener(null, null)
         previous?.close()
     }
-    private fun requestFrame() {
+    private fun requestFrame(append: Boolean) {
         if (stopping || pending || processing || timeout?.isActive == true) return
+        appendCapture = append
+        captureArchive = controller.state.value.selectedArchiveId
         idle?.cancel()
         timeout = scope.launch {
             // Wait until both the overlay and consent Activity have disappeared.

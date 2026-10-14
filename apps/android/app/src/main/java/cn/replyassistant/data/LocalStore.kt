@@ -26,10 +26,12 @@ class LocalStore(context: Context, databaseName: String = "assistant.db") : SQLi
         writableDatabase.apply {
             beginTransaction()
             try {
-                delete("archives", null, null)
-                archives.forEach { archive -> insertOrThrow("archives", null, ContentValues().apply {
-                    put("id", archive.id); put("body", json.encodeToString(archive))
-                }) }
+                val previous = rawQuery("SELECT id,body FROM archives",null).use { cursor -> buildMap { while(cursor.moveToNext()) put(cursor.getString(0),cursor.getString(1)) } }
+                val ids=archives.map {it.id}.toSet()
+                previous.keys.filterNot {it in ids}.forEach {delete("archives","id=?",arrayOf(it))}
+                archives.forEach { archive -> val body=json.encodeToString(archive)
+                    if(previous[archive.id]!=body) insertWithOnConflict("archives",null,ContentValues().apply {put("id",archive.id);put("body",body)},SQLiteDatabase.CONFLICT_REPLACE).also {check(it!=-1L)}
+                }
                 delete("session", null, null)
                 session?.let { insertOrThrow("session", null, ContentValues().apply { put("id", 1); put("body", json.encodeToString(it)) }) }
                 setTransactionSuccessful()

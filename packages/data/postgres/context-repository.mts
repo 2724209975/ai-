@@ -15,9 +15,10 @@ export class PgContextRepository {
   private readonly db: PgQuery;
   constructor(db: PgQuery) { this.db = db; }
 
-  async queryMessages(input: ScopedRead & { cutoffTime: string; cutoffMessageId?: string; mode?: 'live' | 'import'; limit?: number }) {
+  async queryMessages(input: ScopedRead & { cutoffTime: string; cutoffMessageId?: string; mode?: 'live' | 'import'; limit?: number; numericOrder?:boolean }) {
     scoped(input);
     if (!Number.isFinite(Date.parse(input.cutoffTime)) || input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1)) throw new Error('VALIDATION_FAILED');
+    const order=(alias:string)=>input.numericOrder?`COALESCE(CASE WHEN ${alias}.platform_order_key ~ '^[0-9]+$' THEN ${alias}.platform_order_key::numeric END,-1),` : '';
     const result = await this.db.query<Record<string, unknown>>(`
       SELECT m.* FROM data_messages m
       JOIN data_contacts c ON c.id = m.contact_id AND c.conversation_id = m.conversation_id
@@ -26,9 +27,9 @@ export class PgContextRepository {
         AND (m.mode = 'live' OR ($3 = 'import' AND m.mode = 'import'))
         AND m.sent_at <= $2::timestamptz
         AND ($4::uuid IS NULL OR (cutoff.id IS NOT NULL AND
-          (m.sent_at,COALESCE(m.platform_order_key,''),m.platform_message_id,m.id) <=
-          (cutoff.sent_at,COALESCE(cutoff.platform_order_key,''),cutoff.platform_message_id,cutoff.id)))
-      ORDER BY m.sent_at DESC,COALESCE(m.platform_order_key,'') DESC,m.platform_message_id DESC,m.id DESC
+          (m.sent_at,${order('m')}COALESCE(m.platform_order_key,''),m.platform_message_id,m.id) <=
+          (cutoff.sent_at,${order('cutoff')}COALESCE(cutoff.platform_order_key,''),cutoff.platform_message_id,cutoff.id)))
+      ORDER BY m.sent_at DESC,${order('m').replace(/,$/,' DESC,')}COALESCE(m.platform_order_key,'') DESC,m.platform_message_id DESC,m.id DESC
       LIMIT $5`, [input.contactId, input.cutoffTime, input.mode ?? 'live', input.cutoffMessageId ?? null, input.limit ?? null]);
     return result.rows.reverse();
   }
@@ -40,6 +41,7 @@ export class PgContextRepository {
       SELECT f.* FROM data_facts f
       WHERE f.scope = ANY($2::text[]) AND (f.scope = 'global' OR f.scope = $1)
         AND f.confirmation_status = 'confirmed' AND f.deletion_status = 'active'
+        AND f.memory_owner_id IS NULL
         AND f.valid_from <= $3::timestamptz AND (f.valid_until IS NULL OR $3::timestamptz < f.valid_until)
       ORDER BY f.id`, [input.contactId, scopes, input.asOf]);
     return result.rows;
@@ -52,6 +54,7 @@ export class PgContextRepository {
       SELECT f.* FROM data_facts f
       WHERE f.scope = ANY($2::text[]) AND (f.scope = 'global' OR f.scope = $1)
         AND f.confirmation_status = 'confirmed' AND f.deletion_status = 'active'
+        AND f.memory_owner_id IS NULL
         AND f.valid_from <= $3::timestamptz AND (f.valid_until IS NULL OR $3::timestamptz < f.valid_until)
         AND strpos(lower(f.content), lower($4)) > 0
       ORDER BY f.id`, [input.contactId, scopes, input.asOf, input.query]);

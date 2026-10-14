@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">回复助手</string>
-    <string name="accessibility_description">仅在你主动读取或填写时处理当前聊天画面。填写不会点击发送。可以随时在设置中关闭。</string>
+    <string name="accessibility_description">仅在你主动读取时获取当前聊天的可见内容。不填写输入框，不点击发送。可以随时在设置中关闭。</string>
 </resources>

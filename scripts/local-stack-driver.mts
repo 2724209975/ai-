@@ -5,13 +5,14 @@ import { isAbsolute, resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { readCoreConfig, type EnvLike } from '../apps/core/config.mts';
+import { isPrivateIPv4, readCoreConfig, type EnvLike } from '../apps/core/config.mts';
 import type { ManagedProcess } from './local-supervisor.mts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const pgExecutable = (bin: string, name: string) => join(bin, `${name}${process.platform === 'win32' ? '.exe' : ''}`);
 export type LocalStackPlatform = 'wechat' | 'qq';
 export type LocalStackConfig = { platform: LocalStackPlatform; bridgeEntry: string; bin: string; data: string;
+  bridges?: { name: string; platform: LocalStackPlatform; entry: string; port: number }[];
   databaseUrl: string; pgPort: number; corePort: number; bridgePort: number; env: EnvLike };
 function required(env: EnvLike, name: string) { const value = env[name]?.trim(); if (!value) throw new Error(`MISSING_ENV:${name}`); return value; }
 /** The bridge entry and required variables differ per platform; both stacks stay separately runnable. */
@@ -38,31 +39,42 @@ export async function readLocalStackConfig(input: EnvLike): Promise<LocalStackCo
   const databaseUrl = required(input, 'DATABASE_URL'), database = new URL(databaseUrl), pgPort = Number(database.port || '5432');
   if (!['postgres:', 'postgresql:'].includes(database.protocol) || database.hostname !== '127.0.0.1' || !Number.isSafeInteger(pgPort) || pgPort < 1 || pgPort > 65535) throw new Error('LOCAL_DATABASE_REQUIRED');
   const origin = new URL(required(input, 'PUBLIC_ORIGIN'));
-  if (origin.protocol !== 'http:' || origin.hostname !== '127.0.0.1' || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== '/') throw new Error('LOCAL_ORIGIN_REQUIRED');
-  const corePort = Number(origin.port || '80'), bridgePort = Number(input.LOCAL_BRIDGE_PORT || '19099');
-  if (!Number.isSafeInteger(bridgePort) || bridgePort < 1 || bridgePort > 65535 || new Set([pgPort, corePort, bridgePort]).size !== 3) throw new Error('LOCAL_PORTS_INVALID');
+  if (origin.protocol !== 'http:' || (origin.hostname !== '127.0.0.1' && !isPrivateIPv4(origin.hostname)) || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== '/') throw new Error('LOCAL_ORIGIN_REQUIRED');
+  const corePort = Number(origin.port || '80');
   const platformInput = input.LOCAL_BRIDGE_PLATFORM?.trim() || 'wechat';
   if (platformInput !== 'wechat' && platformInput !== 'qq') throw new Error('LOCAL_BRIDGE_PLATFORM_INVALID');
   const platform: LocalStackPlatform = platformInput;
   const selection = platformSelection(platform);
-  const env = { ...input, HOST: '127.0.0.1', START_PAUSED: '1', CORE_PLATFORM: platform };
+  const enabled = input.LOCAL_STACK_PLATFORMS?.split(',').map(value=>value.trim()) ?? [platform];
+  if (!enabled.length || enabled.some(value=>value!=='qq' && value!=='wechat') || new Set(enabled).size!==enabled.length) throw new Error('LOCAL_STACK_PLATFORMS_INVALID');
+  const bridges = enabled.map((value,index) => ({ name: `bridge-${value}`, platform: value as LocalStackPlatform,
+    entry: platformSelection(value as LocalStackPlatform).entry,
+    port: Number(input[value==='qq' ? 'LOCAL_QQ_BRIDGE_PORT' : 'LOCAL_WECHAT_BRIDGE_PORT'] || (enabled.length===1 ? input.LOCAL_BRIDGE_PORT : undefined) || String(19099+index)) }));
+  const ports=[pgPort,corePort,...bridges.map(b=>b.port)];
+  if (ports.some(port=>!Number.isSafeInteger(port) || port<1 || port>65535) || new Set(ports).size!==ports.length) throw new Error('LOCAL_PORTS_INVALID');
+  const bridgePort=bridges[0].port;
+  // Only core is reachable over LAN. A wildcard also keeps loopback health checks working.
+  const env = { ...input, HOST: isPrivateIPv4(origin.hostname) ? '0.0.0.0' : '127.0.0.1', START_PAUSED: input.START_PAUSED?.trim() || '0', CORE_PLATFORM: platform };
   readCoreConfig({ ...env, PORT: String(corePort) });
-  for (const name of selection.required) required(input, name);
-  // Outbound needs its endpoint; asking for outbound without one is a configuration mistake.
-  if (input[selection.outboundVar]?.trim() === '1') for (const name of selection.outboundRequires) required(input, name);
-  return { platform, bridgeEntry: selection.entry, bin, data, databaseUrl, pgPort, corePort, bridgePort, env };
+  for (const bridge of bridges) {
+    const config=platformSelection(bridge.platform);
+    for (const name of config.required) required(input,name);
+    if (input[config.outboundVar]?.trim()==='1') for (const name of config.outboundRequires) required(input,name);
+  }
+  if (bridges.length>1 && input.QQ_ACCOUNT_ID===input.WECHAT_ACCOUNT_ID) throw new Error('LOCAL_ACCOUNT_IDS_CONFLICT');
+  return { platform, bridgeEntry: selection.entry, bridges, bin, data, databaseUrl, pgPort, corePort, bridgePort, env };
 }
 
-async function freePort(port: number) {
+async function freePort(port: number, host = '127.0.0.1') {
   await new Promise<void>((done, fail) => {
     const server = createServer(); server.once('error', () => fail(new Error('LOCAL_PORT_IN_USE')));
-    server.listen(port, '127.0.0.1', () => server.close(error => error ? fail(error) : done()));
+    server.listen(port, host, () => server.close(error => error ? fail(error) : done()));
   });
 }
 export function createLocalStackDriver(options: { config: LocalStackConfig; signal: AbortSignal;
   log(event: string, service?: string, measurement?: Record<string, unknown>): Promise<void>;
   /** In-memory test injection only. The production CLI never reads overrides from env or argv. */
-  entries?: { core?: string; bridge?: string; migrate?: string }; onSpawn?(service: string, child: ChildProcess): void;
+  entries?: { core?: string; bridge?: string; 'bridge-qq'?: string; 'bridge-wechat'?: string; migrate?: string }; onSpawn?(service: string, child: ChildProcess): void;
   onCommandSpawn?(child: ChildProcess): void;
   startupMs?: number; stopMs?: number }) {
   const { config, log } = options, startupMs = options.startupMs ?? 30_000, stopMs = options.stopMs ?? 15_000;
@@ -78,10 +90,11 @@ export function createLocalStackDriver(options: { config: LocalStackConfig; sign
     });
   }
   async function start(name: string): Promise<ManagedProcess> {
-    if (!['postgres', 'core', 'bridge'].includes(name)) throw new Error('LOCAL_SERVICE_INVALID');
+    const bridge=config.bridges?.find(b=>b.name===name);
+    if (!['postgres', 'core', 'bridge'].includes(name) && !bridge) throw new Error('LOCAL_SERVICE_INVALID');
     if (options.signal.aborted) throw new Error('LOCAL_STOPPED');
-    const port = name === 'postgres' ? config.pgPort : name === 'core' ? config.corePort : config.bridgePort;
-    await freePort(port);
+    const port = name === 'postgres' ? config.pgPort : name === 'core' ? config.corePort : bridge?.port ?? config.bridgePort;
+    await freePort(port, name === 'core' ? config.env.HOST : '127.0.0.1');
     if (name === 'postgres') {
       const pid = await clusterPid(config.data);
       if (pid !== undefined) {
@@ -95,7 +108,7 @@ export function createLocalStackDriver(options: { config: LocalStackConfig; sign
     const lifecycle = new AbortController();
     const child = name === 'postgres'
       ? spawn(pgExecutable(config.bin, 'postgres'), ['-D', config.data, '-p', String(port), '-c', 'listen_addresses=127.0.0.1', '-c', 'logging_collector=off', '-c', 'log_statement=none', '-c', 'log_min_error_statement=panic'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: config.env, cwd: root })
-      : spawn(process.execPath, [name === 'core' ? options.entries?.core ?? join(root, 'apps/core/main.mts') : options.entries?.bridge ?? config.bridgeEntry], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...config.env, PORT: String(port) }, cwd: root });
+      : spawn(process.execPath, [name === 'core' ? options.entries?.core ?? join(root, 'apps/core/main.mts') : options.entries?.[name as 'bridge-qq' | 'bridge-wechat'] ?? options.entries?.bridge ?? bridge?.entry ?? config.bridgeEntry], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...config.env, HOST: name === 'core' ? config.env.HOST : '127.0.0.1', PORT: String(port) }, cwd: root });
     const ownership = name === 'postgres' && child.pid ? { pid: child.pid, exited: false } : undefined;
     let finished = false, failedLog = false, readyPromise: Promise<void> | undefined, stopPromise: Promise<void> | undefined;
     const exited = new Promise<void>(done => {

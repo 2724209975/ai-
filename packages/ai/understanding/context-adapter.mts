@@ -6,6 +6,7 @@ import type { MediaInterpretationRef } from '../../contracts/index.mts';
 type Ref = Readonly<{ id: string; version: number; mediaInterpretation?: MediaInterpretationRef }>;
 /** Shared read shape of 03's memory and PostgreSQL projections. */
 export type DataContextProjectionInput = Readonly<{
+  contextPackageV2?: import('../../contracts/context-memory-v2.mts').ContextPackageV2;
   snapshot: Readonly<{ id: string; contactId: string; conversationId: string; generation: number; cutoffMessageId?: string | null; cutoffTime: string; messageRefs: readonly Ref[]; summaryRefs: readonly Ref[]; factRefs: readonly Ref[]; analysisRefs: readonly Ref[]; policyVersion: number; hash: string }>;
   messages: readonly Readonly<{ id: string; contactId: string; actor: string; type: string; contentRef?: string | null; sentAt: string; isAgentGenerated: boolean; mode: string; platformAccountId: string; platformMessageId: string; mediaId?: string | null; mediaInterpretation?: StoredMediaInterpretation }>[];
   facts: readonly Readonly<{ id: string; scope: string; version: number; subject: string; content: string | null; confirmationStatus: string; validFrom: string; validUntil?: string | null; deletionStatus: string; evidenceRefs: readonly Ref[] }>[];
@@ -32,6 +33,7 @@ export function adaptDataContextProjection(projection: DataContextProjectionInpu
       i.sourceVersions.some((source, index) => source.id !== ref.evidenceRefs[index]?.id || source.version !== ref.evidenceRefs[index]?.version))) throw new Error('STALE_CONTEXT');
   }
   return {
+    contextPackageV2: projection.contextPackageV2,
     contactId: snapshot.contactId,
     snapshot: {
       id: snapshot.id, conversationId: snapshot.conversationId, generation: snapshot.generation,

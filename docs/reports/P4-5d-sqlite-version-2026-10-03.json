@@ -1,0 +1,49 @@
+{
+  "protocol": "p4-5d-sqlite-version-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "clientBytes": 100449384,
+  "detected": {
+    "version": "3.28.0",
+    "major": 3,
+    "minor": 28,
+    "patch": 0,
+    "versionNumber": 3028000,
+    "stringRva": "0x4d9bc54",
+    "pointerReturners": [
+      {
+        "rva": "0x3a51e79",
+        "bytes": "488d05d49d340148"
+      },
+      {
+        "rva": "0x3a99930",
+        "bytes": "488d051d233001c3"
+      }
+    ],
+    "numberReturners": [
+      {
+        "rva": "0x3a99940",
+        "bytes": "b820342e00c3",
+        "immediate": 3028000
+      }
+    ]
+  },
+  "candidateStrings": [
+    {
+      "rva": "0x4d9bc54",
+      "text": "3.28.0"
+    },
+    {
+      "rva": "0x4e10f61",
+      "text": "3.10.4"
+    },
+    {
+      "rva": "0x4f32676",
+      "text": "3.26.24"
+    }
+  ],
+  "disposition": "NO_GO",
+  "reasons": [
+    "version-corroborated-by-string-and-number-returner",
+    "entry-identity-for-prepare-step-column-finalize-still-unproven"
+  ]
+}

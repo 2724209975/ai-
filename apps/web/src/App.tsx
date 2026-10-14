@@ -1,245 +1,33 @@
+import {ModelUsageSummary} from './workspace/ModelUsageSummary';
+import {ModelSettingsPage} from './workspace/ModelSettingsPage';
+import { MobileLink } from './MobileLink';
+import {PeoplePage} from './PeoplePage';
+import {projectRelease} from '../../../packages/infrastructure/release.mts';
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError, contentHash, type Alternative, type Analysis, type Contact, type Conversation, type Fact, type Fault, type ImportJob, type Media, type Operable, type Overview, type SendTask, type Skill, type Task, type AuditEntry } from './api';
+import { requestKey as key } from './browser-crypto';
+import { api, ApiError, type Analysis, type Fact, type Fault, type ImportJob, type Media, type Overview, type Skill, type AuditEntry } from './api';
 
-type Page = 'overview' | 'contacts' | 'conversations' | 'tasks' | 'facts' | 'analyses' | 'media' | 'skills' | 'imports' | 'audit' | 'faults';
+type Page = 'people' | 'models' | 'link' | 'chat' | 'more' | 'overview' | 'contacts' | 'conversations' | 'tasks' | 'facts' | 'analyses' | 'media' | 'skills' | 'imports' | 'audit' | 'faults';
 const pages: { id: Page; label: string }[] = [
-  { id: 'overview', label: '总览' }, { id: 'tasks', label: '待办' }, { id: 'contacts', label: '联系人' },
+  {id:'people',label:'人物与导入'},
+  { id: 'models', label: '模型配置' }, { id: 'link', label: '手机联动' }, { id: 'chat', label: '聊天' }, { id: 'more', label: '更多' },
+  { id: 'overview', label: '运行状态' }, { id: 'tasks', label: '待办' }, { id: 'contacts', label: '联系人' },
   { id: 'conversations', label: '会话' }, { id: 'facts', label: '资料记忆' }, { id: 'analyses', label: '分析证据' },
   { id: 'media', label: '媒体素材' }, { id: 'skills', label: 'Skill' }, { id: 'imports', label: '导入' },
   { id: 'audit', label: '审计' }, { id: 'faults', label: '故障' },
 ];
-const labels: Record<string, string> = {
-  DISABLED: '代理已关闭', UPDATED: '设置已保存',
-  GENERATION_REQUESTED: '已加入候选生成队列，请到待办查看', REVIEWED: '来信提醒已清除',
-  CREATED: '尚未发送', PREFLIGHT: '发送前检查', LEASED: '待提交', SUBMITTING: '提交中',
-  SUBMITTED: '平台已接收', DELIVERED: '已送达', FAILED_DEFINITE: '确定失败',
-  REJECTED_PREFLIGHT: '发送前拒绝', CANCELLED_PRE_SUBMIT: '提交前取消',
-  RESULT_UNKNOWN: '结果未知，禁止重复发送', PARTIALLY_SENT: '部分已发送',
-  INVALIDATED: '已过期', PAUSED_UNKNOWN_SEND: '未知发送，已暂停',
-  PAUSED_OWNER: '人工接管或来源待核，已暂停', PAUSED_GLOBAL: '全局暂停',
-  PAUSED_FAILURE: '故障暂停', PAUSED_MEDIA: '媒体待核，已暂停',
-  PAUSED_MISSING_FACT: '缺少事实，已暂停', PAUSED_STOP_REQUEST: '停止联系，已暂停',
-  RELOGIN_REQUIRED: '需要重新登录', RECONCILING: '正在核对历史与发送结果',
-  DISCONNECTED: '已断开', DEGRADED: '能力受限', CONNECTED: '连接已建立',
-};
-const label = (value: string) => labels[value] ?? labels[value.toUpperCase()] ?? value;
-const reasonLabels: Record<string, string> = {
-  AUTO_REVIEW_UNAVAILABLE: '自动模式暂未开放，本轮转人工确认',
-  CONFIRM_MODE: '联系人使用确认模式',
-  OWNER_ORIGIN: '自身账号消息来源未明或人工接管，须本人核对',
-  UNKNOWN_SEND: '发送结果未知，核对前禁止重复发送',
-  MEDIA_UNCERTAIN: '媒体含义待核对',
-  MODEL_UNAVAILABLE: '模型故障，处理已暂停',
-};
-const reason = (code: string) => reasonLabels[code] ? `${reasonLabels[code]}（${code}）` : code;
-const can = (row: Operable, action: string) => row.allowedActions.includes(action);
-const needsAttention = (task: Task) => task.allowedActions.length > 0
-  || ['AWAITING_CONFIRMATION', 'APPROVED', 'PARTIALLY_SENT', 'RESULT_UNKNOWN'].includes(task.status)
-  || task.sends.some(send => ['CREATED', 'RESULT_UNKNOWN'].includes(send.status));
-const key = () => crypto.randomUUID();
-const formatError = (error: unknown) => {
-  if (!(error instanceof ApiError)) return '读取失败，请稍后重试。';
-  const message = error.status === 501 ? '该页面的持久化接口尚未提供，当前状态不可用。'
-    : error.status === 503 ? error.body.code === 'SEND_RESULT_UNKNOWN' ? '发送结果未知，须先核对平台状态；不要重复提交。' : '服务或依赖暂不可用，当前状态不能视为正常。'
-    : error.message;
-  return `${message}${error.body.correlationId ? ` · 追踪 ${error.body.correlationId}` : ''}`;
-};
-const safeMediaUrl = (url?: string) => url?.startsWith('/api/v1/media/') && !url.includes('..') ? url : undefined;
-
-/** The platform never proves delivery, so an unknown part stays blocked until the owner states what
- * they checked. "已送达并恢复" also clears the UNKNOWN_SEND pause in the same backend transaction;
- * any other pause reason still keeps the contact paused. */
-function UnknownSendActions({ send, run }: { send: SendTask; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
-  const [evidence, setEvidence] = useState('本人核对');
-  const [busy, setBusy] = useState(false);
-  const missingVersion = !send.version;
-  const record = (status: 'DELIVERED' | 'FAILED_DEFINITE', resume = false) => {
-    if (busy || missingVersion) return;
-    setBusy(true);
-    void run(`/sends/${encodeURIComponent(send.sendTaskId)}/resolve`, {
-      status, evidenceRef: evidence.trim() || '本人核对', expectedVersion: send.version, idempotencyKey: key(),
-      ...(resume ? { resume: true } : {}),
-    }).catch(() => {}).finally(() => setBusy(false));
-  };
-  return <div className="editor">
-    <label>核对证据<input type="text" value={evidence} maxLength={120} disabled={busy}
-      onChange={event => setEvidence(event.target.value)} placeholder="例如：手机已收到" /></label>
-    <div className="actions">
-      <button className="primary" disabled={busy || missingVersion} onClick={() => record('DELIVERED', true)}>已送达并恢复</button>
-      <button disabled={busy || missingVersion} onClick={() => record('DELIVERED')}>只记已送达</button>
-      <button disabled={busy || missingVersion} onClick={() => record('FAILED_DEFINITE')}>记明确失败</button>
-    </div>
-    {missingVersion && <p className="muted">缺少版本信息，无法核对。</p>}
-  </div>;
-}
-
-function SendState({ sends, run }: { sends: SendTask[]; run?: (path: string, body: Record<string, unknown>) => Promise<void> }) {
-  if (!sends.length) return <p className="muted">尚无发送任务，不代表已发送。</p>;
-  return <ol className="send-list">{sends.map(send => <li key={send.sendTaskId}><strong>第 {send.sequence} 条：{label(send.status)}</strong>
-    {send.approvalSource === 'mock_auto' && <span> · 自动决策（仅 mock 平台）</span>}
-    {send.approvalSource === 'owner_confirmation' && <span> · 本人确认</span>}
-    {send.receiptLevel && (['SUBMITTED', 'DELIVERED', 'RESULT_UNKNOWN'].includes(send.status)) && <span> · 回执 {send.receiptLevel}</span>}
-    {send.lastError && <p className="muted">{send.lastError}</p>}
-    {send.correlationId && <small>追踪 {send.correlationId}</small>}
-    {send.status === 'RESULT_UNKNOWN' && run && <UnknownSendActions send={send} run={run} />}
-  </li>)}</ol>;
-}
-
-function TaskCard({ task, run }: { task: Task; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
-  const [selected, setSelected] = useState<Alternative | null>(task.alternatives[0] ?? null);
-  const [parts, setParts] = useState((task.alternatives[0]?.parts ?? []).map(part => part.content ?? ''));
-  const [rejectionReason, setRejectionReason] = useState('');
-  const shownIds = task.alternatives.map(a => a.alternativeId);
-  const shownKey = shownIds.join(',');
-  const active = can(task, 'confirmPlan') || can(task, 'rejectPlan') || can(task, 'regeneratePlan');
-  useEffect(() => {
-    if (active) void api.command(`/tasks/${encodeURIComponent(task.taskId)}/present`, {
-      expectedVersion: task.taskVersion, idempotencyKey: `candidate-view:${task.taskId}:${task.taskVersion}`, shownAlternativeIds: shownKey ? shownKey.split(',') : [],
-    }).catch(() => {});
-  }, [task.taskId, task.taskVersion, shownKey, active]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => { const first = task.alternatives[0] ?? null; setSelected(first); setParts((first?.parts ?? []).map(part => part.content ?? '')); setError(''); setRejectionReason(''); }, [task.taskVersion, task.planVersion, task.planId]);
-  async function submit() {
-    if (!selected || busy || !can(task, 'confirmPlan')) return;
-    if (selected.parts.some(part => part.type !== 'text')) { setError('当前页面只能编辑文字；表情素材确认接口待定。'); return; }
-    const editedParts = parts.map(content => ({ type: 'text', content: content.trim() }));
-    if (!editedParts.length || editedParts.some(part => !part.content)) { setError('请填写每条回复内容。'); return; }
-    setBusy(true); setError('');
-    try {
-      await run(`/tasks/${encodeURIComponent(task.taskId)}/confirm`, {
-        taskVersion: task.taskVersion, planVersion: task.planVersion, alternativeId: selected.alternativeId,
-        editedParts, contentHash: await contentHash(editedParts), idempotencyKey: key(), shownAlternativeIds: shownIds,
-      });
-    } catch (cause) { setError(formatError(cause)); }
-    finally { setBusy(false); }
-  }
-  async function regenerate() {
-    if (busy || !can(task, 'regeneratePlan')) return;
-    setBusy(true); setError('');
-    try { await run(`/tasks/${encodeURIComponent(task.taskId)}/regenerate`, { expectedVersion: task.taskVersion, idempotencyKey: key(), shownAlternativeIds: shownIds }); }
-    catch (cause) { setError(formatError(cause)); }
-    finally { setBusy(false); }
-  }
-  async function reject() {
-    if (busy || !can(task, 'rejectPlan')) return;
-    setBusy(true); setError('');
-    try { await run(`/tasks/${encodeURIComponent(task.taskId)}/reject`, { expectedVersion: task.taskVersion, idempotencyKey: key(), shownAlternativeIds: shownIds,
-      ...(rejectionReason ? { rejectionReason } : {}) }); }
-    catch (cause) { setError(formatError(cause)); }
-    finally { setBusy(false); }
-  }
-  return <article className="card">
-    <div className="card-head"><div><h3>{task.contactName}</h3><p className="muted">待办 {task.taskId} · 方案版本 {task.planVersion}</p></div><span className="badge">{label(task.status)}</span></div>
-    <p>触发原因：{task.reasonCodes.map(reason).join('、') || '未提供'}</p>
-    {(task.status === 'RESULT_UNKNOWN' || task.sends.some(send => send.status === 'RESULT_UNKNOWN')) && <p role="alert" className="warning">有分条发送结果未知。核对前不要重复确认或重发。</p>}
-    {(task.status === 'PARTIALLY_SENT' || (task.sends.some(send => ['SUBMITTED', 'DELIVERED'].includes(send.status)) && task.sends.some(send => !['SUBMITTED', 'DELIVERED'].includes(send.status)))) && <p className="warning">部分消息已提交。下方逐条状态以最新后端记录为准，已提交内容不能保证撤回。</p>}
-    {task.invalidationReason && <p role="alert" className="warning">已失效：{task.invalidationReason}。旧内容未发送。</p>}
-    {task.triggerMessages.map(message => <blockquote key={message.id}><small>{message.at} · {message.type}</small><p>{message.text ?? '媒体消息，请查看会话中的受控媒体。'}</p></blockquote>)}
-    {!!task.requiredInputs?.length && <p>需要补充：{task.requiredInputs.join('、')}</p>}
-    <h4>候选方案</h4>
-    <div className="choices">{task.alternatives.map((alternative, index) => <button type="button" key={alternative.alternativeId}
-      className={selected?.alternativeId === alternative.alternativeId ? 'choice selected' : 'choice'}
-      aria-pressed={selected?.alternativeId === alternative.alternativeId}
-      disabled={busy || !can(task, 'confirmPlan')}
-      onClick={() => { setSelected(alternative); setParts(alternative.parts.map(part => part.content ?? '')); setError(''); }}>
-      <strong>方案 {index + 1}</strong><span>{alternative.parts.map(part => part.content ?? '已批准表情素材').join(' / ')}</span><small>{alternative.strategySummary}</small>
-    </button>)}</div>
-    {selected && can(task, 'confirmPlan') && <div className="editor"><h4>发送前编辑</h4>{selected.parts.map((part, index) => <label key={part.replyPartId}>第 {index + 1} 条
-      <textarea rows={3} value={parts[index] ?? ''} disabled={busy || part.type !== 'text'} onChange={event => setParts(old => old.map((value, i) => i === index ? event.target.value : value))} />
-    </label>)}</div>}
-    {error && <p className="error" role="alert">{error}</p>}
-    {can(task, 'rejectPlan') && <label>拒绝原因（可选）<select value={rejectionReason} disabled={busy} onChange={event => setRejectionReason(event.target.value)}>
-      <option value="">不填写</option><option value="not_my_style">不像我</option><option value="too_long">太长</option>
-      <option value="wrong_tone">语气不对</option><option value="wrong_fact">事实错</option><option value="should_not_reply">不该回</option>
-    </select></label>}
-    <div className="actions">
-      {can(task, 'confirmPlan') && <button className="primary" disabled={busy} onClick={() => void submit()}>确认并发送</button>}
-      {can(task, 'regeneratePlan') && <button disabled={busy} onClick={() => void regenerate()}>重新生成候选</button>}
-      {can(task, 'rejectPlan') && <button disabled={busy} onClick={() => void reject()}>拒绝候选</button>}
-    </div>
-    <h4>逐条发送状态</h4><SendState sends={task.sends} run={run} />
-  </article>;
-}
-
-function TaskList({ tasks, run }: { tasks: Task[]; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
-  const [history, setHistory] = useState(false);
-  const current = tasks.filter(needsAttention);
-  const past = tasks.filter(task => !needsAttention(task));
-  const visible = history ? past : current;
-  return <section className="stack">
-    <div className="actions" aria-label="待办范围">
-      <button aria-pressed={!history} className={!history ? 'primary' : ''} onClick={() => setHistory(false)}>待处理（{current.length}）</button>
-      <button aria-pressed={history} className={history ? 'primary' : ''} onClick={() => setHistory(true)}>历史记录（{past.length}）</button>
-    </div>
-    {visible.length ? visible.map(task => <TaskCard key={task.taskId} task={task} run={run} />)
-      : <p className="empty">{history ? '暂无历史记录' : '暂无待处理任务'}</p>}
-    <p className="muted">最多加载 100 条记录，待处理任务优先。</p>
-  </section>;
-}
-
-function RowActions({ row, prefix, run, actions }: { row: Operable; prefix: string; run: (path: string, body: Record<string, unknown>) => Promise<void>; actions: { name: string; title: string; extra?: Record<string, unknown> }[] }) {
-  return <div className="actions">{actions.filter(action => can(row, action.name)).map(action => <button key={action.name} onClick={() => void run(`${prefix}/${encodeURIComponent(row.id)}/${action.name}`, { expectedVersion: row.version, idempotencyKey: key(), ...action.extra })}>{action.title}</button>)}</div>;
-}
-
-function ContactAgentControl({ row, run }: { row: Contact; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  async function toggle() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await run(`/contacts/${encodeURIComponent(row.id)}/updatePolicy`, {
-        expectedVersion: row.version, idempotencyKey: key(), policy: { agentEnabled: !row.agentEnabled },
-      });
-    } catch { /* The shared command handler displays errors and refreshes stale versions. */ }
-    finally { setBusy(false); }
-  }
-  return <button disabled={busy} onClick={() => void toggle()}>{row.agentEnabled ? '关闭代理' : '开启代理'}</button>;
-}
-
-function ContactPolicyEditor({ row, run }: { row: Contact; run: (path: string, body: Record<string, unknown>) => Promise<void> }) {
-  const [goal, setGoal] = useState(row.goal);
-  const [style, setStyle] = useState((row.stylePreferences ?? []).join('\n'));
-  const [restrictions, setRestrictions] = useState((row.restrictions ?? []).join('\n'));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    setGoal(row.goal);
-    setStyle((row.stylePreferences ?? []).join('\n'));
-    setRestrictions((row.restrictions ?? []).join('\n'));
-    setError('');
-  }, [row.policyVersion]);
-  const lines = (value: string) => value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  async function save() {
-    if (busy) return;
-    const styles = lines(style), limits = lines(restrictions);
-    if (!goal.trim() || goal.length > 200 || styles.length > 24 || limits.length > 24 ||
-      [...styles, ...limits].some(line => line.length > 120)) {
-      setError('目标或条目过长，请缩短后再保存。'); return;
-    }
-    setBusy(true); setError('');
-    try {
-      await run(`/contacts/${encodeURIComponent(row.id)}/updatePolicy`, {
-        expectedVersion: row.version, idempotencyKey: key(),
-        policy: { goal: goal.trim(), stylePreferences: styles, restrictions: limits },
-      });
-    } catch { /* The shared command handler shows the backend error and refreshes stale versions. */ }
-    finally { setBusy(false); }
-  }
-  return <div className="editor">
-    <label>聊天目标<input value={goal} maxLength={200} disabled={busy} onChange={event => setGoal(event.target.value)} /></label>
-    <label>表达偏好（每行一条）<textarea rows={2} value={style} disabled={busy} placeholder="例如：简短、像日常聊天" onChange={event => setStyle(event.target.value)} /></label>
-    <label>避免内容（每行一条）<textarea rows={2} value={restrictions} disabled={busy} placeholder="例如：不提具体见面时间" onChange={event => setRestrictions(event.target.value)} /></label>
-    {error && <p className="error" role="alert">{error}</p>}
-    <button disabled={busy} onClick={() => void save()}>保存聊天设置</button>
-  </div>;
-}
-
+import { label, reason, can, formatError, safeMediaUrl, RowActions } from './controls';
+import { Workspace, createWorkspaceState } from './workspace/Workspace';
 function App() {
-  const initial = location.hash.slice(1) as Page;
-  const [page, setPage] = useState<Page>(pages.some(item => item.id === initial) ? initial : 'overview');
+  const routePage = () => {
+    const target = location.hash.slice(1).split('/')[0] as Page;
+    return ['tasks','contacts','conversations'].includes(target) ? 'chat' : target;
+  };
+  const initial = routePage();
+  const [page, setPage] = useState<Page>(pages.some(item => item.id === initial) ? initial : 'chat');
   /** Tagged with the page it belongs to: a hash change renders the new page before its fetch
    * resolves, and stale data from the previous page must never be rendered as the new one. */
+  const [workspaceState, setWorkspaceState] = useState(createWorkspaceState);
   const [data, setData] = useState<{ page: Page; value: unknown } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -250,9 +38,11 @@ function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
+  const [serverVersion,setServerVersion]=useState('');
+  useEffect(()=>{if(auth!=='signed-in')return;let active=true;void fetch('/api/v1/project-version',{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(value=>{if(active&&value?.desktopVersion)setServerVersion(value.desktopVersion);}).catch(()=>{});return()=>{active=false;};},[auth]);
   const refresh = useCallback(() => setReload(value => value + 1), []);
   useEffect(() => {
-    const onHash = () => { const target = location.hash.slice(1) as Page; if (pages.some(item => item.id === target)) setPage(target); };
+    const onHash = () => { const target = routePage(); if (pages.some(item => item.id === target)) setPage(target); };
     addEventListener('hashchange', onHash); return () => removeEventListener('hashchange', onHash);
   }, []);
   useEffect(() => {
@@ -273,12 +63,14 @@ function App() {
       setAuthError(body?.code === 'RATE_LIMITED' ? '尝试次数过多，请稍后再试。' : '密码不正确，或未通过来源校验。');
     } finally { setSigningIn(false); }
   }
+  function clearSession() { setAuth('anonymous'); setData(null); setDrafts({}); setWorkspaceState(createWorkspaceState()); }
+  useEffect(() => { addEventListener('owner-session-expired',clearSession); return () => removeEventListener('owner-session-expired',clearSession); }, []);
   async function signOut() {
     try { await api.logout(); } catch { /* the cookie is cleared server-side even if the call races */ }
-    setAuth('anonymous'); setData(null);
+    clearSession();
   }
   useEffect(() => {
-    if (auth !== 'signed-in') return;
+    if (auth !== 'signed-in' || page === 'people' || page === 'chat' || page === 'more' || page === 'link' || page === 'models') { setLoading(false); return; }
     let active = true;
     let inFlight = false;
     setLoading(data?.page !== page);
@@ -299,7 +91,7 @@ function App() {
     void load();
     const onVisible = () => { if (!document.hidden) void load(); };
     if (page === 'tasks' || page === 'overview') document.addEventListener('visibilitychange', onVisible);
-    const interval = page === 'tasks' || page === 'overview' ? setInterval(() => { void load(); }, 10_000) : undefined;
+    const interval = page === 'tasks' || page === 'overview' ? setInterval(() => { void load(); }, 5_000) : undefined;
     return () => {
       active = false;
       if (interval) clearInterval(interval);
@@ -310,7 +102,7 @@ function App() {
     setError(''); setNotice('');
     try {
       const result = await api.command(path, body);
-      setNotice(`命令已受理，当前结果：${result.status ? label(result.status) : '等待最新状态'}。追踪 ${result.correlationId}`);
+      setNotice(result.skipped?.length ? `恢复 ${result.restored?.length ?? 0} 个联系人，${result.skipped.length} 个仍需处理：${[...new Set(result.skipped.flatMap(item=>item.reasons))].map(reason).join('、')}` : `操作已完成：${result.status ? label(result.status) : '等待最新状态'}`);
       refresh();
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) {
@@ -341,10 +133,15 @@ function App() {
         </form>
       </section>}
   </main>;
-  return <main className="page">
-    <header className="topbar"><div><p className="eyebrow">管理端 · 以后端状态为准</p><h1>个人聊天代理</h1></div><div className="actions"><span className="badge">已登录</span><button onClick={() => void signOut()}>退出登录</button></div></header>
-    <nav aria-label="管理页面" className="nav">{pages.map(item => <a key={item.id} href={`#${item.id}`} aria-current={page === item.id ? 'page' : undefined}>{item.label}</a>)}</nav>
-    <div className="page-title"><h2>{pages.find(item => item.id === page)?.label}</h2><button onClick={refresh} disabled={loading}>刷新</button></div>
+  return <main className={`page ${page === 'chat' ? 'workspace-page' : ''}`}>
+    <header className="topbar"><div><p className="eyebrow">聊天工作台</p><h1>个人聊天代理</h1><small>电脑 {projectRelease.desktopVersion} · 手机推荐 {projectRelease.androidVersion}{serverVersion&&serverVersion!==projectRelease.desktopVersion?' · 请刷新页面以匹配运行版本':''}</small></div><div className="actions"><span className="badge">已登录</span><button onClick={() => void signOut()}>退出登录</button></div></header>
+    <nav aria-label="管理页面" className="nav">{pages.filter(item => ['chat','people','models','overview','more'].includes(item.id)).sort((a,b) => ['chat','people','models','overview','more'].indexOf(a.id)-['chat','people','models','overview','more'].indexOf(b.id)).map(item => <a key={item.id} href={`#${item.id}`} aria-current={page === item.id ? 'page' : undefined}>{item.label}</a>)}</nav>
+    {page !== 'chat' && <div className="page-title"><h2>{pages.find(item => item.id === page)?.label}</h2><button onClick={refresh} disabled={loading}>刷新</button></div>}
+    {page === 'models' && <ModelSettingsPage refreshVersion={reload}/>}
+    {page === 'people' && <PeoplePage refreshVersion={reload}/>}
+    {page === 'link' && <MobileLink refreshVersion={reload}/>}
+    {page === 'chat' && <Workspace state={workspaceState} />}
+    {page === 'more' && <section className="more-grid">{pages.filter(item => ['people','link','facts','analyses','media','audit'].includes(item.id)).map(item => <a className="card" key={item.id} href={`#${item.id}`}>{item.label}<span>查看与管理 →</span></a>)}</section>}
     {notice && <p className="notice" role="status">{notice}</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {loading && <p role="status">正在读取后端状态…</p>}
@@ -353,33 +150,17 @@ function App() {
         {row.unknownSendCount > 0 && <p role="alert" className="warning">存在结果未知的发送。须核对平台回执，不能盲目重发。</p>}
         <div className="actions">{row.allowedActions.includes('pauseAll') && <button onClick={() => void run('/control/pause-all', { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>暂停全部代理</button>}
           {row.allowedActions.includes('resumeAll') && <button onClick={() => void run('/control/resume-all', { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>恢复全部代理</button>}</div></article>
-      <article className="card"><h3>账号连接与恢复</h3>{row.connections.length ? row.connections.map((connection, index) => <div className="subcard" key={connection.accountId ?? connection.id ?? index}>
+      <ModelUsageSummary refreshVersion={reload}/><article className="card"><h3>账号连接与恢复</h3>{row.connections.length ? row.connections.map((connection, index) => <div className="subcard" key={connection.accountId ?? connection.id ?? index}>
         <p><strong>{connection.platform}：{label(connection.connectionState ?? connection.state ?? '未知')}</strong></p>
-        <p>能力验证：{connection.verificationStatus ?? '未提供证据'} · 最近核对：{connection.lastReconciledAt ?? '未提供'}</p>
+        <p>最近探测：{connection.lastReconciledAt ? new Date(connection.lastReconciledAt).toLocaleString('zh-CN') : '尚无探测记录'}</p>
+        <p>下一步：{connection.connectionState === 'probe_healthy' ? '可以查看当前聊天；若仍有人工暂停，点击一键恢复。' : connection.connectionState === 'disconnected' ? '检查对应平台客户端、桥接和登录状态，探测正常后再恢复。' : '检查对应桥接是否启动，等待新的健康探测；当前状态无法确认。'}</p>
         {connection.recovery && <p>恢复状态：{label(connection.recovery.status)} · 历史覆盖：{connection.recovery.historyComplete ? '已证实连续' : '未证实连续'} · 未决发送 {connection.recovery.unresolvedSendCount ?? '未提供'}</p>}
         {!!connection.recovery?.gaps?.length && <p className="warning">同步缺口：{connection.recovery.gaps.join('、')}</p>}
         {!!connection.limitations?.length && <p>限制：{connection.limitations.join('、')}</p>}
       </div>) : <p className="warning">{row.connectionQueryStatus === 'ready' ? '当前没有已登记账号；不能推断微信或 QQ 已连接。' : '连接与恢复查询尚未接入；无法判断账号是否在线或历史是否补齐。'}</p>}</article>
-      <article className="card"><h3>故障</h3>{row.faults.length ? row.faults.map(fault => <p key={fault.id}>{fault.summary} · {label(fault.status)}</p>) : <p className="warning">{row.faultQueryStatus === 'ready' ? '当前查询范围内没有故障记录。' : '故障汇总查询尚未接入；不能判断系统无故障。'}</p>}</article>
+      <article className="card"><h3>故障</h3>{row.faults.length ? row.faults.map(fault => <p key={fault.id}>{fault.summary} · {fault.status === 'ACTIVE' ? '仍需处理' : fault.status === 'RECOVERED_AWAITING_OWNER' ? '探测曾恢复，等待本人处理' : label(fault.status)}</p>) : <p className="warning">{row.faultQueryStatus === 'ready' ? '当前查询范围内没有故障记录。' : '故障汇总查询尚未接入；不能判断系统无故障。'}</p>}</article>
       <p className="muted">本页轮询或手动刷新不构成可靠后台通知。</p>
     </section>; })()}
-    {showContent && page === 'tasks' && <TaskList tasks={list<Task>()} run={run} />}
-    {showContent && page === 'contacts' && <section className="stack">{list<Contact>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.name}</h3><span className="badge">{label(row.status)}</span></div>
-      <p>{row.platform} · {row.agentEnabled ? '代理开启' : '代理关闭'} · {row.sendMode}</p><p>目标：{row.goal}</p><p>表达偏好：{row.stylePreferences?.join('、') || '未配置'}</p>
-      <p>主动联系：{row.activeContactEnabled ? '开启' : '关闭'} · 主动表白：{row.activeConfessionEnabled ? '开启' : '关闭'}</p>
-      <p>允许时段：{row.allowedWindows?.join('、') || '未配置'} · 限制：{row.restrictions?.join('、') || '无'}</p><p className="muted">策略版本 {row.policyVersion} · 暂停原因 {row.pauseReasons?.map(reason).join('、') || '无'}</p>
-      {!!row.unreviewedPausedInboundCount && <p role="alert" className="warning">暂停期间收到 {row.unreviewedPausedInboundCount} 条未核对来信。请到会话页查看；恢复不会自动生成回复。</p>}
-      {can(row, 'updatePolicy') && <><ContactAgentControl row={row} run={run} /><ContactPolicyEditor row={row} run={run} /></>}
-      <RowActions row={row} prefix="/contacts" run={(path, body) => run(path, body).catch(() => {})} actions={[{ name: 'pauseContact', title: '暂停联系人' }, { name: 'resumeContact', title: '恢复联系人', extra: { reason: row.pauseReasons?.[0] } }]} />
-    </article>)}</section>}
-    {showContent && page === 'conversations' && <section className="stack">{list<Conversation>().map(row => <article className="card" key={row.id}><div className="card-head"><h3>{row.contactName}</h3><span className="badge">{label(row.status)}</span></div><p className="muted">修订 {row.revision} · generation {row.generation} · 暂停 {row.pauseReasons.map(reason).join('、') || '无'}</p>
-      {!!row.unreviewedPausedInboundCount && <p role="alert" className="warning">暂停期间收到 {row.unreviewedPausedInboundCount} 条未核对来信。下方显示最近 20 条消息；如有更早来信，请在原客户端核对。恢复后可为最新未处理文字生成候选，再到待办确认。</p>}
-      {can(row, 'requestPausedReply') && <button className="primary" onClick={() => void run(`/contacts/${encodeURIComponent(row.contactId)}/requestPausedReply`, { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>为最新来信生成候选</button>}
-      {(row.pauseReasons.includes('OWNER_ORIGIN') || row.messages.some(message => message.actor === 'unknown')) && <p role="alert" className="warning">存在来源未明的自身账号消息。此状态不能自动判为本人发言或系统回显；请人工核对，恢复须以后端允许动作为准。</p>}
-      {row.sends.some(send => send.status === 'RESULT_UNKNOWN') && <p role="alert" className="warning">发送结果未知。核对前不要重复发送；核对后用下方按钮记录结果。</p>}
-      {row.messages.map(message => <blockquote key={message.id}><small>{message.at} · {message.actor === 'unknown' ? '来源未明' : message.actor} · {message.type}</small><p>{message.text ?? '媒体内容请到媒体页面查看'}</p>
-        {message.actor === 'unknown' && message.originEvidenceRefs?.length ? <small>核对证据引用：{message.originEvidenceRefs.join('、')}</small> : null}
-      </blockquote>)}{can(row, 'acknowledgePausedInbound') && <button onClick={() => void run(`/contacts/${encodeURIComponent(row.contactId)}/acknowledgePausedInbound`, { expectedVersion: row.version, idempotencyKey: key() }).catch(() => {})}>已核对，清除来信提醒</button>}<h4>发送记录</h4><SendState sends={row.sends} run={(path, body) => run(path, body).catch(() => {})} /></article>)}</section>}
     {showContent && page === 'facts' && <section className="stack">{list<Fact>().map(row => <article className="card" key={row.id}><h3>{row.content}</h3><p>范围 {row.scope} · 来源 {row.sourceKind} · {row.confirmed ? '已确认' : '未确认'}</p><p>更新 {row.updatedAt} · 有效期 {row.expiresAt ?? '未设置'}</p><p>证据 {row.evidenceRefs?.join('、') || '无'}</p>
       {can(row, 'correctFact') && <label>纠正内容<input value={drafts[row.id] ?? row.content} onChange={event => setDrafts(old => ({ ...old, [row.id]: event.target.value }))} /></label>}
       <div className="actions">{can(row, 'correctFact') && <button onClick={() => void run(`/facts/${encodeURIComponent(row.id)}/correctFact`, { expectedVersion: row.version, content: drafts[row.id] ?? row.content, idempotencyKey: key() }).catch(() => {})}>保存纠正</button>}</div>
@@ -402,7 +183,7 @@ function App() {
       <RowActions row={row} prefix="/imports" run={(path, body) => run(path, body).catch(() => {})} actions={[{ name: 'commitImport', title: '确认导入' }]} /></article>)}</section>}
     {showContent && page === 'audit' && <section className="stack">{list<AuditEntry>().map(row => <article className="card" key={row.id}><h3>{row.action}</h3><p>{row.at} · 联系人 {row.contactId ?? '全局'}</p><p>{row.decisionSummary}</p><p>策略版本 {row.policyVersion ?? '无'} · 方案版本 {row.planVersion ?? '无'} · 发送 {row.sendStatus ? label(row.sendStatus) : '无'}</p><small>追踪 {row.correlationId}</small></article>)}</section>}
     {showContent && page === 'faults' && <section className="stack">{list<Fault>().map(row => <article className="card" key={row.id}><h3>{row.summary}</h3><p>状态 {label(row.status)} · 发生 {row.occurredAt}</p><p>影响联系人 {row.affectedContactIds.join('、') || '未列出'} · 恢复 {row.recoveryState ?? '待核对'}</p><small>追踪 {row.correlationId}</small></article>)}</section>}
-    {showContent && page !== 'overview' && page !== 'tasks' && list<unknown>().length === 0 && <p className="empty">后端当前无记录。</p>}
+    {showContent && !['chat','people','models','more','overview','link'].includes(page) && list<unknown>().length === 0 && <p className="empty">后端当前无记录。</p>}
   </main>;
 }
 export default App;

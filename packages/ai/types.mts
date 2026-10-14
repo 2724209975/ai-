@@ -67,6 +67,7 @@ export interface AnalysisProjection {
 
 /** 03 has already filtered and resolved every ref before calling 04. */
 export interface ScopedContext {
+  contextPackageV2?: import('../contracts/context-memory-v2.mts').ContextPackageV2;
   contactId: string;
   snapshot: ContextSnapshotProjection;
   messages: MessageProjection[];
@@ -92,6 +93,7 @@ export type Result<T> = { ok: true; value: T } | { ok: false; error: { code: Int
 
 export type RiskCategory = 'STOP_REQUEST' | 'REJECTION' | 'ACTIVE_CONTACT' | 'CONFESSION' | 'RELATIONSHIP_COMMITMENT' | 'CONCRETE_MEETING' | 'MONEY_OR_LEGAL' | 'SENSITIVE_DATA' | 'MISSING_FACT';
 export interface ReplyDecision {
+  decisionEngineV21?:{classificationLevel:import('../contracts/decision-v2.mts').ClassificationLevel;analysis:import('../contracts/decision-v2.mts').EmotionAnalysisV21|null};
   conversationId: string;
   contextSnapshotId: string;
   shouldReply: boolean;

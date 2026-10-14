@@ -29,6 +29,69 @@ import java.util.concurrent.TimeUnit
 /** Only synthetic screenshots and local TLS responses; never user's model or chats. */
 @RunWith(AndroidJUnit4::class)
 class MultimodalDeviceTest {
+    @Test fun cancellingVisualGenerationRetainsSourcesAndManualDraftAndRetryUsesTheEdit() {
+        val (server, model) = server()
+        server.use {
+            val controller = setup(server, model)
+            val source = page()
+            try {
+                main { controller.mutateArchive(controller.selected()!!.id) {
+                    it.copy(draft = ReplyDraft(contextRevision = it.revision, alternatives = listOf("原建议"), text = "本人改过的回复", manuallyEdited = true))
+                } }
+                server.enqueue(response(listOf(source), delay = 2000))
+                // A manual draft prevents automatic generation; the explicit request is cancellable.
+                main { controller.addCapturedPage(source)
+                    controller.mutateArchive(controller.selected()!!.id) { it.copy(draft = it.draft!!.copy(previewVersion = controller.state.value.preview!!.version)) }
+                    controller.generate("简短一点") }
+                assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+                main { controller.cancelGeneration() }
+                assertFalse(controller.state.value.busy)
+                assertTrue(controller.state.value.generationCancelled)
+                assertEquals("本人改过的回复", controller.selected()!!.draft!!.text)
+                assertEquals(source.id, controller.state.value.preview!!.pages.single().id)
+                assertTrue(File(source.path).exists())
+                assertTrue(controller.selected()!!.messages.isEmpty())
+                server.enqueue(response(listOf(source)))
+                main { controller.generate("简短一点") }
+                val request = server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()
+                idle(controller)
+                assertFalse(request.contains("本人改过的回复"))
+                server.takeRequest()
+                assertTrue(server.takeRequest()!!.body.readUtf8().contains("本人改过的回复"))
+                assertFalse(controller.state.value.generationCancelled)
+                assertTrue(controller.state.value.error.isBlank())
+                assertEquals(4, server.requestCount)
+                assertEquals(3, controller.selected()!!.draft!!.alternatives.size)
+            } finally { finish(controller) }
+        }
+    }
+    @Test fun accessibleLayoutGeneratesOnceDeduplicatesAndKeepsOldReplyUntilReplacement() {
+        val (server,model)=server()
+        server.use {
+            val controller=setup(server,model)
+            val first=ScreenshotPage(path="",rows=emptyList(),accessibleText="合成界面：对方问周末有空吗；我说周日下午吧；对方说一起喝咖啡")
+            try {
+                server.enqueue(response(listOf(first)))
+                main {controller.addCapturedPage(first,append=false)};idle(controller)
+                val request=server.takeRequest()!!.body.readUtf8()
+                assertTrue(request.contains("合成界面"));assertFalse(request.contains("data:image"))
+                assertTrue(controller.selected()!!.messages.all {it.origin==Origin.ACCESSIBILITY})
+                val old=controller.selected()!!.draft!!
+                val ids=controller.selected()!!.messages.map {it.id}
+                val second=first.copy(id=newId())
+                server.enqueue(MockResponse().setResponseCode(503))
+                main {controller.addCapturedPage(second,append=false)};idle(controller)
+                assertEquals(old,controller.selected()!!.draft)
+                assertEquals(second.id,controller.state.value.preview!!.pages.single().id)
+                server.enqueue(response(listOf(second)))
+                main {controller.generate("自然一点")};idle(controller)
+                assertEquals(ids,controller.selected()!!.messages.map {it.id})
+                assertTrue(controller.state.value.captureStatus.contains("已保存"))
+                assertNotEquals(old.id,controller.selected()!!.draft!!.id)
+                assertTrue(controller.selected()!!.draftHistory.isEmpty())
+            } finally {finish(controller)}
+        }
+    }
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     private fun main(block: () -> Unit) = instrumentation.runOnMainSync(block)
@@ -45,7 +108,7 @@ class MultimodalDeviceTest {
         val cert = HeldCertificate.Builder().commonName("localhost").addSubjectAlternativeName("localhost").build()
         val serverCerts = HandshakeCertificates.Builder().heldCertificate(cert).build()
         val clientCerts = HandshakeCertificates.Builder().addTrustedCertificate(cert.certificate).build()
-        val server = MockWebServer().apply { useHttps(serverCerts.sslSocketFactory(), false); start() }
+        val server = MockWebServer().apply { dispatcher=IndependentPipelineDispatcher(); useHttps(serverCerts.sslSocketFactory(), false); start() }
         val model = ModelClient(OkHttpClient.Builder().sslSocketFactory(clientCerts.sslSocketFactory(), clientCerts.trustManager)
             .followRedirects(false).retryOnConnectionFailure(false).build())
         return server to model
@@ -81,7 +144,7 @@ class MultimodalDeviceTest {
                 assertTrue(page.rows.isEmpty())
                 server.enqueue(response(listOf(page)))
                 main { controller.addCapturedPage(page) }; idle(controller)
-                assertEquals(1, server.requestCount)
+                assertEquals(3, server.requestCount)
                 assertTrue(server.takeRequest()!!.body.readUtf8().contains("data:image/jpeg;base64,"))
                 val archive = controller.selected()!!
                 assertEquals(3, archive.draft!!.alternatives.size); assertEquals(3, archive.messages.size)
@@ -98,6 +161,26 @@ class MultimodalDeviceTest {
                 main { restored.scope.cancel() }
             } finally { finish(controller) }
         }
+    }
+    @Test fun repeatedScreenshotWithPictureNotesDoesNotDuplicateAndEarlierContextPrepends() {
+        val (server,model)=server();val controller=setup(server,model)
+        val dialogue=listOf(VisualMessage(Speaker.OTHER,"周末一起去喝咖啡吗"),VisualMessage(Speaker.ME,"我周日下午可以"),VisualMessage(Speaker.OTHER,"那我们两点见"))
+        fun reply(p:ScreenshotPage,messages:List<VisualMessage>):MockResponse {
+            val content=Json.encodeToString(ScreenshotReply(listOf(VisualPage(p.id,messages,"一张看不清的图片")),listOf("合成回复一","合成回复二","合成回复三")))
+            return MockResponse().setBody(buildJsonObject {put("choices",buildJsonArray {add(buildJsonObject {put("message",buildJsonObject {put("content",content)})})})}.toString())
+        }
+        try {
+            val first=page();server.enqueue(reply(first,dialogue));main {controller.addCapturedPage(first,append=false)};idle(controller)
+            val ids=controller.selected()!!.messages.map {it.id}
+            assertEquals(4,ids.size)
+            val repeated=page();server.enqueue(reply(repeated,dialogue));main {controller.addCapturedPage(repeated,append=false)};idle(controller)
+            assertEquals(ids,controller.selected()!!.messages.map {it.id})
+            val older=page();server.enqueue(reply(older,listOf(VisualMessage(Speaker.ME,"前一天讨论过的背景"))+dialogue));main {controller.addCapturedPage(older,append=false)};idle(controller)
+            val merged=controller.selected()!!.messages
+            assertEquals(5,merged.size);assertEquals("前一天讨论过的背景",merged.first().text)
+            assertEquals(ids,merged.drop(1).map {it.id})
+            assertEquals(9,server.requestCount)
+        }finally {finish(controller);server.shutdown()}
     }
     @Test fun uploadRequiresOneTimeConsentAndNoVisionConfigurationNeverFallsBack() {
         val (server, model) = server()
@@ -122,7 +205,7 @@ class MultimodalDeviceTest {
                 server.enqueue(response(listOf(first)))
                 main { controller.addCapturedPage(first) }; idle(controller)
                 main { controller.editDraft("本人手工草稿"); controller.addCapturedPage(second) }; idle(controller)
-                assertEquals(1, server.requestCount); assertEquals("本人手工草稿", controller.selected()!!.draft!!.text)
+                assertEquals(3, server.requestCount); assertEquals("本人手工草稿", controller.selected()!!.draft!!.text)
                 main { assertTrue(runCatching { controller.copyDraft() }.isFailure) }
                 server.enqueue(MockResponse().setResponseCode(400))
                 main { controller.generate("简短一点") }; idle(controller)
@@ -139,7 +222,7 @@ class MultimodalDeviceTest {
             try {
                 server.enqueue(response(listOf(page)))
                 main { controller.addCapturedPage(page) }; idle(controller)
-                server.takeRequest()
+                repeat(3){server.takeRequest()}
                 main { controller.updatePreview { p -> p.copy(pages = p.pages.map { old -> old.copy(corrected = true,
                     rows = old.rows.mapIndexed { index, row -> if (index == 0) row.copy(text = "周六有空吗") else row }) }) } }
                 server.enqueue(response(listOf(page)))
@@ -199,7 +282,7 @@ class MultimodalDeviceTest {
             } finally { finish(controller) }
         }
     }
-    @Test fun switchingChosenContactClearsOldProcessedImagesAndDoesNotRegenerateThem() {
+    @Test fun switchingChosenContactKeepsOwnProcessedImagesWithoutRegeneratingOrMixing() {
         val (server, model) = server()
         server.use {
             val controller = setup(server, model); val page = page()
@@ -208,11 +291,15 @@ class MultimodalDeviceTest {
                 main { controller.addCapturedPage(page) }; idle(controller)
                 val first = controller.selected()!!.id
                 main { controller.createArchive("另一对象", "测试") }; idle(controller)
-                assertEquals(1, server.requestCount)
+                assertEquals(3, server.requestCount)
                 assertTrue(controller.selected()!!.messages.isEmpty())
                 assertTrue(controller.state.value.preview!!.pages.isEmpty())
-                assertFalse(File(page.path).exists())
+                assertTrue(File(page.path).exists())
                 assertEquals(3, controller.state.value.archives.find { it.id == first }!!.messages.size)
+                main {controller.selectArchive(first)}
+                assertEquals(page.id,controller.state.value.preview!!.pages.single().id)
+                assertTrue(controller.draftIsCurrent())
+                assertEquals(3,server.requestCount)
             } finally { finish(controller) }
         }
     }
@@ -222,7 +309,7 @@ class MultimodalDeviceTest {
             val controller = setup(server, model); val page = page()
             try {
                 server.enqueue(response(listOf(page)))
-                main { controller.addCapturedPage(page) }; idle(controller); server.takeRequest()
+                main { controller.addCapturedPage(page) }; idle(controller); repeat(3){server.takeRequest()}
                 val archive = controller.selected()!!
                 main { controller.reviseMessages(archive.id, archive.messages.dropLast(1).map { it.copy(text = "纠正的原文${it.speaker}") }) }
                 assertEquals(2, controller.state.value.preview!!.pages.single().rows.size)
@@ -245,7 +332,7 @@ class MultimodalDeviceTest {
                 assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
                 server.enqueue(response(listOf(first, second)))
                 main { controller.addCapturedPage(second) }; idle(controller)
-                assertEquals(2, server.requestCount)
+                assertEquals(4, server.requestCount)
                 assertEquals(2, controller.state.value.preview!!.pages.size)
                 assertEquals(3, controller.selected()!!.messages.size)
                 assertEquals(controller.state.value.preview!!.version, controller.selected()!!.draft!!.previewVersion)
@@ -258,14 +345,21 @@ class MultimodalDeviceTest {
             val controller = setup(server, model); val first = page(); val second = page()
             server.dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val ids = Regex("sourceId=([a-zA-Z0-9-]+)").findAll(request.body.readUtf8()).map { it.groupValues[1] }.toList()
+                    val body=request.body.readUtf8()
+                    if(body.contains("严格包含以下13个字段")) {
+                        val content=Json.parseToJsonElement(body).jsonObject["messages"]!!.jsonArray.last().jsonObject["content"]!!.jsonPrimitive.content
+                        val ids=Regex("\\[([^\\]\\n]+)\\] 对方：").findAll(content).map {it.groupValues[1]}.toList()
+                        val d=MobileDecisionV2("2.0","reply","接话",MobileEmotionV2("neutral",.9),null,"接话","自然","short","low",emptyList(),ids,"NORMAL_REPLY",true)
+                        return MockResponse().setBody(buildJsonObject {put("choices",buildJsonArray {add(buildJsonObject {put("message",buildJsonObject {put("content",Json.encodeToString(d))})})})}.toString())
+                    }
+                    val ids = Regex("sourceId=([a-zA-Z0-9-]+)").findAll(body).map { it.groupValues[1] }.toList()
                     return response(ids.map { ScreenshotPage(it, "unused", emptyList()) })
                 }
             }
             try {
                 main { controller.importImages(listOf(Uri.fromFile(File(first.path)), Uri.fromFile(File(second.path)))) }
                 assertNotNull(server.takeRequest(10, TimeUnit.SECONDS)); idle(controller)
-                assertEquals(1, server.requestCount)
+                assertEquals(3, server.requestCount)
                 assertEquals(2, controller.state.value.preview!!.pages.size)
                 assertEquals(3, controller.selected()!!.draft!!.alternatives.size)
             } finally { finish(controller); File(first.path).delete(); File(second.path).delete() }

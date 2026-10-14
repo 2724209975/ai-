@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decision-v2", "type": "object", "additionalProperties": false,
+  "required": ["schema_version","action","intent","emotion","relationship_hint","strategy","tone","target_length","risk_level","required_memory_keys","evidence_message_ids","reason_code","needs_user_approval"],
+  "properties": {
+    "schema_version": {"const":"2.0"}, "action":{"enum":["reply","wait","skip","ask_user"]},
+    "intent":{"type":"string","minLength":1,"maxLength":300}, "emotion":{"type":"object","additionalProperties":false,"required":["label","confidence"],"properties":{"label":{"type":"string","minLength":1,"maxLength":80},"confidence":{"type":"number","minimum":0,"maximum":1}}},
+    "relationship_hint":{"type":["string","null"],"maxLength":300}, "strategy":{"type":"string","minLength":1,"maxLength":300}, "tone":{"type":"string","minLength":1,"maxLength":300},
+    "target_length":{"enum":["short","medium"]}, "risk_level":{"enum":["low","medium","high"]},
+    "required_memory_keys":{"type":"array","maxItems":100,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":300}},
+    "evidence_message_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":300}},
+    "reason_code":{"type":"string","minLength":1,"maxLength":300}, "needs_user_approval":{"type":"boolean"}
+  }
+}

@@ -41,11 +41,71 @@ class PersonalAdvisorDeviceTest {
         val bitmap = Bitmap.createBitmap(400, 600, Bitmap.Config.ARGB_8888)
         try { ImageImporter(context).fromBitmap(bitmap) } finally { bitmap.recycle() }
     }
+    @Test fun newCaptureBatchRetainsUnprocessedFilesDraftAndOriginAcrossRestart() {
+        val namespace = "synthetic-batches-${newId()}"
+        val controller = AssistantController(context,storageNamespace = namespace)
+        val first = page(); val second = page(); val third = page()
+        try {
+            main {
+                val id = controller.createArchive("SyntheticBatch","测试")
+                controller.mutateArchive(id) { it.copy(draft = ReplyDraft(contextRevision = 0,alternatives = listOf("手工旧稿"),manuallyEdited = true)) }
+                controller.addCapturedPage(first,append = false)
+                controller.addCapturedPage(second,append = false)
+                assertEquals(listOf(second.id),controller.state.value.preview!!.pages.map { it.id })
+                assertEquals(first.id,controller.state.value.preview!!.heldBatches.single().pages.single().id)
+                assertEquals("手工旧稿",controller.selected()!!.draft!!.text)
+                controller.addCapturedPage(third,append = true)
+                assertEquals(2,controller.state.value.preview!!.pages.size)
+            }
+            val restored = AssistantController(context,storageNamespace = namespace)
+            try {
+                main {
+                    assertTrue(File(first.path).exists())
+                    val held = restored.state.value.preview!!.heldBatches.single()
+                    restored.restoreCaptureBatch(held.id)
+                    assertEquals(first.id,restored.state.value.preview!!.pages.single().id)
+                    assertEquals(2,restored.state.value.preview!!.heldBatches.single().pages.size)
+                    assertEquals("手工旧稿",restored.selected()!!.draft!!.text)
+                    val id = restored.selected()!!.id
+                    restored.restoreCaptureBatch(restored.state.value.preview!!.heldBatches.single().id)
+                    restored.updatePreview { it.copy(pages = it.pages.mapIndexed { index,p -> if (index == 0) p.copy(includeVisual = true) else p }) }
+                    val other = restored.createArchive("SyntheticOtherBatch","测试")
+                    assertTrue(restored.state.value.preview!!.pages.isEmpty())
+                    assertTrue(restored.state.value.preview!!.heldBatches.all { it.archiveId == id })
+                    assertTrue(File(second.path).exists()); assertTrue(File(third.path).exists())
+                    restored.deleteArchive(id)
+                    restored.deleteArchive(other)
+                    assertFalse(File(first.path).exists()); assertFalse(File(second.path).exists()); assertFalse(File(third.path).exists())
+                }
+            } finally { restored.scope.cancel() }
+        } finally { controller.scope.cancel(); listOf(first,second,third).forEach { File(it.path).delete() } }
+    }
+    @Test fun freshCaptureRetainsCandidatesUntilReplacementAndPreservesProtectedDrafts() {
+        val controller = AssistantController(context,storageNamespace = "synthetic-discard-${newId()}")
+        val images = listOf(page(),page(),page(),page())
+        try { main {
+            val id = controller.createArchive("SyntheticDiscard","测试")
+            controller.mutateArchive(id) { it.copy(draft = ReplyDraft(contextRevision = 0,alternatives = listOf("旧自动候选"))) }
+            controller.addCapturedPage(images[0],append = false)
+            assertEquals("旧自动候选",controller.selected()!!.draft!!.text)
+            assertTrue(controller.selected()!!.draftHistory.isEmpty())
+            controller.mutateArchive(id) { it.copy(draft = ReplyDraft(contextRevision = 0,alternatives = listOf("已复制稿"),state = DraftState.COPIED)) }
+            controller.addCapturedPage(images[1],append = false)
+            assertEquals("已复制稿",controller.selected()!!.draft!!.text)
+            controller.mutateArchive(id) { it.copy(draft = ReplyDraft(contextRevision = 0,alternatives = listOf("手工稿"),manuallyEdited = true)) }
+            controller.addCapturedPage(images[2],append = false)
+            assertEquals("手工稿",controller.selected()!!.draft!!.text)
+            controller.mutateArchive(id) { it.copy(draft = ReplyDraft(contextRevision = 0,alternatives = listOf("本轮候选"))) }
+            controller.addCapturedPage(images[3],append = true)
+            assertEquals("本轮候选",controller.selected()!!.draft!!.text)
+        } } finally { controller.scope.cancel(); images.forEach { File(it.path).delete() } }
+    }
+
     private fun server(): Pair<MockWebServer, ModelClient> {
         val cert = HeldCertificate.Builder().commonName("localhost").addSubjectAlternativeName("localhost").build()
         val serverCerts = HandshakeCertificates.Builder().heldCertificate(cert).build()
         val clientCerts = HandshakeCertificates.Builder().addTrustedCertificate(cert.certificate).build()
-        val server = MockWebServer().apply { useHttps(serverCerts.sslSocketFactory(), false); start() }
+        val server = MockWebServer().apply { dispatcher=IndependentPipelineDispatcher(); useHttps(serverCerts.sslSocketFactory(), false); start() }
         val model = ModelClient(OkHttpClient.Builder().sslSocketFactory(clientCerts.sslSocketFactory(), clientCerts.trustManager)
             .followRedirects(false).retryOnConnectionFailure(false).build())
         return server to model
@@ -83,21 +143,25 @@ class PersonalAdvisorDeviceTest {
                 server.enqueue(response(listOf(page)))
                 main { controller.addCapturedPage(page) }; idle(controller)
                 assertTrue(controller.state.value.error,controller.state.value.error.isBlank())
-                val body = server.takeRequest()!!.body.readUtf8()
-                assertTrue(body.contains("狗头军师") && body.contains("image_url"))
-                assertEquals(1,server.requestCount)
+                val recognition = server.takeRequest()!!.body.readUtf8()
+                assertTrue(recognition.contains("image_url"));server.takeRequest()
+                val body=server.takeRequest()!!.body.readUtf8()
+                assertTrue(body.contains("狗头军师"))
+                assertEquals(3,server.requestCount)
                 assertNotNull(controller.selected()!!.draft!!.advisor)
                 assertEquals(1,controller.selected()!!.memory.entries.size)
                 assertTrue(Personalization.samples(controller.selected()!!).isEmpty())
                 main { controller.teachSample(controller.selected()!!.messages.first { it.speaker == Speaker.ME }.id,true) }
                 server.enqueue(response(listOf(page)))
                 main { controller.generate("沿用样例") }; idle(controller)
-                server.takeRequest()
+                repeat(2){server.takeRequest()}
                 assertEquals(1,Personalization.samples(controller.selected()!!).size)
                 main { controller.editDraft("手工改过的回复") }
                 server.enqueue(response(listOf(page)))
                 main { controller.feedback("太长了") }; idle(controller)
-                assertTrue(server.takeRequest()!!.body.readUtf8().contains("更简短"))
+                val rewriteRequest=server.takeRequest()!!.body.readUtf8()
+                assertTrue(rewriteRequest.contains("更简短"))
+                assertTrue(rewriteRequest.contains("手工改过的回复") && rewriteRequest.contains("尚未发送"))
                 assertTrue(controller.selected()!!.preferences.isEmpty())
                 assertEquals("手工改过的回复",controller.selected()!!.draftHistory.single().text)
                 main { controller.savePreference("不使用感叹号",false) }

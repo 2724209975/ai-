@@ -82,6 +82,7 @@ export type PgReceptionOptions = {
   onUnmappedSelf?(tx: PgClient, input: { accountId: string; rawEventRef: string; correlationId: string }): Promise<void>;
   /** Optional private echo classification, in the inbox transaction. Omission preserves legacy delivery. */
   classifySelf?(tx: PgClient, observation: WireMessage): Promise<'echo' | 'unmapped'>;
+  mapSelfToConversation?: boolean;
   now?: () => number;
 };
 
@@ -118,7 +119,7 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
         // cannot turn a previously quarantined early echo into another accepted inbox row.
         const prior = await tx.query<{ payload_sha256: string }>(stableSelf
           ? `SELECT payload_sha256 FROM platform_inbox_raw WHERE platform='qq' AND account_id=$1
-              AND conversation_id IN ('agent-echo','unmapped:self') AND event_key=$2`
+              AND event_key=$2`
           : `SELECT payload_sha256 FROM platform_inbox_raw WHERE platform='qq' AND account_id=$1
               AND conversation_id=$2 AND event_key=$3`,
           stableSelf ? [options.accountId, dedupeKey] : [options.accountId, inboxScope, dedupeKey]);
@@ -136,7 +137,12 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
             && await options.classifySelf!(tx, observation) === 'echo';
           if (!echo) await tx.query('ROLLBACK TO SAVEPOINT qq_self_origin');
           await tx.query('RELEASE SAVEPOINT qq_self_origin');
-          inboxScope = echo ? 'agent-echo' : 'unmapped:self';
+          inboxScope = echo ? 'agent-echo' : options.mapSelfToConversation && conversationId ? conversationId : 'unmapped:self';
+          if (!echo && options.mapSelfToConversation && conversationId) event = normalizeObservation(observation, {
+            accountId: options.accountId, externalAccountRef: observation.externalAccountRef, conversationId,
+            eventId: newId(now()), correlationId: newId(now()), causationId: observation.dedupeKey,
+            receivedAt, adapterVersion: options.adapterVersion,
+          });
         }
         // Discovery for non-enrolled peers retains only scoped IDs, event key, timestamp and
         // digest in the private database. Own-account ambiguity retains restricted raw evidence.
@@ -148,7 +154,7 @@ export function createPgReceptionPort(options: PgReceptionOptions): AtomicRecept
           [newId(now()), options.accountId, inboxScope, dedupeKey, payloadRef, sha256]);
         if (!rows.rows.length) throw new WireError('CONFLICT_VERSION');
         if (event) await appendOutbox(tx, event);
-        if (privateSelf && !echo) {
+        if (privateSelf && !echo && !event) {
           if (!options.onUnmappedSelf) throw new Error('UNMAPPED_SELF_PAUSE_UNAVAILABLE');
           await options.onUnmappedSelf(tx, { accountId: options.accountId, rawEventRef: observation.rawEventRef, correlationId: newId(now()) });
         }

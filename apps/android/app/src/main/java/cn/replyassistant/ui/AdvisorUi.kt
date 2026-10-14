@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -28,20 +29,30 @@ import cn.replyassistant.domain.*
     var deleteMemory by remember { mutableStateOf(false) }
     var deleteConsult by remember { mutableStateOf(false) }
     var profile by remember(archive.id, archive.memory.profile) { mutableStateOf(archive.memory.profile) }
-    LazyColumn(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        stickyHeader {
+    var backgroundOpen by remember(archive.id) { mutableStateOf(false) }
+    val historyState = rememberLazyListState()
+    LaunchedEffect(archive.id,archive.consultation.turns.size) {
+        if (archive.consultation.turns.isNotEmpty()) historyState.animateScrollToItem(archive.consultation.turns.size + if (memoryOpen) 1 else 0)
+    }
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding().padding(horizontal = 16.dp)) {
+        Column {
             Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background),horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("狗头军师 · ${archive.name}", style = MaterialTheme.typography.titleLarge,modifier = Modifier.weight(1f))
                 TextButton(onClick = controller::closeAdvisor, enabled = !state.busy) { Text("返回") }
             }
         }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(),state = historyState,contentPadding = PaddingValues(vertical = 8.dp),verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Tip("咨询只供你参考，不会发送消息；各对象的咨询与关系记忆分别保存。")
             Row { Switch(archive.skill.enabled, { controller.setSkill(archive.id,it) }, enabled = !state.busy); Text("此对象启用狗头军师", Modifier.padding(top = 12.dp)) }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.error.isNotBlank()) Tip(state.error,true)
             if (state.notice.isNotBlank()) Tip(state.notice)
+            TextButton(onClick = { deleteConsult = true },enabled = !state.busy) { Text("清除咨询记录") }
+            archive.consultation.pages.forEachIndexed { index,page -> Row {
+                Text("截图 ${index+1}",Modifier.weight(1f))
+                TextButton(onClick = { controller.removeConsultImage(archive.id,page.id) },enabled = !state.busy) { Text("移除") }
+            } }
             TextButton(onClick = { memoryOpen = !memoryOpen }) { Text("关系档案与记忆 · ${if (!archive.memory.consent) "未开启" else if (archive.memory.paused) "已暂停更新" else "已开启"}") }
         }
         if (memoryOpen) item { Block("关系记忆") {
@@ -75,22 +86,23 @@ import cn.replyassistant.domain.*
                 TextButton(onClick = { safe(controller) { controller.useConsultReply(archive.id,turn.id,index) } },enabled = !state.busy) { Text("用作回复") }
             }
         } } }
-        item { Block("问军师") {
-            OutlinedTextField(archive.consultation.question,{ controller.editConsultation(archive.id,it,archive.consultation.background) },label = { Text("你想问什么？") },modifier = Modifier.fillMaxWidth(),minLines = 2,enabled = !state.busy)
-            OutlinedTextField(archive.consultation.background,{ controller.editConsultation(archive.id,archive.consultation.question,it) },label = { Text("补充背景（可选）") },modifier = Modifier.fillMaxWidth(),enabled = !state.busy)
-            archive.consultation.pages.forEachIndexed { index, page ->
-                Row { Text("截图 ${index+1}",Modifier.weight(1f)); TextButton(onClick = { controller.removeConsultImage(archive.id,page.id) },enabled = !state.busy) { Text("移除") } }
-            }
-            if (onPick != null) OutlinedButton(onClick = onPick,enabled = !state.busy) { Text("补充截图") }
+        }
+        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp),verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(archive.consultation.question,{ controller.editConsultation(archive.id,it,archive.consultation.background) },
+                label = { Text("你想问什么？") },modifier = Modifier.fillMaxWidth(),minLines = 1,maxLines = 3,enabled = !state.busy)
+            if (backgroundOpen) OutlinedTextField(archive.consultation.background,{ controller.editConsultation(archive.id,archive.consultation.question,it) },
+                label = { Text("补充背景（可选）") },modifier = Modifier.fillMaxWidth(),maxLines = 3,enabled = !state.busy)
             if (archive.consultation.pages.isNotEmpty() && !state.settings.screenshotUploadAccepted) {
                 Tip("截图将上传到你配置的模型服务。")
                 Button(onClick = controller::acceptScreenshotUpload,enabled = !state.busy) { Text("同意截图上传") }
             }
-            Button(onClick = { controller.consult(archive.id) },enabled = !state.busy && !state.settings.paused && archive.skill.enabled && archive.consultation.question.isNotBlank() &&
-                (archive.consultation.pages.isEmpty() || state.settings.screenshotUploadAccepted)) { Text("发送问题") }
-            Tip("最近20轮咨询提供给模型；更早记录仍保留在本机。处理成功后清除本轮原始截图，失败可直接重试。")
-            TextButton(onClick = { deleteConsult = true },enabled = !state.busy) { Text("清除咨询记录") }
-        } }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = { controller.consult(archive.id) },enabled = !state.busy && !state.settings.paused && archive.skill.enabled && archive.consultation.question.isNotBlank() &&
+                    (archive.consultation.pages.isEmpty() || state.settings.screenshotUploadAccepted)) { Text("发送问题") }
+                TextButton(onClick = { backgroundOpen = !backgroundOpen }) { Text(if (backgroundOpen) "收起背景" else "背景") }
+                if (onPick != null) TextButton(onClick = onPick,enabled = !state.busy) { Text("补充截图${if (archive.consultation.pages.isNotEmpty()) "（${archive.consultation.pages.size}）" else ""}") }
+            }
+        }
     }
     if (deleteMemory) AlertDialog(onDismissRequest = { deleteMemory = false }, title = { Text("删除关系记忆？") },text = { Text("背景、记忆及撤销记录会被删除，并关闭自动更新；聊天和咨询记录保留。") },
         confirmButton = { TextButton(onClick = { controller.changeMemory(archive.id,"delete"); deleteMemory = false }) { Text("删除") } },dismissButton = { TextButton(onClick = { deleteMemory = false }) { Text("取消") } })

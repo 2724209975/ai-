@@ -38,7 +38,9 @@
 | ImportJob | `format, sourceHash, mode=import, preview, identityMapping, confirmedScope, status, errorReport` | 03 |
 | AuditEntry | `actor, action, targetType/id/version, decisionSummary, sourceRefs, result, correlationId` | 03 |
 
-- PlatformCapabilitySnapshot 的机器 schema 在 packages/contracts/schemas/platform-capability-snapshot.schema.json，校验函数为 ssertCapabilitySnapshot：六个能力族（eceive_types、send_types、eceipt_levels、owner_message_signal、history_sync、media_fetch）各需一条独立证据且不得重复；	ested 的来源不得是 http(s) 文档链接（文档只能支撑 documented）；总体 erificationStatus 必须等于由逐项证据推导的结果，不得单独声明。
+- PlatformCapabilitySnapshot 的机器 schema 在 packages/contracts/schemas/platform-capability-snapshot.schema.json，校验函数为 ssertCapabilitySnapshot：六个能力族（
+eceive_types、send_types、
+eceipt_levels、owner_message_signal、history_sync、media_fetch）各需一条独立证据且不得重复；	ested 的来源不得是 http(s) 文档链接（文档只能支撑 documented）；总体 erificationStatus 必须等于由逐项证据推导的结果，不得单独声明。
 - `Message.quotedMessageId` 是本系统的内部消息 ID；平台侧的引用 ID 不写入该字段，而是保留在 `provenance`（如 `quotedPlatformMessageId`），因为被引用的消息可能根本不在本地存储中。正文可加密字段、数据库索引和拆表属于实现细节，但不能削弱 scope、来源、版本、状态或引用完整性。
 
 ## 3. 模块端口
@@ -92,6 +94,16 @@
 - 批准 G1 最小 REST 形状：`GET /api/v1/overview`、`GET /api/v1/tasks`（`{items:[...]}`）、`POST /api/v1/tasks/{taskId}/confirm`（`ConfirmPlanCommand`）、`POST /api/v1/control/pause-all`、`POST /api/v1/contacts/{id}/pauseContact`。查询资源必带 `id,version,status,allowedActions`，可带 `reasonCodes,invalidationReason,correlationId`；命令返回 `resultVersion,correlationId,status?`。
 - G2/G3 只读投影新增可选字段：`connectionQueryStatus`、`faultQueryStatus` 取 `ready|unavailable`（字段缺失按 unavailable）；只有 ready 且数组为空才可显示「无记录」，服务失败仍返回 503；`connections[]` 含 accountId、platform、connectionState、verificationStatus、lastReconciledAt、limitations[] 与 `recovery:{status,historyComplete,gaps[],unresolvedSendCount}`；会话消息在 `actor=unknown` 时可带 `originStatus`、`originEvidenceRefs`。`historyComplete` 只能取 01 的真实 RecoveryReport 证据，`unresolvedSendCount` 只能是该报告未决发送的受控聚合。`approvalSource` 仍为 02/06 私有投影，不是公共字段。
 - 已按 A14 落地的会话端点：`GET /api/v1/session`、`POST /api/v1/session/login`、`POST /api/v1/session/logout`；登录是唯一的未鉴权写操作，仅受精确 Origin 与限速保护。同一路由层已接入的查询与命令还包括 `/conversations`、`/facts`（含 `confirmFact/correctFact/deleteFact`）、`/analyses`（含 `correctAnalysis`）、`/media`（含 `approveAsset/revokeAsset`）、`/audit`、`/tasks/{id}/reject`、`/control/resume-all`、`/contacts/{id}/resumeContact|updatePolicy`。尚无持久 provider 的资源 `/skills`、`/imports`、`/faults` 返回 501 `NOT_IMPLEMENTED`，不得以空列表伪装；05/03 的 Skill 与导入 provider 就绪前不能把 06 提案全表当已实现接口。
+
+### 3.8 聊天工作台兼容接口（2026-10-06）
+
+旧查询与命令保持可用，新增 `GET /api/v1/workspace/conversations` 与 `GET /api/v1/conversations/{id}/workspace`。均要求本人会话，详情按已登记联系人 scope 查询。列表参数为 `search`（最多 200 字）、`platform=all|qq|wechat|unknown`、`filter=all|pending|attention`、数字偏移 `cursor`、`limit`（1–100，默认 50）。列表响应 `items/total/nextCursor`；会话项含 `id/contactId/contactName/accountId/platform/status/version/allowedActions/pauseReasons/pendingCount/unknownSendCount/unreviewedPausedInboundCount/needsAttention/preview/lastActivityAt`。需处理优先，同组最近活动优先。
+
+详情响应 `contact/conversation/tasks/nextCursor`，会话可带 `globalPaused/globalVersion`，用于在当前聊天显式恢复全部而无需切换页面。`conversation.messages` 为升序最近 50 条；`before=nextCursor` 继续读取更早消息，游标绑定 `(sent_at,id)`，无跨联系人读取权限。当前联系人待办独立查询，发送记录含内容和确认时间；未决发送优先保留。
+
+新增 `POST /api/v1/contacts/{id}/resumeRoutine`，使用现有 `{expectedVersion,idempotencyKey}` 与 CSRF。响应 `{resultVersion,correlationId,status,remainingReasons}`，状态为 `RESUMED|PARTIAL_RESUME`。全局 `resume-all` 增加 `restored`（联系人 ID 数组）、`skipped`（`{contactId,reasons}`）与部分恢复状态。幂等重放返回原来的处理结果。只能清除日常人工暂停与最近 30 秒探测正常的账号故障；未知发送、特殊阻塞和关闭的代理保留。旧单原因恢复接口保留。
+
+迁移 `0013` 持久化 `account_id → platform`，历史 inbox 冲突映射为 null；联系人与 overview 平台增加 `unknown`。overview 只读连接状态增加 `unknown/probe_healthy`，探测记录使用现有 `lastReconciledAt` 字段返回时间；`probe_healthy` 不等同历史完整或送达证据。发送领取、领取后复核与桥接收集均按本桥接账号隔离，core 仍不派发。控制命令增加 `result_details` 保存恢复结果，发送任务增加 `created_at` 用于稳定时间线。
 
 ## 4. 事件目录和失效规则
 

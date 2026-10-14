@@ -1,0 +1,216 @@
+{
+  "date": "2026-10-11",
+  "scope": "candidate-only QQ trial",
+  "selectedContacts": 2,
+  "persistent": true,
+  "runtime": {
+    "connected": true,
+    "automaticSend": false,
+    "dispatchWorker": false,
+    "sendTaskCount": 0
+  },
+  "recovery": {
+    "at": "2026-10-11T15:13:47.729Z",
+    "unexpectedChildExitRecovered": true,
+    "pidChanged": true,
+    "connected": true,
+    "contactsRetained": true,
+    "candidatesAndVersionsRetained": true,
+    "budgetRetained": true,
+    "existingSessionRetained": true,
+    "cloudCallsAdded": 0,
+    "foreignContactDenied": true,
+    "sendCalls": 0
+  },
+  "workbench": [
+    {
+      "origin": "http://127.0.0.1:55135",
+      "unauthenticatedDenied": true,
+      "passwordLogin": true,
+      "selectedContacts": 2,
+      "existingCandidates": 3,
+      "approveDenied": true,
+      "autoModeDenied": true,
+      "csrfAndOriginDenied": true,
+      "contextPreviewReadable": true,
+      "memoryReadable": true,
+      "actualPhone": false
+    },
+    {
+      "origin": "http://192.168.31.17:55135",
+      "unauthenticatedDenied": true,
+      "passwordLogin": true,
+      "selectedContacts": 2,
+      "existingCandidates": 3,
+      "approveDenied": true,
+      "autoModeDenied": true,
+      "csrfAndOriginDenied": true,
+      "contextPreviewReadable": true,
+      "memoryReadable": true,
+      "actualPhone": false
+    }
+  ],
+  "imageAcceptance": {
+    "realProvider": true,
+    "source": "synthetic PNG",
+    "modelCalls": 1,
+    "inputTokens": 383,
+    "outputTokens": 43,
+    "costUpperCny": 0.00111,
+    "fullCoverage": true,
+    "expectedGeometryAndTextMatched": true,
+    "realQqImageChainVerified": false
+  },
+  "budget": {
+    "totalAuthorizationCny": 10,
+    "priorConservativeCny": 2.06302,
+    "accountedCny": 0.00111,
+    "cumulativeUpperCny": 2.06413,
+    "remainingCny": 0.417386,
+    "remainingCalls": 27,
+    "unknownUsageCalls": 0
+  },
+  "checks": {
+    "totalPassed": 949,
+    "fail": 0,
+    "skip": 0,
+    "groups": {
+      "unit": 433,
+      "app": 33,
+      "tools": 239,
+      "contracts": 11,
+      "integration": 184,
+      "e2e": 49
+    },
+    "strictTypecheck": true,
+    "build": true,
+    "isolatedTestDatabaseStopped": true,
+    "responsiveWidths": [
+      1280,
+      390,
+      320
+    ],
+    "horizontalOverflow": false,
+    "chatHeaderClipped": false,
+    "copyOnly": true,
+    "actualPhoneVerified": false,
+    "administratorFirewallChangePerformed": false
+  },
+  "pending": [
+    "actual-phone network verification",
+    "selected-friend real image end-to-end verification",
+    "human multi-turn quality evaluation previously deferred"
+  ],
+  "files": [
+    {
+      "path": "scripts/qq-candidate-trial.mts",
+      "sha256": "a46e359940f1cb97f733cac96fac5f46ed5d2b3b461d4cc14cac2cda2ebd5e56",
+      "lines": 201
+    },
+    {
+      "path": "scripts/qq-trial-control.mts",
+      "sha256": "77906bf172aff2e8a9125ff086401e9e1e1969b05d2f5d3b9fc038e75b23ea96",
+      "lines": 44
+    },
+    {
+      "path": "scripts/qq-trial-services.mts",
+      "sha256": "acc469c4300e1f8a93b9ae38eeea46be00c062055e5b194044f77ba16ea63fd4",
+      "lines": 26
+    },
+    {
+      "path": "scripts/qq-trial-services.test.mts",
+      "sha256": "75aed4d788b63c38a5367c49b1c576f1c5de1d5cfef02069301c71736b3cd7a2",
+      "lines": 11
+    },
+    {
+      "path": "scripts/qq-trial-receiver.mts",
+      "sha256": "e4c53047f141785c04d080ba0409bebba06c11a49c6bc209d3329a112a6dbd0a",
+      "lines": 17
+    },
+    {
+      "path": "scripts/qq-trial-receiver.test.mts",
+      "sha256": "46c4dc00ca3ccf425a4daa945e7160881165b2e74e57816fde1f61cb80984f09",
+      "lines": 15
+    },
+    {
+      "path": "scripts/qq-trial-ledger.mts",
+      "sha256": "cd97fced74877582bd6712b2f1f273ec1204667c9b402cea1a174940281ba310",
+      "lines": 18
+    },
+    {
+      "path": "scripts/qq-trial-ledger.test.mts",
+      "sha256": "215aaa03cd715d7cf9c922b6e88b7e520a30a5738c28919d0c4d315f361acdea",
+      "lines": 16
+    },
+    {
+      "path": "scripts/qq-trial-workbench.test.mts",
+      "sha256": "60858a1dcaefbd11115a7f160fb33cbc76bca048b57375cc97f5e9d4b9b2afcd",
+      "lines": 31
+    },
+    {
+      "path": "scripts/qq-trial-scope.mts",
+      "sha256": "690a6087a206cc6d939e7b7e51290c3b6bea74d673a5fb33368f32acbc47918a",
+      "lines": 44
+    },
+    {
+      "path": "scripts/qq-trial-scope.test.mts",
+      "sha256": "6836aa2199b0dc4e6f743b9cab1998ef6ae5b6cd8118aa6e5ba808f76aae314f",
+      "lines": 48
+    },
+    {
+      "path": "scripts/enable-qq-trial-lan.ps1",
+      "sha256": "50ec01a55706f3bbedb7a02a42ed8e0f9c0e9578f542d0ec45c31359d27b14e8",
+      "lines": 25
+    },
+    {
+      "path": "apps/web/server/candidate-owner-port.mts",
+      "sha256": "8dfb1c5ab720f6733c342280e7113deb9532686e213bf06765177db3bdf97d27",
+      "lines": 61
+    },
+    {
+      "path": "apps/web/src/api.ts",
+      "sha256": "432d18f82a87e758c3f10a84d278931bc6efb2a1e709cf0656299fc64383fdb0",
+      "lines": 84
+    },
+    {
+      "path": "apps/web/src/style.css",
+      "sha256": "cfa62130d853a39c4d43a9a55b03ac2a2d606e7fc6949e111115df6d3242fc4c",
+      "lines": 175
+    },
+    {
+      "path": "apps/web/src/workspace/CandidateEditor.tsx",
+      "sha256": "a34259ad78ef46640036a93c401fc24c113ec68ecdc0aef8c720315712a6d3c3",
+      "lines": 79
+    },
+    {
+      "path": "apps/web/src/workspace/Workspace.tsx",
+      "sha256": "40f3b641659c0db97c24d45f344feb05e426fec1ea5b347587dff56c1713737d",
+      "lines": 164
+    },
+    {
+      "path": "apps/web/src/workspace/ModelPanel.tsx",
+      "sha256": "1353378bcedddd3ffe068f7e934bd55d89da1ee052429cf8bbf2879a29a0c99b",
+      "lines": 40
+    },
+    {
+      "path": "packages/ai/eval/paid-replay-budget.mts",
+      "sha256": "9cf1cd370d1aa4a0fa49b124e7566ee6e04b7292fdaa3b1d3ca599a27405c7d4",
+      "lines": 82
+    },
+    {
+      "path": "packages/ai/eval/paid-replay-budget.test.mts",
+      "sha256": "4304151c08a9786ecfa542efda64415f7bada7a731a17721caa259877659f3e2",
+      "lines": 44
+    },
+    {
+      "path": "packages/ai/understanding/vision-provider.mts",
+      "sha256": "8e28e33c49fd577905489527b6ac0b3932ff97a818adc3c74162910918892570",
+      "lines": 180
+    },
+    {
+      "path": "tests/integration/postgres-context-memory-v2.test.mts",
+      "sha256": "ad4138f909308f6c18a679c36f56bc5db82a1ab79248846b880ff68a84137451",
+      "lines": 256
+    }
+  ]
+}

@@ -7,6 +7,8 @@
 import { createDeepSeekTextProvider, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROMPT_VERSION, type DeepSeekProviderOptions } from './deepseek-provider.mts';
 import { budgetOptionsFromEnv, withDailyBudget, type ModelBudgetOptions } from './model-budget.mts';
 import type { TextModelProvider } from './text-provider-contract.mts';
+import {unifiedMoneyFromEnv} from './unified-budget.mts';
+import {buildPrompt} from './deepseek-provider.mts';
 
 export type EnvLike = Record<string, string | undefined>;
 export type DeepSeekEnv = {
@@ -73,7 +75,8 @@ export function createDeepSeekFromEnv(env: EnvLike, overrides: Partial<DeepSeekP
     ...overrides,
   });
   // Every composition root gets the same guard: a loop cannot spend without bound.
-  return withDailyBudget(provider, budgetOptionsFromEnv(env, budget.onRefusal));
+  const daily=withDailyBudget(provider, budgetOptionsFromEnv(env, budget.onRefusal)),money=unifiedMoneyFromEnv(env);
+  return !money?daily:{...daily,async invoke(input){const prompt=buildPrompt(input.context,input.decision,input.policy);await money.reserve('generation',config.modelId,Buffer.byteLength(JSON.stringify(prompt),'utf8')+4096,overrides.maxTokens??config.maxTokens,{inputPerMillion:Number(env.DEEPSEEK_INPUT_CNY_PER_MILLION),outputPerMillion:Number(env.DEEPSEEK_OUTPUT_CNY_PER_MILLION)});return daily.invoke(input);}};
 }
 
 /** Safe to log: everything except the key. */

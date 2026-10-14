@@ -11,13 +11,28 @@ import { defaultPolicy, routeReply, type Policy } from '../policy/evaluate.mts';
 import { newId, sha256 } from './ids.mts';
 import { PgCandidateFeedbackJournal, validRejectionReason, type RejectionReason } from '../../data/feedback/pg-candidate-journal.mts';
 import { preparePersistentImages, type ImagePreparationPort } from './media-preparation.mts';
+import { registerPlatformAccount } from './platform-accounts.mts';
+import { createWorkspaceQueries, type WorkspaceQuery } from './workspace-query.mts';
+import { createReplyJob, invalidateReplyJobs, readReplyJob, transitionPlanJob, transitionReplyJob, type ReplyJobRow } from './reply-jobs.mts';
+import { cancellableReplyStates, type PipelineVersion, type ReplyJobState } from '../../contracts/reply-pipeline-v2.mts';
+import { MemoryService } from '../../data/memory-v2/service.mts';
+import { MemoryWorker } from '../../data/memory-v2/worker.mts';
+import type { EmbeddingProvider } from '../../data/memory-v2/embedding.mts';
+import type { ContextBudget } from '../../contracts/context-memory-v2.mts';
+import { ReplyPipelineV2,type DecisionRunV2 } from '../../ai/pipeline-v2/pipeline.mts';
+import type { GenerationProviderV2,DecisionProviderV2,AnalysisProviderV21 } from '../../ai/pipeline-v2/providers.mts';
+import { adaptDataContextProjection } from '../../ai/understanding/context-adapter.mts';
+import { evaluateQualityV2 } from '../../ai/pipeline-v2/quality.mts';
+import { ruleDecision } from '../../ai/pipeline-v2/providers.mts';
+import { registeredProvidersFromEnv } from '../../ai/pipeline-v2/compatible-provider.mts';
+import {cloudAllowedForContact} from '../../data/memory-v2/cloud-policy.mts';
 
-type Row = { conversation_id: string; contact_id: string; account_id: string; external_contact_ref: string; policy: Policy; policy_version: number | string; generation: number | string; revision: number | string; version: number | string; state: string; pause_reasons: string[]; last_inbound_message_id: string | null; paused_inbound_unreviewed_count: number | string; collection_started_at?: Date | string | null; collection_due_at?: Date | string | null; collection_message_ids?: string[] | null };
+type Row = { conversation_id: string; contact_id: string; account_id: string; external_contact_ref: string; policy: Policy; policy_version: number | string; generation: number | string; revision: number | string; version: number | string; state: string; pause_reasons: string[]; last_inbound_message_id: string | null; paused_inbound_unreviewed_count: number | string; collection_started_at?: Date | string | null; collection_due_at?: Date | string | null; collection_message_ids?: string[] | null; pipeline_version: PipelineVersion; current_reply_job_id: string | null };
 type PlanRow = { id: string; conversation_id: string; contact_id: string; context_snapshot_id: string; generation: number | string; policy_version: number | string; dependency_epoch: number | string; skill_epoch: number | string; trigger_message_ids: string[]; alternatives: { alternativeId: string; strategySummary: string; parts: { replyPartId: string; sequence: number; type: 'text'; content: string }[] }[]; risks: string[]; status: string; version: number | string; final_content_hash: string | null; approved_alternative_id: string | null; invalidation_reasons?: string[] };
 type TaskRow = { id: string; plan_id: string; status: string; version: number | string; reason_codes: string[]; confirmed_content_hash: string | null; confirmed_plan_version: number | string | null };
 type SendRow = { id: string; plan_id: string; reply_part_id: string; sequence: number; send_key: string; content: string; content_sha256: string; status: string; version: number | string; correlation_id: string; receipt: { status: string; platformMessageId: string | null } | null; approval_source?: string };
 export type PersistentContext = Awaited<ReturnType<PgDataProvider['buildContext']>>;
-export type PersistentIntelligence = { propose(context: PersistentContext, policy: Policy): Promise<Draft>; checkEdited(context: PersistentContext, policy: Policy, parts: readonly { type: 'text'; content: string }[]): Promise<{ allowed: boolean; reasons: string[] }> };
+export type PersistentIntelligence = { v2Generations?:GenerationProviderV2[];v2Decisions?:DecisionProviderV2[];v21Analyses?:AnalysisProviderV21[];propose(context: PersistentContext, policy: Policy): Promise<Draft>; checkEdited(context: PersistentContext, policy: Policy, parts: readonly { type: 'text'; content: string }[]): Promise<{ allowed: boolean; reasons: string[] }> };
 /** The platform surface 02 needs for dispatch. Mock and the QQ bridge satisfy it structurally;
  * authorization, the dispatch lease and the send ledger stay inside 02, so no platform
  * implementation can submit a send on its own. */
@@ -33,6 +48,33 @@ function requireText(value: unknown): asserts value is string { if (typeof value
 function toMs(value: unknown): number { return value instanceof Date ? value.getTime() : Date.parse(String(value)); }
 function validAlternatives(alternatives: ProposedAlternative[]): boolean {
   return alternatives.length >= 1 && alternatives.length <= 3 && alternatives.every(a => a.key && a.parts.length > 0 && a.parts.every((p, i) => p.key && p.sequence === i + 1 && p.type === 'text' && p.content.trim()));
+}
+
+/** Model output is data; it cannot introduce actions or send authorization. */
+function assertReplyDraftV2(value: unknown): asserts value is Draft {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('INVALID_INTELLIGENCE_OUTPUT');
+  const draft = value as Record<string, unknown>;
+  const fields = ['shouldReply','risks','alternatives','generatorVersion','promptVersion','timing','factVersions','analysisVersions','skillVersions'];
+  const risks = ['ordinary','confession','relationship_decision','meeting_commitment','major_commitment','sensitive','unknown_fact','media_uncertain','stop_request'];
+  if (Object.keys(draft).some(key => !fields.includes(key)) || typeof draft.shouldReply !== 'boolean'
+    || !['now','wait','no_reply'].includes(String(draft.timing)) || typeof draft.generatorVersion !== 'string'
+    || !draft.generatorVersion.trim() || (draft.promptVersion !== undefined && typeof draft.promptVersion !== 'string')
+    || !Array.isArray(draft.risks) || !draft.risks.every(risk => risks.includes(risk))
+    || !Array.isArray(draft.alternatives)) fail('INVALID_INTELLIGENCE_OUTPUT');
+  for (const key of ['factVersions','analysisVersions','skillVersions']) {
+    const versions = draft[key];
+    if (versions !== undefined && (!versions || typeof versions !== 'object' || Array.isArray(versions)
+      || Object.values(versions).some(version => !Number.isSafeInteger(version) || Number(version) < 1))) fail('INVALID_INTELLIGENCE_OUTPUT');
+  }
+  for (const alternative of draft.alternatives) {
+    if (!alternative || typeof alternative !== 'object' || Object.keys(alternative).some(key => !['key','strategySummary','parts'].includes(key))
+      || typeof alternative.key !== 'string' || typeof alternative.strategySummary !== 'string' || !Array.isArray(alternative.parts)) fail('INVALID_INTELLIGENCE_OUTPUT');
+    for (const part of alternative.parts) {
+      if (!part || typeof part !== 'object' || Object.keys(part).some(key => !['key','sequence','type','content'].includes(key))
+        || typeof part.key !== 'string' || typeof part.content !== 'string' || part.type !== 'text') fail('INVALID_INTELLIGENCE_OUTPUT');
+    }
+  }
+  if (draft.shouldReply && draft.timing === 'now' && !validAlternatives(draft.alternatives as ProposedAlternative[])) fail('INVALID_INTELLIGENCE_OUTPUT');
 }
 
 /** Only live events for this platform account may touch conversation state. */
@@ -68,6 +110,14 @@ function deriveState(pauseReasons: readonly string[], sendMode: Policy['sendMode
 }
 
 export class PgConfirmedService {
+  readonly pipeline:ReplyPipelineV2;
+  readonly memory:MemoryService;
+  readonly memoryWorker:MemoryWorker;
+  readonly #ownerId:string;
+  readonly #contextBudget?:Partial<ContextBudget>;
+  readonly #embedding?:EmbeddingProvider;
+  workspaceList(query: WorkspaceQuery = {}) { return createWorkspaceQueries(this.#pool, this).list(query); }
+  workspaceDetail(id: string, before?: string) { return createWorkspaceQueries(this.#pool, this).detail(id, before); }
   readonly #feedback = new PgCandidateFeedbackJournal();
   readonly #pool: PgPool; readonly #data: PgDataProvider; readonly #ai: PersistentIntelligence;
   readonly #platform: DispatchPlatform; readonly #authority: object; readonly #now: () => number;
@@ -75,13 +125,19 @@ export class PgConfirmedService {
   readonly #mockAutoEnabled: boolean;
   readonly #images?: ImagePreparationPort;
   #recovered = false;
-  constructor(options: { pool: PgPool; data: PgDataProvider; intelligence: PersistentIntelligence; platform: DispatchPlatform; authority: object; now?: () => number; aggregationWindowMs?: number; maxAggregationMs?: number; mockAutoEnabled?: boolean; images?: ImagePreparationPort }) {
+  constructor(options: { pool: PgPool; data: PgDataProvider; intelligence: PersistentIntelligence; platform: DispatchPlatform; authority: object; now?: () => number; aggregationWindowMs?: number; maxAggregationMs?: number; mockAutoEnabled?: boolean; images?: ImagePreparationPort; ownerId?:string;contextBudget?:Partial<ContextBudget>;embedding?:EmbeddingProvider }) {
     this.#pool = options.pool; this.#data = options.data; this.#ai = options.intelligence; this.#platform = options.platform;
     this.#authority = options.authority; this.#now = options.now ?? Date.now;
     this.#aggregationWindowMs = options.aggregationWindowMs ?? 0;
     this.#maxAggregationMs = options.maxAggregationMs ?? 30_000;
     this.#mockAutoEnabled = options.mockAutoEnabled === true;
     this.#images = options.images;
+    this.#ownerId=options.ownerId??'local-owner';this.#contextBudget=options.contextBudget;this.#embedding=options.embedding;
+    this.memory=new MemoryService(options.pool,options.data,this.#ownerId);
+    this.memoryWorker=new MemoryWorker({pool:options.pool,data:options.data,ownerId:this.#ownerId,embedding:options.embedding});
+    const registered=registeredProvidersFromEnv(process.env);
+    this.pipeline=new ReplyPipelineV2({pool:options.pool,ownerId:this.#ownerId,generations:[...(options.intelligence.v2Generations??[]),...registered.generations],decisions:[...(options.intelligence.v2Decisions??[]),...registered.decisions],analyses:[...(options.intelligence.v21Analyses??[]),...registered.analyses],
+      invalidate:async(tx,id)=>{await this.#invalidate(tx,id,'MODEL_CONFIG_CHANGED');await tx.query(`UPDATE orch_conversations SET state=CASE WHEN cardinality(pause_reasons)>0 THEN state ELSE CASE WHEN policy->>'sendMode'='auto' THEN 'READY_AUTO' ELSE 'READY_CONFIRM' END END,version=version+1 WHERE conversation_id=$1`,[id]);}});
     if (this.#mockAutoEnabled && !(this.#platform instanceof MockPlatformAdapter)) fail('MOCK_AUTO_REQUIRES_MOCK_PLATFORM');
     if (!Number.isSafeInteger(this.#aggregationWindowMs) || this.#aggregationWindowMs < 0
       || !Number.isSafeInteger(this.#maxAggregationMs) || this.#maxAggregationMs < this.#aggregationWindowMs) fail('VALIDATION_FAILED');
@@ -93,6 +149,7 @@ export class PgConfirmedService {
     return withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
       await setContactScope(tx, input.contactId);
+      await registerPlatformAccount(tx, input.accountId, this.#platform.platform);
       const contact = await tx.query<{ conversation_id: string; platform_account_id: string; external_contact_ref: string }>(`SELECT conversation_id,platform_account_id,external_contact_ref FROM data_contacts WHERE id=$1 AND enrollment_status='enrolled'`, [input.contactId]);
       const c = contact.rows[0]; if (!c || c.conversation_id !== input.conversationId || c.platform_account_id !== input.accountId || c.external_contact_ref !== input.externalContactRef) fail('FORBIDDEN');
       await tx.query(`INSERT INTO dispatch_control(conversation_id,account_id,paused) VALUES($1,$2,false)`, [input.conversationId, input.accountId]);
@@ -154,6 +211,7 @@ export class PgConfirmedService {
   }
 
   async ingestPlatformEvent(event: Event): Promise<{ planId: string; taskId: string } | undefined> {
+    if (event.eventVersion !== 1) fail('VALIDATION_FAILED');
     if (event.eventType === 'PlatformSelfMessageUnattributed') return this.#handleOwnerOrigin(event);
     if (event.eventType === 'PlatformMessageMutationObserved') return this.#handleMutation(event);
     if (event.eventType !== 'PlatformInboundObserved') fail('VALIDATION_FAILED');
@@ -189,6 +247,7 @@ export class PgConfirmedService {
         }
         if (this.#aggregationWindowMs === 0) {
           await tx.query(`UPDATE orch_conversations SET generation=$2,revision=revision+1,state='GENERATING',last_inbound_message_id=$3,collection_started_at=NULL,collection_due_at=NULL,collection_message_ids='{}'::uuid[],version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, generation, saved.id]);
+          if (row.pipeline_version === 2) await createReplyJob(tx, (await this.#conversation(tx,row.conversation_id))!, [saved.id], event.eventId);
           return { row, generation, messageIds: [saved.id], flush: true };
         }
         // Aggregation: the deadline is persisted so a restart cannot lose the batch.
@@ -197,6 +256,7 @@ export class PgConfirmedService {
         const batch = [...(row.collection_message_ids ?? []), saved.id];
         await tx.query(`UPDATE orch_conversations SET generation=$2,revision=revision+1,state='COLLECTING',last_inbound_message_id=$3,collection_started_at=$4::timestamptz,collection_due_at=$5::timestamptz,collection_message_ids=$6::uuid[],version=version+1,updated_at=now() WHERE conversation_id=$1`,
           [row.conversation_id, generation, saved.id, new Date(startedAt).toISOString(), new Date(dueAt).toISOString(), batch]);
+        if (row.pipeline_version === 2) await createReplyJob(tx, (await this.#conversation(tx,row.conversation_id))!, batch, event.eventId, true);
         return { row, generation, messageIds: batch, flush: false };
       });
       if ('value' in result) return result.value;
@@ -249,7 +309,9 @@ export class PgConfirmedService {
         const row = await this.#conversation(tx, ref.conversationId, true);
         if (!row) return; // Outside enrollment: raw evidence only, no business effect.
         if (row.account_id !== ref.accountId || row.external_contact_ref !== ref.externalContactRef) fail('VALIDATION_FAILED');
-        await this.#data.appendObservedMessage(tx, observedMessageOf(p, row, type as MessageType, 'unknown'), event.correlationId);
+        const saved = await this.#data.appendObservedMessage(tx, observedMessageOf(p, row, type as MessageType, 'unknown'), event.correlationId);
+        if (saved.duplicate) return;
+        await tx.query('UPDATE orch_conversations SET revision=revision+1 WHERE conversation_id=$1', [row.conversation_id]);
         if (row.pause_reasons.includes('OWNER_ORIGIN')) return;
         await changeContactPause(tx, row.conversation_id, true);
         await this.#invalidate(tx, row.conversation_id, 'OWNER_ORIGIN');
@@ -283,48 +345,127 @@ export class PgConfirmedService {
           platformAccountId: row.account_id, platformMessageId: String(p.platformMessageId), platformEventId,
           mutation: mutation as 'recall' | 'edit', rawEventRef, receivedAt: String(p.receivedAt),
         }, event.correlationId);
+        if (outcome.status === 'duplicate') return;
         await this.#invalidate(tx, row.conversation_id, outcome.status === 'unmatched' ? 'PLATFORM_MUTATION_UNVERIFIED' : 'PLATFORM_MUTATION');
         // Applied or not, the old evidence is no longer trustworthy: pause until the owner reviews.
         // Nothing here ever resumes the contact automatically.
         if (!row.pause_reasons.includes('PLATFORM_MUTATION_UNVERIFIED')) await changeContactPause(tx, row.conversation_id, true);
         const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
-        await tx.query(`UPDATE orch_conversations SET generation=$2,state='PAUSED_FAILURE',pause_reasons=CASE WHEN 'PLATFORM_MUTATION_UNVERIFIED'=ANY(pause_reasons) THEN pause_reasons ELSE array_append(pause_reasons,'PLATFORM_MUTATION_UNVERIFIED') END,collection_started_at=NULL,collection_due_at=NULL,collection_message_ids='{}'::uuid[],version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, Number(control.rows[0]?.generation)]);
+        await tx.query(`UPDATE orch_conversations SET generation=$2,revision=revision+1,state='PAUSED_FAILURE',pause_reasons=CASE WHEN 'PLATFORM_MUTATION_UNVERIFIED'=ANY(pause_reasons) THEN pause_reasons ELSE array_append(pause_reasons,'PLATFORM_MUTATION_UNVERIFIED') END,collection_started_at=NULL,collection_due_at=NULL,collection_message_ids='{}'::uuid[],version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, Number(control.rows[0]?.generation)]);
       });
     });
     return undefined;
   }
 
+  readonly #shadowTasks=new Set<Promise<void>>();
+  /** Diagnostics are detached after the existing flow commits; no error can change a plan or pause a contact. */
+  async waitForShadow(){await Promise.all([...this.#shadowTasks]);}
   async #proposeFor(row: Row, generation: number, messageIds: readonly string[], causationId: string): Promise<{ planId: string; taskId: string } | undefined> {
+    let observed:{jobId:string;context:PersistentContext}|undefined;
+    const result=await this.#proposeForCurrent(row,generation,messageIds,causationId,(jobId,context)=>{observed={jobId,context};});
+    if(observed){
+      // Use the validated input of this turn, including turns where the old engine then paused the contact.
+      const task=this.pipeline.shadow(observed.jobId,adaptDataContextProjection(observed.context),{...row.policy,restrictions:[...row.policy.restrictions],stylePreferences:[...(row.policy.stylePreferences??[])]}).catch(()=>{});
+      this.#shadowTasks.add(task);void task.finally(()=>this.#shadowTasks.delete(task));
+    }
+    return result;
+  }
+  async #proposeForCurrent(row: Row, generation: number, messageIds: readonly string[], causationId: string,observe?:(jobId:string,context:PersistentContext)=>void): Promise<{ planId: string; taskId: string } | undefined> {
     const messageId = messageIds.at(-1);
     if (!messageId) fail('VALIDATION_FAILED');
     // The snapshot must include the messages that triggered it. A platform timestamp with second
     // precision can lead our own clock by up to a second (QQ reports time in whole seconds), and
     // taking only "now" as the cutoff made buildContext reject the trigger message as NOT_FOUND.
-    let projection = await withTransaction(this.#pool, async tx => {
-      const newest = await tx.query<{ sent_at: Date | string }>('SELECT sent_at FROM data_messages WHERE id=$1 AND contact_id=$2', [messageId, row.contact_id]);
-      const sentAt = newest.rows[0] ? toMs(newest.rows[0].sent_at) : Number.NaN;
-      const cutoffMs = Number.isFinite(sentAt) ? Math.max(this.#now(), sentAt) : this.#now();
-      return this.#data.buildContext(tx, { callerContactId: row.contact_id, contactId: row.contact_id, generation,
-        policyVersion: Number(row.policy_version), allowedScopes: row.policy.factScopes,
-        cutoffTime: new Date(cutoffMs).toISOString(), cutoffMessageId: messageId, mode: 'live' });
-    });
-    let draft: Draft;
+    const job = row.pipeline_version === 2 ? await withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const current = await this.#conversation(tx,row.conversation_id,true);
+      if (!current || current.pipeline_version !== 2 || Number(current.generation) !== generation || current.state !== 'GENERATING') return;
+      const existing = current.current_reply_job_id ? (await tx.query<ReplyJobRow>('SELECT * FROM orch_reply_jobs WHERE id=$1 AND conversation_id=$2', [current.current_reply_job_id,current.conversation_id])).rows[0] : undefined;
+      if (existing && !existing.plan_id && ['RECEIVED','BUFFERING','CONTEXT_READY','DECIDING','GENERATING','VALIDATING'].includes(existing.status)) return existing;
+      return createReplyJob(tx,current,messageIds,causationId);
+    }) : undefined;
+    if (row.pipeline_version === 2 && !job) return;
+    let projection: PersistentContext;
+    let draft!: Draft;
+    let runV2:DecisionRunV2|undefined;
     try {
+      const cloudAllowed=!job||await withTransaction(this.#pool,tx=>cloudAllowedForContact(tx,this.#ownerId,row.contact_id));
+      const v2Budget=job?await this.pipeline.contextBudget(row.contact_id,this.#contextBudget):undefined;
+      const activeV21=job&&await this.pipeline.mode(row.contact_id)==='active';
+      let queryEmbedding:import('../../data/memory-v2/repository.mts').Embedding|undefined;
+      if(job&&!activeV21&&cloudAllowed&&this.#embedding&&(await this.memory.scoped(row.conversation_id,repo=>repo.controls())).enabled){
+        const text=await withTransaction(this.#pool,async tx=>{await setContactScope(tx,row.contact_id);return (await tx.query<{content_ref:string}>("SELECT content_ref FROM data_messages WHERE contact_id=$1 AND id=ANY($2::uuid[]) AND type='text' AND deletion_status='active' ORDER BY sent_at,id",[row.contact_id,messageIds])).rows.map(m=>m.content_ref).join('\n');});
+        if(text)try{queryEmbedding=await this.#embedding.embed(text);}catch{/* Optional semantic lookup falls back to scoped keyword recall. */}
+      }
+      projection = await withTransaction(this.#pool, async tx => {
+        const newest = await tx.query<{ sent_at: Date | string }>('SELECT sent_at FROM data_messages WHERE id=$1 AND contact_id=$2', [messageId, row.contact_id]);
+        const sentAt = newest.rows[0] ? toMs(newest.rows[0].sent_at) : Number.NaN;
+        const cutoffMs = Number.isFinite(sentAt) ? Math.max(this.#now(), sentAt) : this.#now();
+        return this.#data.buildContext(tx, { callerContactId: row.contact_id, contactId: row.contact_id, generation,
+          policyVersion: Number(row.policy_version), allowedScopes: row.policy.factScopes,
+          cutoffTime: new Date(cutoffMs).toISOString(), cutoffMessageId: messageId, mode: 'live',queryEmbedding,
+          v2:job?{ownerId:this.#ownerId,revision:Number(job.conversation_revision),triggerMessageIds:messageIds,budget:v2Budget,retrievalMode:activeV21?'light':'full'}:undefined });
+      });
+      if (job && !await this.#stageReplyJob(job.id,projection,'CONTEXT_READY')) return;
       const lastReply = projection.messages.findLastIndex(m => m.actor === 'owner' || m.actor === 'agent');
-      if (this.#images && projection.messages.slice(lastReply + 1).some(m => m.type === 'image')) {
+      let mediaReady=true;
+      if (this.#images && cloudAllowed && projection.messages.slice(lastReply + 1).some(m => m.type === 'image')) {
         const prepared = await preparePersistentImages({ pool: this.#pool, data: this.#data, port: this.#images, context: projection, policy: row.policy });
         projection = prepared.context; generation = projection.snapshot.generation;
-        if (!prepared.ready) draft = { shouldReply: false, risks: ['media_uncertain'], alternatives: [], generatorVersion: 'image-preparation-1', timing: 'no_reply' };
-        else draft = await this.#ai.propose(projection, row.policy);
-      } else draft = await this.#ai.propose(projection, row.policy);
+        mediaReady=prepared.ready;
+      }
+      if(job&&mediaReady){
+        if(!await this.#stageReplyJob(job.id,projection,'DECIDING'))return;
+        observe?.(job.id,projection);
+        let full=adaptDataContextProjection(projection);const policy={...row.policy,restrictions:[...row.policy.restrictions],stylePreferences:[...(row.policy.stylePreferences??[])]};
+        let decision:DecisionRunV2;
+        try{decision=await this.pipeline.decide(job.id,full,policy,async()=>{
+          // L3 alone pays for optional semantic retrieval. Rebuild through MemoryEngine so all evidence remains version checked.
+          if(cloudAllowed&&this.#embedding&&(await this.memory.scoped(row.conversation_id,repo=>repo.controls())).enabled){
+            const text=full.messages.filter(m=>messageIds.includes(m.id)).map(m=>m.text??'').join('\n');
+            if(text)try{queryEmbedding=await this.#embedding.embed(text);}catch{/* Keyword retrieval remains available. */}
+          }
+          projection=await withTransaction(this.#pool,tx=>this.#data.buildContext(tx,{callerContactId:row.contact_id,contactId:row.contact_id,generation,policyVersion:Number(row.policy_version),allowedScopes:row.policy.factScopes,cutoffTime:projection.snapshot.cutoffTime,cutoffMessageId:messageId,mode:'live',queryEmbedding,
+            v2:{ownerId:this.#ownerId,revision:Number(job.conversation_revision),triggerMessageIds:messageIds,budget:v2Budget,retrievalMode:'full'}}));
+          full=adaptDataContextProjection(projection);return full;
+        });}catch(error){
+          if(error instanceof Error&&['MEDIA_UNCERTAIN','UNSUPPORTED_CAPABILITY'].includes(error.message)){mediaReady=false;}else throw error;
+        }
+        if(mediaReady){
+          await this.#recordReplyDiagnostics(job.id,decision!.decision,decision!.route);
+          if((decision!.decision.action==='reply'||this.#ai.v2Generations===undefined&&!decision!.route.engineV21)&&!await this.#stageReplyJob(job.id,projection,'GENERATING'))return;
+          runV2=decision!;
+          if(this.#ai.v2Generations!==undefined||decision!.route.engineV21){
+            const generated=await this.pipeline.generate(job.id,full,policy,decision!);draft=generated.draft;
+          }else draft=await this.#ai.propose(projection,row.policy);
+        }
+      }else if(!job&&mediaReady)draft=await this.#ai.propose(projection,row.policy);
+      if(!mediaReady){
+        if(job&&!await this.#stageReplyJob(job.id,projection,'GENERATING'))return;
+        draft={shouldReply:false,risks:['media_uncertain'],alternatives:[],generatorVersion:'image-preparation-1',timing:'no_reply'};
+      }
+      if (job) assertReplyDraftV2(draft);
+      if (job && (draft.shouldReply||this.#ai.v2Generations===undefined&&!runV2?.route.engineV21||!mediaReady) && !await this.#stageReplyJob(job.id,projection,'VALIDATING')) return;
+      if(job&&draft.shouldReply&&runV2&&(this.#ai.v2Generations!==undefined||runV2.route.engineV21)){
+        const full=adaptDataContextProjection(projection),policy={...row.policy,restrictions:[...row.policy.restrictions],stylePreferences:[...(row.policy.stylePreferences??[])]};
+        const quality=this.pipeline.evaluate(full,policy,runV2,draft);
+        await this.#recordReplyDiagnostics(job.id,runV2.decision,runV2.route,quality);
+        if(quality.some(q=>q.status==='blocked')){
+          await withTransaction(this.#pool,async tx=>{await acquireDispatchBoundary(tx);await transitionReplyJob(tx,job.id,'FAILED','QUALITY_BLOCKED');const current=await this.#conversation(tx,row.conversation_id,true);if(current?.current_reply_job_id===job.id&&Number(current.generation)===generation)await tx.query(`UPDATE orch_conversations SET state='READY_CONFIRM',version=version+1 WHERE conversation_id=$1`,[row.conversation_id]);});return;
+        }
+      }
     }
     catch (error) {
-      if (error instanceof Error && ['STALE_CONTEXT', 'CONFLICT_VERSION', 'NOT_FOUND'].includes(error.message)) return;
-      if (!(error instanceof Error) || !['MODEL_UNAVAILABLE','SKILL_UNAVAILABLE','INTELLIGENCE_MODEL_UNAVAILABLE'].includes(error.message)) throw error;
+      if (error instanceof Error && ['STALE_CONTEXT', 'CONFLICT_VERSION', 'NOT_FOUND'].includes(error.message)) {
+        if (job) await withTransaction(this.#pool, async tx => { await acquireDispatchBoundary(tx); await transitionReplyJob(tx,job.id,'STALE','CONTEXT_CHANGED'); });
+        return;
+      }
+      if (!(error instanceof Error) || !['MODEL_UNAVAILABLE','MODEL_TIMEOUT','PROVIDER_RATE_LIMIT','PROVIDER_AUTH_FAILURE','PROVIDER_ERROR','MODEL_BUDGET_EXCEEDED','MODEL_BUDGET_EXHAUSTED','MODEL_BUDGET_UNAVAILABLE','MODEL_BUDGET_LIMIT_CHANGED','MODEL_BUDGET_POLICY_CHANGED','MODEL_PRICE_REQUIRED','INVALID_DECISION_OUTPUT','SKILL_UNAVAILABLE','INTELLIGENCE_MODEL_UNAVAILABLE','INVALID_INTELLIGENCE_OUTPUT','CONTEXT_BUDGET_EXCEEDED'].includes(error.message)) throw error;
       await withTransaction(this.#pool, async tx => {
         await acquireDispatchBoundary(tx);
         const current = await this.#conversation(tx, row.conversation_id, true);
         if (!current || Number(current.generation) !== generation || current.state !== 'GENERATING') return;
+        if (job) await transitionReplyJob(tx,job.id,'FAILED',['INVALID_INTELLIGENCE_OUTPUT','INVALID_DECISION_OUTPUT','MODEL_BUDGET_EXCEEDED','MODEL_BUDGET_EXHAUSTED','MODEL_BUDGET_UNAVAILABLE','MODEL_BUDGET_LIMIT_CHANGED','MODEL_BUDGET_POLICY_CHANGED','MODEL_PRICE_REQUIRED','MODEL_TIMEOUT','PROVIDER_RATE_LIMIT','PROVIDER_AUTH_FAILURE','PROVIDER_ERROR','CONTEXT_BUDGET_EXCEEDED'].includes(error.message) ? error.message : 'INTELLIGENCE_FAILURE');
         await changeContactPause(tx, row.conversation_id, true);
         const control = (await tx.query<{ generation: number | string }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id])).rows[0];
         await tx.query(`UPDATE orch_conversations SET generation=$2,state='PAUSED_FAILURE',pause_reasons=array_append(pause_reasons,'INTELLIGENCE_FAILURE'),version=version+1 WHERE conversation_id=$1`, [row.conversation_id, Number(control?.generation)]);
@@ -339,6 +480,7 @@ export class PgConfirmedService {
         await acquireDispatchBoundary(tx);
         const current = await this.#conversation(tx, row.conversation_id, true);
         if (!current || Number(current.generation) !== generation || current.state !== 'GENERATING') return;
+        if (job) await transitionReplyJob(tx,job.id,'SKIPPED',pauseRisk.reason);
         await changeContactPause(tx, row.conversation_id, true);
         const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
         await tx.query(`UPDATE orch_conversations SET generation=$2,state=$3,pause_reasons=array_append(pause_reasons,$4),version=version+1 WHERE conversation_id=$1`, [row.conversation_id, Number(control.rows[0]?.generation), pauseRisk.state, pauseRisk.reason]);
@@ -346,20 +488,28 @@ export class PgConfirmedService {
       return;
     }
     if (!draft.shouldReply || draft.timing !== 'now') {
-      await withTransaction(this.#pool, async tx => { await acquireDispatchBoundary(tx); const current = await this.#conversation(tx, row.conversation_id, true); if (current && Number(current.generation) === generation && current.state === 'GENERATING') await tx.query(`UPDATE orch_conversations SET state=$2,version=version+1 WHERE conversation_id=$1`, [row.conversation_id, deriveState([], current.policy.sendMode)]); });
+      await withTransaction(this.#pool, async tx => { await acquireDispatchBoundary(tx); const current = await this.#conversation(tx, row.conversation_id, true); if (current && Number(current.generation) === generation && current.state === 'GENERATING') {
+        if (job) {const diagnostic=(await tx.query<{decision_record:{action:string;classification_level?:string}|null}>('SELECT decision_record FROM orch_reply_jobs WHERE id=$1',[job.id])).rows[0];await transitionReplyJob(tx,job.id,'SKIPPED',diagnostic?.decision_record?.classification_level==='L4'?'HUMAN_REVIEW_REQUIRED':diagnostic?.decision_record?.action==='ask_user'?'ASK_USER':draft.timing === 'wait' ? 'WAIT' : 'NO_REPLY');}
+        await tx.query(`UPDATE orch_conversations SET state=$2,version=version+1 WHERE conversation_id=$1`, [row.conversation_id, deriveState([], current.policy.sendMode)]);
+      } });
       return;
     }
     if (!validAlternatives(draft.alternatives)) fail('VALIDATION_FAILED');
     const route = routeReply(row.policy, draft.risks);
     if (route.kind === 'block') fail('POLICY_BLOCKED');
-    const triggerMessages = projection.messages.filter(m => messageIds.includes(m.id));
-    const autoEligible = this.#mockAutoEnabled && this.#platform instanceof MockPlatformAdapter && row.policy.sendMode === 'auto'
+    const triggerMessages = projection.messages.filter(m => messageIds.includes(m.id as string));
+    const autoEligible = row.pipeline_version !== 2 && this.#mockAutoEnabled && this.#platform instanceof MockPlatformAdapter && row.policy.sendMode === 'auto'
       && route.kind === 'auto' && draft.risks.every(r => r === 'ordinary') && !Object.keys(draft.skillVersions ?? {}).length
       && triggerMessages.length === messageIds.length && triggerMessages.every(m => m.type === 'text' && m.actor === 'contact' && m.mode === 'live');
     return withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
       const current = await this.#conversation(tx, row.conversation_id, true);
       if (!current || Number(current.generation) !== generation || Number(current.policy_version) !== Number(row.policy_version) || current.pause_reasons.length || current.state !== 'GENERATING') return;
+      if (job) {
+        const finalJob = (await tx.query<ReplyJobRow>('SELECT * FROM orch_reply_jobs WHERE id=$1 FOR UPDATE', [job.id])).rows[0];
+        if (!finalJob || current.current_reply_job_id !== job.id || finalJob.status !== 'VALIDATING'
+          || Number(finalJob.conversation_revision) !== Number(current.revision)) return;
+      }
       const epochs = await tx.query<{ generation: string | number; dependency_epoch: string | number; skill_epoch: string | number; paused: boolean; unresolved_send_key: string | null }>('SELECT generation,dependency_epoch,skill_epoch,paused,unresolved_send_key FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
       const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
       if (Number(epochs.rows[0]?.generation) !== generation || Number(epochs.rows[0]?.dependency_epoch) !== projection.dependencyEpoch || epochs.rows[0]?.paused || epochs.rows[0]?.unresolved_send_key || global?.paused) return;
@@ -370,6 +520,10 @@ export class PgConfirmedService {
       const finalHash = autoEligible ? contentHash(autoParts) : null;
       await tx.query(`INSERT INTO orch_plans(id,conversation_id,contact_id,context_snapshot_id,generation,policy_version,dependency_epoch,skill_epoch,trigger_message_ids,fact_versions,analysis_versions,skill_versions,risks,alternatives,status,approved_alternative_id,final_content_hash,generator_version,prompt_version)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12::jsonb,$13,$14::jsonb,$15,$16,$17,$18,$19)`, [planId, row.conversation_id, row.contact_id, projection.snapshot.id, generation, row.policy_version, Number(epochs.rows[0]?.dependency_epoch ?? 0), Number(epochs.rows[0]?.skill_epoch ?? 0), [...messageIds], JSON.stringify(draft.factVersions ?? {}), JSON.stringify(draft.analysisVersions ?? {}), JSON.stringify(draft.skillVersions ?? {}), draft.risks, JSON.stringify(alternatives), autoEligible ? 'APPROVED' : 'AWAITING_CONFIRMATION', autoEligible ? chosen.alternativeId : null, finalHash, draft.generatorVersion, draft.promptVersion ?? null]);
+      if (job) {
+        await tx.query('UPDATE orch_reply_jobs SET plan_id=$2,context_snapshot_id=$3,generation=$4 WHERE id=$1', [job.id,planId,projection.snapshot.id,generation]);
+        await transitionReplyJob(tx,job.id,'PENDING_APPROVAL');
+      }
       if (autoEligible) {
         await tx.query(`INSERT INTO orch_mock_auto_approvals(plan_id,content_hash,policy_version,generation,dependency_epoch,skill_epoch,reason) VALUES($1,$2,$3,$4,$5,$6,'LOW_RISK_TEXT')`, [planId, finalHash, row.policy_version, generation, Number(epochs.rows[0]?.dependency_epoch), Number(epochs.rows[0]?.skill_epoch)]);
         for (const part of chosen.parts) await tx.query(`INSERT INTO orch_send_tasks(id,plan_id,reply_part_id,sequence,send_key,content,content_sha256,status,correlation_id) VALUES($1,$2,$3,$4,$5,$6,$7,'CREATED',$8)`, [newId(this.#now()), planId, part.replyPartId, part.sequence, newId(this.#now()), part.content, sha256(part.content), newId(this.#now())]);
@@ -384,10 +538,148 @@ export class PgConfirmedService {
     });
   }
 
-  async confirmPlan(command: { conversationId: string; planId: string; taskVersion: number; planVersion: number; alternativeId: string; editedParts: { type: 'text'; content: string }[]; contentHash: string; idempotencyKey: string; shownAlternativeIds?: string[] }) {
+  async #recordReplyDiagnostics(id:string,decision:unknown,route:unknown,quality?:unknown){
+    await withTransaction(this.#pool,async tx=>{await tx.query(`UPDATE orch_reply_jobs j SET decision_record=$2::jsonb,route_record=$3::jsonb,quality_results=COALESCE($4::jsonb,j.quality_results) WHERE j.id=$1 AND j.status IN ('DECIDING','GENERATING','VALIDATING') AND EXISTS(SELECT 1 FROM data_context_snapshots s WHERE s.id=j.context_snapshot_id AND s.status='valid')`,[id,JSON.stringify(decision),JSON.stringify(route),quality===undefined?null:JSON.stringify(quality)]);});
+  }
+  async #stageReplyJob(id: string, context: PersistentContext, status: ReplyJobState): Promise<boolean> {
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const current = await this.#conversation(tx,context.snapshot.conversationId,true);
+      if (!current || current.current_reply_job_id !== id || current.pipeline_version !== 2 || current.state !== 'GENERATING'
+        || Number(current.generation) !== context.snapshot.generation || current.pause_reasons.length) return false;
+      const job=(await tx.query<ReplyJobRow>('SELECT * FROM orch_reply_jobs WHERE id=$1 FOR UPDATE',[id])).rows[0];
+      if(!job||Number(job.conversation_revision)!==Number(current.revision)||!cancellableReplyStates.includes(job.status))return false;
+      await this.#data.readContextProjection(tx,{ callerContactId: current.contact_id, contactId: current.contact_id,
+        snapshotId: context.snapshot.id, allowedScopes: current.policy.factScopes, expectedDependencyEpoch: context.dependencyEpoch });
+      await tx.query('UPDATE orch_reply_jobs SET context_snapshot_id=$2,generation=$3 WHERE id=$1', [id,context.snapshot.id,context.snapshot.generation]);
+      await transitionReplyJob(tx,id,status);
+      return true;
+    });
+  }
+
+  async ownerReplyJobs(conversationId: string) {
+    return withTransaction(this.#pool, async tx => {
+      const row = await this.#conversation(tx,conversationId); if (!row) fail('NOT_FOUND');
+      const jobs = await tx.query<{ id: string }>('SELECT id FROM orch_reply_jobs WHERE conversation_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100', [conversationId]);
+      const items = [];
+      for (const job of jobs.rows) items.push(await readReplyJob(tx,job.id));
+      return { pipelineVersion: row.pipeline_version, conversationVersion: Number(row.version),contactId:row.contact_id,factScopes:[...row.policy.factScopes],items };
+    });
+  }
+
+  async ownerReplyJob(id: string, trace = false) {
+    return withTransaction(this.#pool, async tx => {
+      const job = await readReplyJob(tx,id);
+      if (!trace) return { ...job, transitions: undefined,modelCalls:undefined,feedback:undefined };
+      const transitions = (await tx.query('SELECT version,from_status,to_status,reason_code,occurred_at FROM orch_reply_job_transitions WHERE job_id=$1 ORDER BY version', [id])).rows;
+      await this.pipeline.models.bind(tx);
+      const modelCalls=(await tx.query(`SELECT id,task,provider_key,provider_id,model_id,model_version,prompt_version,route_reason,outcome,error_code,elapsed_ms,input_tokens,output_tokens,reasoning_tokens,cached_input_tokens,price_snapshot,cost,started_at,completed_at FROM ai_model_calls_v2 WHERE job_id=$1 AND owner_id=$2 ORDER BY started_at,id`,[id,this.#ownerId])).rows;
+      await setContactScope(tx,job.contactId);
+      const feedback=job.planId?(await tx.query('SELECT action,reason,rating,shown_alternative_ids,updated_at FROM data_feedback WHERE plan_id=$1 AND contact_id=$2 ORDER BY updated_at',[job.planId,job.contactId])).rows:[];
+      return { ...job, transitions,modelCalls,feedback };
+    });
+  }
+
+  /** Per-conversation opt-in/out; this changes tracking, never sends or grants automation. */
+  async setPipelineVersion(conversationId: string, input: { version: PipelineVersion; expectedVersion: number; idempotencyKey: string }) {
+    requireText(input.idempotencyKey);
+    if (![1,2].includes(input.version) || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) fail('VALIDATION_FAILED');
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const row = await this.#conversation(tx,conversationId,true); if (!row) fail('NOT_FOUND');
+      const scope = `pipeline:${conversationId}`, hash = sha256(JSON.stringify(input));
+      const previous = (await tx.query<{ command_hash: string; result_version: string | number; correlation_id: string }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [scope,input.idempotencyKey])).rows[0];
+      if (previous) { if (previous.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(previous.result_version),correlationId: previous.correlation_id,status: 'UPDATED' }; }
+      if (Number(row.version) !== input.expectedVersion) fail('CONFLICT_VERSION');
+      if (row.pipeline_version !== input.version) {
+        await this.#invalidate(tx,conversationId,'PIPELINE_CHANGED');
+        await tx.query(`UPDATE orch_conversations SET pipeline_version=$2,current_reply_job_id=NULL,
+          state=$3,collection_started_at=NULL,collection_due_at=NULL,collection_message_ids='{}'::uuid[],
+          version=version+1,updated_at=now() WHERE conversation_id=$1`,
+          [conversationId,input.version,deriveState(row.pause_reasons,row.policy.sendMode,row.policy.agentEnabled)]);
+      }
+      const changed = (await this.#conversation(tx,conversationId))!;
+      const correlationId = newId();
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)',
+        [scope,input.idempotencyKey,hash,changed.version,correlationId]);
+      return { resultVersion: Number(changed.version),correlationId,status: 'UPDATED' };
+    });
+  }
+
+  async approveReplyJob(id: string, input: Omit<Parameters<PgConfirmedService['confirmPlan']>[0], 'conversationId' | 'planId'> & { expectedConversationRevision: number }) {
+    if (!Number.isSafeInteger(input.expectedConversationRevision) || input.expectedConversationRevision < 1) fail('VALIDATION_FAILED');
+    const job = await this.ownerReplyJob(id);
+    if (!job.planId) fail('STALE_PLAN');
+    const result = await this.confirmPlan({ ...input,conversationId: job.conversationId,planId: job.planId });
+    return { ...result,jobId: id,status: 'SEND_QUEUED' };
+  }
+
+  async cancelReplyJob(id: string, input: { expectedVersion: number; idempotencyKey: string }) {
+    requireText(input.idempotencyKey);
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) fail('VALIDATION_FAILED');
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const initial = await readReplyJob(tx,id);
+      const row = await this.#conversation(tx,initial.conversationId,true); if (!row) fail('NOT_FOUND');
+      const job = (await tx.query<ReplyJobRow>('SELECT * FROM orch_reply_jobs WHERE id=$1 FOR UPDATE', [id])).rows[0]!;
+      const scope = `cancel-job:${id}`, hash = sha256(JSON.stringify(input));
+      const previous = (await tx.query<{ command_hash: string; result_version: string | number; correlation_id: string }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [scope,input.idempotencyKey])).rows[0];
+      if (previous) { if (previous.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(previous.result_version),correlationId: previous.correlation_id,status: 'CANCELLED' }; }
+      if (Number(job.version) !== input.expectedVersion || row.current_reply_job_id !== id) fail('CONFLICT_VERSION');
+      if (!cancellableReplyStates.includes(job.status)) fail('POLICY_BLOCKED');
+      // Cancellation cannot hide a submitted part or an ambiguous external attempt.
+      if (job.plan_id && (await tx.query(`SELECT id FROM orch_send_tasks WHERE plan_id=$1 AND status NOT IN ('CREATED','CANCELLED_PRE_SUBMIT')
+        UNION ALL SELECT send_task_id FROM dispatch_attempts WHERE plan_id=$1`, [job.plan_id])).rows.length) fail('POLICY_BLOCKED');
+      await transitionReplyJob(tx,id,'CANCELLED','OWNER_CANCEL');
+      await this.#invalidate(tx,row.conversation_id,'OWNER_CANCEL');
+      await tx.query(`UPDATE orch_conversations SET state=$2,current_reply_job_id=NULL,collection_started_at=NULL,
+        collection_due_at=NULL,collection_message_ids='{}'::uuid[],version=version+1 WHERE conversation_id=$1`,
+        [row.conversation_id,deriveState(row.pause_reasons,row.policy.sendMode,row.policy.agentEnabled)]);
+      const version = Number(job.version)+1,correlationId = newId();
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', [scope,input.idempotencyKey,hash,version,correlationId]);
+      return { resultVersion: version,correlationId,status: 'CANCELLED' };
+    });
+  }
+
+  /** A retry creates new reply work; uncertain/submitted sends never enter this path. */
+  async regenerateReplyJob(id:string,input:{expectedVersion:number;expectedConversationRevision:number;idempotencyKey:string}){
+    requireText(input.idempotencyKey);if(!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<1||!Number.isSafeInteger(input.expectedConversationRevision)||input.expectedConversationRevision<1)fail('VALIDATION_FAILED');
+    return withTransaction(this.#pool,async tx=>{
+      await acquireDispatchBoundary(tx);const initial=await readReplyJob(tx,id),row=await this.#conversation(tx,initial.conversationId,true);if(!row)fail('NOT_FOUND');
+      const scope=`regenerate-job:${id}`,hash=sha256(JSON.stringify(input));
+      const prior=(await tx.query<{command_hash:string;result_details:{jobId:string;resultVersion:number;correlationId:string;status:string}}>('SELECT command_hash,result_details FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2',[scope,input.idempotencyKey])).rows[0];
+      if(prior){if(prior.command_hash!==hash)fail('CONFLICT_VERSION');return prior.result_details;}
+      const job=(await tx.query<ReplyJobRow>('SELECT * FROM orch_reply_jobs WHERE id=$1 FOR UPDATE',[id])).rows[0]!;
+      if(row.current_reply_job_id!==id||Number(job.version)!==input.expectedVersion||row.pipeline_version!==2)fail('CONFLICT_VERSION');
+      if(Number(row.revision)!==input.expectedConversationRevision||Number(job.conversation_revision)!==input.expectedConversationRevision)fail('STALE_PLAN');
+      if(!['FAILED','SKIPPED','STALE','CANCELLED','PENDING_APPROVAL'].includes(job.status)||row.pause_reasons.length||!row.policy.agentEnabled)fail('POLICY_BLOCKED');
+      const control=(await tx.query<{paused:boolean;unresolved_send_key:string|null}>('SELECT paused,unresolved_send_key FROM dispatch_control WHERE conversation_id=$1',[row.conversation_id])).rows[0];
+      const global=(await tx.query<{paused:boolean}>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
+      if(control?.paused||control?.unresolved_send_key||global?.paused||job.plan_id&&(await tx.query('SELECT id FROM orch_send_tasks WHERE plan_id=$1 LIMIT 1',[job.plan_id])).rows.length)fail('POLICY_BLOCKED');
+      await setContactScope(tx,row.contact_id);
+      const active=(await tx.query('SELECT id FROM data_messages WHERE id=ANY($1::uuid[]) AND contact_id=$2 AND conversation_id=$3::uuid AND actor=\'contact\' AND mode=\'live\' AND deletion_status=\'active\'',[job.trigger_message_ids,row.contact_id,row.conversation_id])).rows;
+      if(active.length!==job.trigger_message_ids.length)fail('STALE_PLAN');
+      await this.#invalidate(tx,row.conversation_id,'OWNER_REGENERATE');
+      const generation=(await tx.query<{generation:string}>('UPDATE dispatch_control SET generation=generation+1 WHERE conversation_id=$1 RETURNING generation',[row.conversation_id])).rows[0]!;
+      const at=new Date(this.#now()).toISOString();await tx.query(`UPDATE orch_conversations SET generation=$2,state='COLLECTING',collection_started_at=$3,collection_due_at=$3,collection_message_ids=$4,version=version+1,updated_at=now() WHERE conversation_id=$1`,[row.conversation_id,Number(generation.generation),at,job.trigger_message_ids]);
+      const current=(await this.#conversation(tx,row.conversation_id))!,next=await createReplyJob(tx,current,job.trigger_message_ids,scope+':'+input.idempotencyKey,true);
+      if(!next)fail('CONFLICT_VERSION');
+      const result={jobId:next.id,resultVersion:Number(current.version),correlationId:newId(),status:'GENERATION_REQUESTED'};
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id,result_details) VALUES($1,$2,$3,$4,$5,$6::jsonb)',[scope,input.idempotencyKey,hash,result.resultVersion,result.correlationId,JSON.stringify(result)]);return result;
+    });
+  }
+
+  async #checkPlanJobRevision(tx: PgClient, row: Row, planId: string): Promise<void> {
+    const job = (await tx.query<{ conversation_revision: string | number; status: ReplyJobState }>('SELECT conversation_revision,status FROM orch_reply_jobs WHERE plan_id=$1 AND conversation_id=$2', [planId,row.conversation_id])).rows[0];
+    if (job && (Number(job.conversation_revision) !== Number(row.revision) || ['STALE','CANCELLED'].includes(job.status))) fail('STALE_PLAN');
+  }
+
+  async confirmPlan(command: { conversationId: string; planId: string; taskVersion: number; planVersion: number; alternativeId: string; editedParts: { type: 'text'; content: string }[]; contentHash: string; idempotencyKey: string; shownAlternativeIds?: string[]; expectedConversationRevision?: number }) {
     requireText(command.idempotencyKey);
     if (!command.editedParts.length || command.editedParts.some(p => p.type !== 'text' || !p.content.trim()) || contentHash(command.editedParts) !== command.contentHash) fail('VALIDATION_FAILED');
-    const commandHash = sha256(JSON.stringify({ planId: command.planId, taskVersion: command.taskVersion, planVersion: command.planVersion, alternativeId: command.alternativeId, editedParts: command.editedParts, contentHash: command.contentHash }));
+    if (command.expectedConversationRevision !== undefined && (!Number.isSafeInteger(command.expectedConversationRevision) || command.expectedConversationRevision < 1)) fail('VALIDATION_FAILED');
+    const commandHash = sha256(JSON.stringify({ planId: command.planId, taskVersion: command.taskVersion, planVersion: command.planVersion, alternativeId: command.alternativeId, editedParts: command.editedParts, contentHash: command.contentHash,
+      ...(command.expectedConversationRevision === undefined ? {} : { expectedConversationRevision: command.expectedConversationRevision }) }));
     const previous = await withTransaction(this.#pool, async tx => {
       const row = await this.#conversation(tx, command.conversationId); if (!row) fail('NOT_FOUND');
       const old = await tx.query<{ command_hash: string; plan_id: string; result_version: string | number }>('SELECT command_hash,plan_id,result_version FROM orch_owner_commands WHERE contact_id=$1 AND idempotency_key=$2', [row.contact_id, command.idempotencyKey]);
@@ -401,10 +693,19 @@ export class PgConfirmedService {
       if (!row) fail('NOT_FOUND');
       const plan = await this.#plan(tx, command.planId);
       if (!plan || plan.conversation_id !== row.conversation_id) fail('NOT_FOUND');
+      if (command.expectedConversationRevision !== undefined && Number(row.revision) !== command.expectedConversationRevision) fail('STALE_PLAN');
+      await this.#checkPlanJobRevision(tx,row,plan.id);
       const current = await this.#readProjection(tx, row, plan);
       return { row, plan, context: current };
     });
-    const checked = await this.#ai.checkEdited(preview.context, preview.row.policy, command.editedParts);
+    const checked = preview.row.pipeline_version===2&&this.#ai.v2Generations!==undefined?{allowed:true,reasons:[]}:await this.#ai.checkEdited(preview.context, preview.row.policy, command.editedParts);
+    if(preview.row.pipeline_version===2){
+      const full=adaptDataContextProjection(preview.context),policy={...preview.row.policy,restrictions:[...preview.row.policy.restrictions],stylePreferences:[...(preview.row.policy.stylePreferences??[])]};
+      const decision=ruleDecision(full,policy);if(decision.decision.action!=='reply')fail('POLICY_BLOCKED');
+      const config=await this.pipeline.models.read();
+      const quality=evaluateQualityV2(full,policy,decision.legacy,[{clientAlternativeKey:command.alternativeId,strategySummary:'本人编辑',parts:command.editedParts.map((p,i)=>({...p,clientPartKey:`edit-${i}`,sequence:i+1}))}],config.config.maxReplyCharacters);
+      if(quality.some(q=>q.status==='blocked'))fail('POLICY_BLOCKED');
+    }
     if (!checked.allowed) fail(checked.reasons.includes('MISSING_FACT') ? 'MISSING_FACT' : 'POLICY_BLOCKED');
     return withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
@@ -412,6 +713,8 @@ export class PgConfirmedService {
       const old = await tx.query<{ command_hash: string; plan_id: string; result_version: string | number }>('SELECT command_hash,plan_id,result_version FROM orch_owner_commands WHERE contact_id=$1 AND idempotency_key=$2', [row.contact_id, command.idempotencyKey]);
       if (old.rows[0]) { if (old.rows[0].command_hash !== commandHash) fail('CONFLICT_VERSION'); return { planId: old.rows[0].plan_id, resultVersion: Number(old.rows[0].result_version), duplicate: true }; }
       const plan = await this.#plan(tx, command.planId, true);
+      if (command.expectedConversationRevision !== undefined && Number(row.revision) !== command.expectedConversationRevision) fail('STALE_PLAN');
+      if (plan) await this.#checkPlanJobRevision(tx,row,plan.id);
       const task = await this.#task(tx, command.planId, true);
       const control = await tx.query<{ generation: string | number; dependency_epoch: string | number; skill_epoch: string | number; paused: boolean; unresolved_send_key: string | null }>('SELECT generation,dependency_epoch,skill_epoch,paused,unresolved_send_key FROM dispatch_control WHERE conversation_id=$1', [row.conversation_id]);
       const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
@@ -428,6 +731,7 @@ export class PgConfirmedService {
       }
       await tx.query(`INSERT INTO orch_owner_commands(contact_id,idempotency_key,command_hash,plan_id,result_version) VALUES($1,$2,$3,$4,$5)`, [row.contact_id, command.idempotencyKey, commandHash, plan.id, newVersion]);
       await tx.query(`UPDATE orch_conversations SET state='SCHEDULED',version=version+1 WHERE conversation_id=$1`, [row.conversation_id]);
+      await transitionPlanJob(tx,plan.id,'SEND_QUEUED','OWNER_APPROVED');
       await this.#feedback.recordOutcome(tx, { callerContactId: row.contact_id, contactId: row.contact_id, planId: plan.id,
         shownAlternativeIds: command.shownAlternativeIds, at: new Date(this.#now()).toISOString(),
         action: alternative.parts.every((part, i) => part.content === command.editedParts[i]?.content) ? 'selected' : 'edited' });
@@ -437,32 +741,41 @@ export class PgConfirmedService {
 
   async recover(): Promise<void> {
     await withTransaction(this.#pool, async tx => {
-      await recoverAmbiguous(tx);
-      const attempts = await tx.query<{ send_task_id: string; conversation_id: string; status: string; platform_message_id: string | null }>(`SELECT send_task_id,conversation_id,status,platform_message_id FROM dispatch_attempts`);
+      await acquireDispatchBoundary(tx);
+      if (this.#platform.accountId !== 'core-no-dispatch') await registerPlatformAccount(tx, this.#platform.accountId, this.#platform.platform);
+      const accountId = this.#platform.accountId === 'core-no-dispatch' ? undefined : this.#platform.accountId;
+      await recoverAmbiguous(tx, accountId);
+      const attempts = await tx.query<{ send_task_id: string; conversation_id: string; status: string; platform_message_id: string | null }>(`SELECT send_task_id,conversation_id,status,platform_message_id FROM dispatch_attempts WHERE ($1::text IS NULL OR account_id=$1)`, [accountId ?? null]);
       for (const a of attempts.rows) await this.#recordSendResult(tx, a.send_task_id, a.status, a.platform_message_id);
     });
-    const pending = await withTransaction(this.#pool, async tx => (await tx.query<Row>(`SELECT * FROM orch_conversations WHERE state='GENERATING' AND last_inbound_message_id IS NOT NULL`)).rows);
-    for (const row of pending) await this.#proposeFor(row, Number(row.generation), [row.last_inbound_message_id!], newId(this.#now()));
+    const pending = await withTransaction(this.#pool, async tx => (await tx.query<Row>(`SELECT * FROM orch_conversations WHERE state='GENERATING' AND last_inbound_message_id IS NOT NULL AND ($1::text IS NULL OR account_id=$1)`, [this.#platform.accountId === 'core-no-dispatch' ? null : this.#platform.accountId])).rows);
+    for (const row of pending) {
+      const triggerIds = row.pipeline_version === 2 && row.current_reply_job_id ? await withTransaction(this.#pool,async tx =>
+        (await tx.query<{ trigger_message_ids: string[] }>('SELECT trigger_message_ids FROM orch_reply_jobs WHERE id=$1 AND conversation_id=$2', [row.current_reply_job_id,row.conversation_id])).rows[0]?.trigger_message_ids) : undefined;
+      await this.#proposeFor(row, Number(row.generation), triggerIds ?? [row.last_inbound_message_id!], newId(this.#now()));
+    }
     // A batch that was still collecting when the worker died is due-by-deadline, not by wall clock.
     for (const conversationId of await this.claimDueCollections()) await this.flushDue(conversationId);
     this.#recovered = true;
   }
 
   /** Claims due aggregation batches without holding a lock across the model call. */
-  async claimDueCollections(limit = 20): Promise<string[]> {
+  async claimDueCollections(limit = 20, accountId?: string): Promise<string[]> {
+    if (this.#platform.accountId !== 'core-no-dispatch' && accountId !== undefined && accountId !== this.#platform.accountId) fail('FORBIDDEN');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) fail('VALIDATION_FAILED');
     return withTransaction(this.#pool, async tx => (await tx.query<{ conversation_id: string }>(
       `SELECT conversation_id FROM orch_conversations
-       WHERE state='COLLECTING' AND collection_due_at IS NOT NULL AND collection_due_at <= now()
-       ORDER BY collection_due_at,conversation_id LIMIT $1 FOR UPDATE SKIP LOCKED`, [limit])).rows.map(row => row.conversation_id));
+       WHERE state='COLLECTING' AND collection_due_at IS NOT NULL AND collection_due_at <= now() AND ($2::text IS NULL OR account_id=$2)
+       ORDER BY collection_due_at,conversation_id LIMIT $1 FOR UPDATE SKIP LOCKED`, [limit, accountId ?? (this.#platform.accountId === 'core-no-dispatch' ? null : this.#platform.accountId)])).rows.map(row => row.conversation_id));
   }
 
   /** Conversations with approved but not yet submitted parts, for the dispatch worker. */
-  async dispatchableConversations(limit = 20): Promise<string[]> {
+  async dispatchableConversations(limit = 20, accountId = this.#platform.accountId): Promise<string[]> {
+    if (accountId !== this.#platform.accountId) fail('FORBIDDEN');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) fail('VALIDATION_FAILED');
     return withTransaction(this.#pool, async tx => (await tx.query<{ conversation_id: string }>(
-      `SELECT DISTINCT p.conversation_id FROM orch_send_tasks s JOIN orch_plans p ON p.id=s.plan_id
-       WHERE s.status='CREATED' AND p.status IN ('APPROVED','PARTIALLY_SENT') LIMIT $1`, [limit])).rows.map(row => row.conversation_id));
+      `SELECT DISTINCT p.conversation_id FROM orch_send_tasks s JOIN orch_plans p ON p.id=s.plan_id JOIN orch_conversations c ON c.conversation_id=p.conversation_id
+       WHERE s.status='CREATED' AND p.status IN ('APPROVED','PARTIALLY_SENT') AND c.account_id=$2 LIMIT $1`, [limit, accountId])).rows.map(row => row.conversation_id));
   }
 
   /** Flushes one due batch. The generation CAS inside #proposeFor makes a double flush harmless. */
@@ -471,6 +784,7 @@ export class PgConfirmedService {
       await acquireDispatchBoundary(tx);
       const row = await this.#conversation(tx, conversationId, true);
       if (!row || row.state !== 'COLLECTING' || !row.collection_due_at) return undefined;
+      if (this.#platform.accountId !== 'core-no-dispatch' && row.account_id !== this.#platform.accountId) fail('FORBIDDEN');
       if (toMs(row.collection_due_at) > this.#now()) return undefined;
       const messageIds = row.collection_message_ids ?? [];
       if (!messageIds.length) return undefined;
@@ -486,6 +800,7 @@ export class PgConfirmedService {
     if (!this.#recovered) fail('RECOVERY_REQUIRED');
     const candidate = await withTransaction(this.#pool, async tx => {
       const row = await this.#conversation(tx, conversationId); if (!row) fail('NOT_FOUND');
+      if (row.account_id !== this.#platform.accountId) fail('FORBIDDEN');
       const sends = await tx.query<SendRow>(`SELECT s.* FROM orch_send_tasks s JOIN orch_plans p ON p.id=s.plan_id WHERE p.conversation_id=$1 AND s.status='CREATED' AND p.status IN ('APPROVED','PARTIALLY_SENT') ORDER BY p.created_at,s.sequence LIMIT 1`, [conversationId]);
       const send = sends.rows[0]; if (!send) return;
       const plan = await this.#plan(tx, send.plan_id); if (!plan) fail('NOT_FOUND');
@@ -500,6 +815,7 @@ export class PgConfirmedService {
     const result = await withDispatchLease(this.#pool, claim, async tx => {
       const current = await this.#conversation(tx, conversationId, true);
       const p = await this.#plan(tx, plan.id, true);
+      if (current?.account_id !== this.#platform.accountId) fail('FORBIDDEN');
       const t = await this.#task(tx, plan.id, true);
       const auto = (await tx.query<{ content_hash: string; policy_version: number | string; generation: number | string; dependency_epoch: number | string; skill_epoch: number | string }>('SELECT * FROM orch_mock_auto_approvals WHERE plan_id=$1', [plan.id])).rows[0];
       const s = await tx.query<SendRow>('SELECT * FROM orch_send_tasks WHERE id=$1 FOR UPDATE', [send.id]);
@@ -513,6 +829,8 @@ export class PgConfirmedService {
       const all = await tx.query<{ content: string }>('SELECT content FROM orch_send_tasks WHERE plan_id=$1 ORDER BY sequence', [plan.id]);
       if (contentHash(all.rows.map(x => ({ type: 'text', content: x.content }))) !== p.final_content_hash) fail('STALE_PLAN');
       await this.#readProjection(tx, current, p);
+      await this.#checkPlanJobRevision(tx,current,p.id);
+      await transitionPlanJob(tx,p.id,'SENDING');
     }, async () => {
       const observed = await this.#platform.submitSend({ sendTaskId: send.id, sendKey: send.send_key, conversationRef: { accountId: row.account_id, conversationId, externalContactRef: row.external_contact_ref }, partType: 'text', content: send.content, deadline: new Date(this.#now() + 30_000).toISOString(), mode: 'live', correlationId: send.correlation_id }, this.#authority, async () => true);
       return { status: observed.status as 'SUBMITTED' | 'DELIVERED' | 'FAILED_DEFINITE' | 'RESULT_UNKNOWN', platformMessageId: observed.platformMessageId, receiptLevel: observed.receiptLevel, evidenceRef: observed.status === 'FAILED_DEFINITE' ? `${this.#platform.platform}:${observed.correlationId ?? send.correlation_id}` : undefined };
@@ -547,24 +865,31 @@ export class PgConfirmedService {
         FROM orch_account_health h ORDER BY h.account_id`)).rows;
       const coverage = (await tx.query<{ covered: boolean }>(`SELECT EXISTS(SELECT 1 FROM orch_account_health) AND NOT EXISTS(
         SELECT 1 FROM orch_conversations c WHERE NOT EXISTS(SELECT 1 FROM orch_account_health h WHERE h.account_id=c.account_id)) AS covered`)).rows[0]?.covered === true;
-      const summaries: Record<string,string> = { BRIDGE_RESTARTED: '桥接重新启动，账号保持暂停', PROCESS_EXITED: '微信进程已退出，账号已暂停',
+      const summaries: Record<string,string> = { BRIDGE_RESTARTED: '桥接重新启动，账号保持暂停', PROCESS_EXITED: '平台进程已退出，账号已暂停',
         HOOK_LOGIN_ABNORMAL: '接收长时间无事件且登录探测异常，账号已暂停', HELPER_UNRESPONSIVE: '微信 helper 无响应或响应异常，账号已暂停' };
       const faults = health.filter(h => !h.healthy || h.held).map((h, index) => ({ id: `account-fault-${index + 1}`, version: Number(h.version),
         status: h.healthy ? 'RECOVERED_AWAITING_OWNER' : 'ACTIVE', summary: summaries[h.fault_code ?? ''] ?? '账号健康状态未知，保持暂停', allowedActions: [] }));
       return { id: 'global', version: Number(global.pause_epoch), status: global.paused ? 'PAUSED' : 'ACTIVE', globalPaused: global.paused,
-        allowedActions: global.paused ? ['resumeAll'] : ['pauseAll'], pendingCount: Number(counts.pending), unknownSendCount: Number(counts.unknown),
-        connectionQueryStatus: 'unavailable' as const, faultQueryStatus: coverage ? 'ready' as const : 'unavailable' as const, connections: [], faults };
+        allowedActions: global.paused ? ['resumeAll'] : ['pauseAll','resumeAll'], pendingCount: Number(counts.pending), unknownSendCount: Number(counts.unknown),
+        connectionQueryStatus: 'ready' as const, faultQueryStatus: coverage ? 'ready' as const : 'unavailable' as const,
+        connections: (await tx.query<{ account_id: string; platform: string | null; healthy: boolean | null; observed_at: string | null }>(`SELECT a.*,h.healthy,h.observed_at FROM orch_platform_accounts a LEFT JOIN orch_account_health h ON h.account_id=a.account_id ORDER BY a.account_id`)).rows.map(a => ({
+          accountId: a.account_id, platform: a.platform ?? 'unknown',
+          connectionState: !a.observed_at || this.#now()-toMs(a.observed_at)>30_000 ? 'unknown' : a.healthy ? 'probe_healthy' : 'disconnected',
+          lastReconciledAt: a.observed_at ? new Date(a.observed_at).toISOString() : undefined,
+          limitations: ['最近健康探测不证明消息历史完整'],
+        })), faults };
     });
   }
 
-  async ownerTasks() {
+  async ownerTasks(contactId?: string) {
     return withTransaction(this.#pool, async tx => {
       const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
       const rows = await tx.query<TaskRow & { contact_id: string; conversation_id: string; plan_version: number | string; plan_status: string; context_snapshot_id: string; policy_version: number | string; alternatives: PlanRow['alternatives']; trigger_message_ids: string[]; generation: number | string; current_generation: number | string; dependency_epoch: number | string; current_dependency_epoch: number | string; skill_epoch: number | string; current_skill_epoch: number | string; paused: boolean; unresolved_send_key: string | null; pause_reasons: string[] }>(`SELECT t.*,p.contact_id,p.conversation_id,p.version AS plan_version,p.status AS plan_status,p.context_snapshot_id,p.policy_version,p.alternatives,p.trigger_message_ids,p.generation,dc.generation AS current_generation,p.dependency_epoch,dc.dependency_epoch AS current_dependency_epoch,p.skill_epoch,dc.skill_epoch AS current_skill_epoch,dc.paused,dc.unresolved_send_key,o.pause_reasons
         FROM orch_confirmation_tasks t JOIN orch_plans p ON p.id=t.plan_id JOIN orch_conversations o ON o.conversation_id=p.conversation_id JOIN dispatch_control dc ON dc.conversation_id=p.conversation_id
+        WHERE ($1::uuid IS NULL OR p.contact_id=$1)
         ORDER BY (t.status='PENDING' OR p.status IN ('APPROVED','PARTIALLY_SENT','RESULT_UNKNOWN')
           OR EXISTS (SELECT 1 FROM orch_send_tasks s WHERE s.plan_id=p.id AND s.status IN ('CREATED','RESULT_UNKNOWN'))) DESC,
-          t.updated_at DESC,t.id DESC LIMIT 100`);
+          t.updated_at DESC,t.id DESC LIMIT 100`, [contactId ?? null]);
       const items = [];
       for (const t of rows.rows) {
         await setContactScope(tx, t.contact_id);
@@ -573,7 +898,9 @@ export class PgConfirmedService {
         const messages = await tx.query<{ id: string; type: string; content_ref: string | null; sent_at: Date | string }>('SELECT id,type,content_ref,sent_at FROM data_messages WHERE id=ANY($1::uuid[]) AND contact_id=$2', [t.trigger_message_ids, t.contact_id]);
         const sends = await tx.query<SendRow>('SELECT * FROM orch_send_tasks WHERE plan_id=$1 ORDER BY sequence', [t.plan_id]);
         const active = !global?.paused && !t.paused && !t.unresolved_send_key && t.status === 'PENDING' && t.plan_status === 'AWAITING_CONFIRMATION' && detail.snapshot_status === 'valid' && Number(t.generation) === Number(t.current_generation) && Number(t.dependency_epoch) === Number(t.current_dependency_epoch) && Number(t.skill_epoch) === Number(t.current_skill_epoch) && !t.pause_reasons.length;
-        items.push({ id: t.id, taskId: t.id, version: Number(t.version), taskVersion: Number(t.version), status: t.plan_status, allowedActions: active ? ['confirmPlan', 'rejectPlan', ...(detail.send_mode === 'confirm' ? ['regeneratePlan'] : [])] : [], reasonCodes: t.reason_codes,
+        const jobId=(await tx.query<{id:string}>('SELECT id FROM orch_reply_jobs WHERE plan_id=$1',[t.plan_id])).rows[0]?.id;
+        const replyJob=jobId?await readReplyJob(tx,jobId):undefined;
+        items.push({ replyJob, id: t.id, taskId: t.id, version: Number(t.version), taskVersion: Number(t.version), status: t.plan_status, allowedActions: active ? ['confirmPlan', 'rejectPlan', ...(detail.send_mode === 'confirm' ? ['regeneratePlan'] : [])] : [], reasonCodes: t.reason_codes,
           planId: t.plan_id, planVersion: Number(t.plan_version), contactId: t.contact_id, contactName: detail.display_name, conversationId: t.conversation_id,
           triggerMessages: t.trigger_message_ids.map(id => { const m = messages.rows.find(x => x.id === id); return { id, type: m?.type ?? 'text', text: m?.content_ref ?? undefined, at: m?.sent_at instanceof Date ? m.sent_at.toISOString() : String(m?.sent_at ?? '') }; }),
           alternatives: t.alternatives, sends: sends.rows.map(s => ({ sendTaskId: s.id, version: Number(s.version), sequence: s.sequence, status: s.status, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })), contextSnapshotId: t.context_snapshot_id, policyVersion: Number(t.policy_version) });
@@ -582,17 +909,17 @@ export class PgConfirmedService {
     });
   }
 
-  async ownerContacts() {
+  async ownerContacts(contactId?: string) {
     return withTransaction(this.#pool, async tx => {
-      const rows = await tx.query<Row>('SELECT * FROM orch_conversations ORDER BY contact_id');
+      const rows = await tx.query<Row>('SELECT c.*,a.platform AS account_platform FROM orch_conversations c LEFT JOIN orch_platform_accounts a ON a.account_id=c.account_id WHERE ($1::uuid IS NULL OR c.contact_id=$1) ORDER BY c.contact_id', [contactId ?? null]);
       const items = [];
       for (const row of rows.rows) {
         await setContactScope(tx, row.contact_id);
         const contact = (await tx.query<{ display_name: string }>('SELECT display_name FROM data_contacts WHERE id=$1', [row.contact_id])).rows[0];
         if (!contact) fail('FORBIDDEN');
         items.push({ id: row.contact_id, version: Number(row.version), status: row.state,
-          allowedActions: [...(row.pause_reasons.length ? ['resumeContact', 'updatePolicy'] : ['pauseContact', 'updatePolicy']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : [])],
-          name: contact.display_name, platform: this.#platform.platform, agentEnabled: row.policy.agentEnabled, sendMode: row.policy.sendMode, goal: row.policy.goal,
+          allowedActions: [...(row.pause_reasons.length ? ['resumeContact', 'resumeRoutine', 'updatePolicy'] : ['pauseContact', 'updatePolicy']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : [])],
+          name: contact.display_name, platform: (row as Row & { account_platform?: string }).account_platform ?? 'unknown', agentEnabled: row.policy.agentEnabled, sendMode: row.policy.sendMode, goal: row.policy.goal,
           activeContactEnabled: row.policy.activeContactEnabled, activeConfessionEnabled: row.policy.activeConfessionEnabled,
           allowedWindows: row.policy.allowedWindows.map(w => `${w.start}-${w.end}`), restrictions: row.policy.restrictions,
           stylePreferences: row.policy.stylePreferences ?? [], pauseReasons: row.pause_reasons, policyVersion: Number(row.policy_version),
@@ -640,6 +967,7 @@ export class PgConfirmedService {
       const version = Number(plan.version) + 1;
       await tx.query(`UPDATE orch_confirmation_tasks SET status='REJECTED',version=version+1,updated_at=now() WHERE id=$1`, [taskId]);
       await tx.query(`UPDATE orch_plans SET status='REJECTED',version=$2,updated_at=now() WHERE id=$1`, [plan.id, version]);
+      await transitionPlanJob(tx,plan.id,'CANCELLED','OWNER_REJECTED');
       await tx.query(`UPDATE orch_conversations SET state='READY_CONFIRM',version=version+1 WHERE conversation_id=$1 AND state='AWAITING_CONFIRMATION'`, [row.conversation_id]);
       await tx.query('INSERT INTO orch_owner_commands(contact_id,idempotency_key,command_hash,plan_id,result_version) VALUES($1,$2,$3,$4,$5)', [target.contact_id, input.idempotencyKey, hash, plan.id, version]);
       await this.#feedback.recordOutcome(tx, { callerContactId: target.contact_id, contactId: target.contact_id, planId: plan.id,
@@ -681,6 +1009,7 @@ export class PgConfirmedService {
         collection_started_at=$2::timestamptz,collection_due_at=$2::timestamptz,collection_message_ids=$3::uuid[],
         version=version+1,updated_at=now() WHERE conversation_id=$1 RETURNING version`, [row.conversation_id, at, plan.trigger_message_ids]);
       const version = Number(changed.rows[0]!.version), correlationId = newId(this.#now());
+      if (row.pipeline_version === 2) await createReplyJob(tx,(await this.#conversation(tx,row.conversation_id))!,plan.trigger_message_ids,scope+':'+input.idempotencyKey,true);
       await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', [scope, input.idempotencyKey, hash, version, correlationId]);
       return { resultVersion: version, correlationId, status: 'GENERATION_REQUESTED' };
     });
@@ -775,31 +1104,32 @@ export class PgConfirmedService {
     return withTransaction(this.#pool, async tx => (await tx.query<{ contact_id: string }>('SELECT contact_id FROM orch_conversations ORDER BY contact_id')).rows.map(row => row.contact_id));
   }
 
-  async ownerConversations() {
+  async ownerConversations(conversationId?: string, includeMessages = true) {
     const projection = await withTransaction(this.#pool, async tx => {
-      const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
-      const rows = (await tx.query<Row>('SELECT * FROM orch_conversations ORDER BY contact_id')).rows;
+      const global = (await tx.query<{ paused: boolean; pause_epoch: number }>('SELECT paused,pause_epoch FROM dispatch_global_control WHERE singleton=true')).rows[0];
+      const rows = (await tx.query<Row>('SELECT * FROM orch_conversations WHERE ($1::text IS NULL OR conversation_id=$1) ORDER BY contact_id', [conversationId ?? null])).rows;
       const items = [];
       for (const row of rows) {
         await setContactScope(tx, row.contact_id);
         const contact = (await tx.query<{ display_name: string }>('SELECT display_name FROM data_contacts WHERE id=$1', [row.contact_id])).rows[0];
-        const messages = await tx.query<{ id: string; actor: string; type: string; content_ref: string | null; sent_at: Date | string; media_id: string | null }>(
+        const messages = includeMessages ? await tx.query<{ id: string; actor: string; type: string; content_ref: string | null; sent_at: Date | string; media_id: string | null }>(
           `SELECT id,actor,type,content_ref,sent_at,media_id FROM data_messages
-           WHERE contact_id=$1 AND deletion_status='active' ORDER BY sent_at DESC,id DESC LIMIT 20`, [row.contact_id]);
-        const sends = await tx.query<SendRow>(`SELECT s.*,CASE WHEN a.plan_id IS NULL THEN 'owner_confirmation' ELSE 'mock_auto' END AS approval_source FROM orch_send_tasks s JOIN orch_plans p ON p.id=s.plan_id LEFT JOIN orch_mock_auto_approvals a ON a.plan_id=p.id WHERE p.conversation_id=$1 ORDER BY s.updated_at DESC LIMIT 20`, [row.conversation_id]);
+           WHERE contact_id=$1 AND deletion_status='active' ORDER BY sent_at DESC,id DESC LIMIT 20`, [row.contact_id]) : { rows: [] };
+        const sends = await tx.query<SendRow & { created_at: Date | string }>(`SELECT s.*,CASE WHEN a.plan_id IS NULL THEN 'owner_confirmation' ELSE 'mock_auto' END AS approval_source FROM orch_send_tasks s JOIN orch_plans p ON p.id=s.plan_id LEFT JOIN orch_mock_auto_approvals a ON a.plan_id=p.id WHERE p.conversation_id=$1 ORDER BY (s.status='RESULT_UNKNOWN') DESC,s.updated_at DESC LIMIT 100`, [row.conversation_id]);
         const paused = Boolean(global?.paused) || row.pause_reasons.length > 0;
         items.push({
           id: row.conversation_id, version: Number(row.version), status: row.state,
-          allowedActions: [...(paused ? ['resumeContact'] : ['pauseContact']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : []), ...(await this.#canRequestPausedReply(tx, row) ? ['requestPausedReply'] : [])],
+          allowedActions: [...(paused ? ['resumeContact','resumeRoutine'] : ['pauseContact']), ...(Number(row.paused_inbound_unreviewed_count) ? ['acknowledgePausedInbound'] : []), ...(await this.#canRequestPausedReply(tx, row) ? ['requestPausedReply'] : [])],
           contactId: row.contact_id, contactName: contact?.display_name ?? '未命名联系人',
           revision: Number(row.revision), generation: Number(row.generation),
-          pauseReasons: row.pause_reasons, globalPaused: Boolean(global?.paused), unreviewedPausedInboundCount: Number(row.paused_inbound_unreviewed_count),
+          pauseReasons: row.pause_reasons, globalPaused: Boolean(global?.paused), globalVersion: Number(global?.pause_epoch), unreviewedPausedInboundCount: Number(row.paused_inbound_unreviewed_count),
           messages: messages.rows.reverse().map(m => ({ id: m.id, actor: m.actor, type: m.type, text: m.content_ref ?? undefined, mediaId: m.media_id ?? undefined, at: m.sent_at instanceof Date ? m.sent_at.toISOString() : String(m.sent_at) })),
-          sends: sends.rows.map(s => ({ sendTaskId: s.id, version: Number(s.version), sequence: s.sequence, status: s.status, approvalSource: s.approval_source, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })),
+          sends: sends.rows.map(s => ({ sendTaskId: s.id, version: Number(s.version), sequence: s.sequence, status: s.status, content: s.content, at: new Date(s.created_at).toISOString(), approvalSource: s.approval_source, receiptLevel: s.status === 'DELIVERED' ? 'delivered' : s.status === 'SUBMITTED' ? 'accepted' : s.status === 'RESULT_UNKNOWN' ? 'unknown' : undefined, platformMessageId: s.receipt?.platformMessageId ?? undefined, correlationId: s.correlation_id })),
         });
       }
       return { items, connectionQueryStatus: 'unavailable' as const, faultQueryStatus: 'unavailable' as const };
     });
+    if (!includeMessages) return projection;
     const origins = await new PgOwnerDataPort(this.#pool).listUnknownOrigins({ contactIds: projection.items.map(item => item.contactId) });
     const byMessage = new Map(origins.items.map(item => [`${item.contactId}:${item.messageId}`, item]));
     return { ...projection, items: projection.items.map(item => ({ ...item, messages: item.messages.map(message => {
@@ -814,23 +1144,23 @@ export class PgConfirmedService {
     return withTransaction(this.#pool, async tx => {
       await acquireDispatchBoundary(tx);
       const hash = sha256(JSON.stringify({ action: 'resumeAll', expectedVersion: input.expectedVersion }));
-      const previous = (await tx.query<{ command_hash: string; result_version: number | string; correlation_id: string }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', ['global', input.idempotencyKey])).rows[0];
-      if (previous) { if (previous.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: 'ACTIVE' }; }
+      const previous = (await tx.query<{ command_hash: string; result_version: number | string; correlation_id: string; result_details?: Record<string, unknown> }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', ['global', input.idempotencyKey])).rows[0];
+      if (previous) { if (previous.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(previous.result_version), correlationId: previous.correlation_id, status: 'ACTIVE', ...previous.result_details }; }
       const global = (await tx.query<{ pause_epoch: number | string; paused: boolean }>('SELECT pause_epoch,paused FROM dispatch_global_control WHERE singleton=true FOR UPDATE')).rows[0];
       if (!global || Number(global.pause_epoch) !== input.expectedVersion) fail('CONFLICT_VERSION');
       const version = await changeGlobalPause(tx, false);
       const conversations = (await tx.query<Row>('SELECT * FROM orch_conversations ORDER BY conversation_id FOR UPDATE')).rows;
-      for (const row of conversations) {
-        await this.#invalidate(tx, row.conversation_id, 'GLOBAL_RESUME_REBASE');
-        const remaining = row.pause_reasons.filter(reason => reason !== 'GLOBAL_PAUSE');
-        const state = deriveState(remaining, row.policy.sendMode, row.policy.agentEnabled);
-        await tx.query(`UPDATE orch_conversations SET state=$3,pause_reasons=$2::text[],version=version+1,updated_at=now() WHERE conversation_id=$1`, [row.conversation_id, remaining, state]);
-        if (state !== 'PAUSED_GLOBAL') await changeContactPause(tx, row.conversation_id, state.startsWith('PAUSED_'));
-      }
+      const restored: string[] = [], skipped: { contactId: string; reasons: string[] }[] = [];
       const correlationId = newId(this.#now());
-      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id) VALUES($1,$2,$3,$4,$5)', ['global', input.idempotencyKey, hash, version, correlationId]);
+      for (const row of conversations) {
+        const result = await this.#restoreRoutine(tx, row, correlationId);
+        if (result.reasons.length) skipped.push({ contactId: row.contact_id, reasons: result.reasons });
+        else restored.push(row.contact_id);
+      }
+      const details = { restored, skipped, status: skipped.length ? 'PARTIAL_RESUME' : 'ACTIVE' };
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id,result_details) VALUES($1,$2,$3,$4,$5,$6::jsonb)', ['global', input.idempotencyKey, hash, version, correlationId, JSON.stringify(details)]);
       await appendOutbox(tx, { eventId: newId(this.#now()), eventType: 'GlobalPauseChanged', eventVersion: 1, occurredAt: new Date(this.#now()).toISOString(), correlationId, causationId: correlationId, aggregateId: 'global', aggregateVersion: version, payload: { paused: false, resumeAll: true } });
-      return { resultVersion: version, correlationId, status: 'ACTIVE' };
+      return { resultVersion: version, correlationId, ...details };
     });
   }
 
@@ -894,7 +1224,43 @@ export class PgConfirmedService {
     });
   }
 
-  /** Removes exactly one pause reason; other reasons and any unresolved send keep the contact paused. */
+  /** Routine recovery preserves unresolved sends, special blocks and disabled agents. */
+  async resumeRoutine(contactId: string, input: { expectedVersion: number; idempotencyKey: string }) {
+    requireText(input.idempotencyKey);
+    return withTransaction(this.#pool, async tx => {
+      await acquireDispatchBoundary(tx);
+      const hash = sha256(JSON.stringify({ action: 'resumeRoutine', contactId, expectedVersion: input.expectedVersion }));
+      const prior = (await tx.query<{ command_hash: string; result_version: number; correlation_id: string; result_details: Record<string, unknown> }>('SELECT * FROM orch_control_commands WHERE scope=$1 AND idempotency_key=$2', [contactId,input.idempotencyKey])).rows[0];
+      if (prior) { if (prior.command_hash !== hash) fail('CONFLICT_VERSION'); return { resultVersion: Number(prior.result_version), correlationId: prior.correlation_id, ...prior.result_details }; }
+      const row = (await tx.query<Row>('SELECT * FROM orch_conversations WHERE contact_id=$1 FOR UPDATE', [contactId])).rows[0];
+      if (!row) fail('NOT_FOUND');
+      if (Number(row.version) !== input.expectedVersion) fail('CONFLICT_VERSION');
+      const correlationId = newId(this.#now());
+      const result = await this.#restoreRoutine(tx,row,correlationId);
+      const details = { status: result.reasons.length ? 'PARTIAL_RESUME' : 'RESUMED', remainingReasons: result.reasons };
+      await tx.query('INSERT INTO orch_control_commands(scope,idempotency_key,command_hash,result_version,correlation_id,result_details) VALUES($1,$2,$3,$4,$5,$6::jsonb)', [contactId,input.idempotencyKey,hash,result.version,correlationId,JSON.stringify(details)]);
+      return { resultVersion: result.version, correlationId, ...details };
+    });
+  }
+
+  async #restoreRoutine(tx: PgClient, row: Row, correlationId: string) {
+    const control = (await tx.query<{ unresolved_send_key: string | null }>('SELECT unresolved_send_key FROM dispatch_control WHERE conversation_id=$1 FOR UPDATE', [row.conversation_id])).rows[0];
+    if (control?.unresolved_send_key || row.pause_reasons.includes('UNKNOWN_SEND')) return { version: Number(row.version), reasons: [...new Set(['UNKNOWN_SEND',...row.pause_reasons,...(!row.policy.agentEnabled ? ['AGENT_DISABLED'] : [])])] };
+    const clear = ['OWNER_PAUSE','OWNER_ORIGIN','OWNER_ORIGIN_UNMAPPED','AWAITING_MANUAL_RESUME','GLOBAL_PAUSE'];
+    if ((await tx.query(`SELECT account_id FROM orch_account_health WHERE account_id=$1 AND healthy=true AND observed_at>=now()-interval '30 seconds'`, [row.account_id])).rows.length) clear.push('ACCOUNT_FAULT');
+    const global = (await tx.query<{ paused: boolean }>('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0];
+    const remaining = row.pause_reasons.filter(reason => !clear.includes(reason) || reason === 'GLOBAL_PAUSE' && global?.paused);
+    const reasons = [...remaining, ...(!row.policy.agentEnabled ? ['AGENT_DISABLED'] : []), ...(global?.paused && !remaining.includes('GLOBAL_PAUSE') ? ['GLOBAL_PAUSE'] : [])];
+    const state = deriveState(global?.paused ? [...remaining,'GLOBAL_PAUSE'] : remaining, row.policy.sendMode,row.policy.agentEnabled);
+    if (remaining.join() === row.pause_reasons.join() && state === row.state) return { version: Number(row.version), reasons };
+    await this.#invalidate(tx,row.conversation_id,'RESUME_REBASE');
+    await changeContactPause(tx,row.conversation_id,state.startsWith('PAUSED_'));
+    const updated = await tx.query<{ version: number }>(`UPDATE orch_conversations SET state=$2,pause_reasons=$3::text[],generation=(SELECT generation FROM dispatch_control WHERE conversation_id=$1),version=version+1,updated_at=now() WHERE conversation_id=$1 RETURNING version`, [row.conversation_id,state,remaining]);
+    const version = Number(updated.rows[0]!.version);
+    await appendOutbox(tx,{ eventId:newId(this.#now()),eventType:'ContactControlChanged',eventVersion:1,occurredAt:new Date(this.#now()).toISOString(),correlationId,causationId:correlationId,aggregateId:row.conversation_id,aggregateVersion:version,payload:{ paused:state.startsWith('PAUSED_'),state,clearedReason:'ROUTINE_RESUME' } });
+    return { version,reasons };
+  }
+
   async resumeContact(contactId: string, input: { expectedVersion: number; idempotencyKey: string; reason?: string }) {
     requireText(input.idempotencyKey);
     const reason = input.reason?.trim() || 'OWNER_PAUSE';
@@ -976,6 +1342,19 @@ export class PgConfirmedService {
     if (send.status === 'DELIVERED' && status === 'SUBMITTED') return;
     if (send.status === status) return;
     await tx.query(`UPDATE orch_send_tasks SET status=$2,receipt=$3::jsonb,version=version+1,updated_at=now() WHERE id=$1`, [sendId, status, JSON.stringify({ status, platformMessageId })]);
+    if(status==='DELIVERED'){
+      const scope=(await tx.query<{contact_id:string}>('SELECT contact_id FROM orch_plans WHERE id=$1',[send.plan_id])).rows[0];
+      if(scope)await this.#feedback.recordDelivered(tx,{contactId:scope.contact_id,planId:send.plan_id,at:new Date(this.#now()).toISOString()});
+    }
+    const job = (await tx.query<{ id: string }>('SELECT id FROM orch_reply_jobs WHERE plan_id=$1', [send.plan_id])).rows[0];
+    if (job) {
+      const parts = (await tx.query<{ status: string }>('SELECT status FROM orch_send_tasks WHERE plan_id=$1 ORDER BY sequence', [send.plan_id])).rows;
+      const outcome: ReplyJobState = parts.some(p => p.status === 'RESULT_UNKNOWN') ? 'UNCERTAIN'
+        : parts.some(p => ['FAILED_DEFINITE','CANCELLED_PRE_SUBMIT'].includes(p.status)) ? 'FAILED'
+        : parts.every(p => p.status === 'DELIVERED') ? 'SENT'
+        : parts.every(p => ['SUBMITTED','DELIVERED'].includes(p.status)) ? 'SUBMITTED' : 'SEND_QUEUED';
+      await transitionReplyJob(tx,job.id,outcome,status === 'RESULT_UNKNOWN' ? 'SEND_RESULT_UNKNOWN' : undefined);
+    }
     await appendOutbox(tx, { eventId: newId(this.#now()), eventType: 'SendTaskStateChanged', eventVersion: 1, occurredAt: new Date(this.#now()).toISOString(), correlationId: send.correlation_id, causationId: sendId, aggregateId: sendId, aggregateVersion: Number(send.version) + 1, payload: { sendTaskId: sendId, status, platformMessageId } });
     const active = await tx.query<{ status: string; generation: string | number; current_generation: string | number }>(`SELECT p.status,p.generation,c.generation AS current_generation FROM orch_plans p JOIN orch_conversations c ON c.conversation_id=p.conversation_id WHERE p.id=$1 FOR UPDATE OF p,c`, [send.plan_id]);
     if (!active.rows[0] || active.rows[0].status === 'INVALIDATED' || Number(active.rows[0].generation) !== Number(active.rows[0].current_generation)) return;
@@ -995,6 +1374,7 @@ export class PgConfirmedService {
   }
 
   async #invalidate(tx: PgClient, conversationId: string, reason: string, staleSkillEpoch?: number): Promise<void> {
+    await invalidateReplyJobs(tx,conversationId,reason,staleSkillEpoch);
     const unconfirmed = (await tx.query<{ id: string; contact_id: string }>(`SELECT id,contact_id FROM orch_plans
       WHERE conversation_id=$1 AND status='AWAITING_CONFIRMATION' AND ($2::bigint IS NULL OR skill_epoch<$2::bigint)`, [conversationId, staleSkillEpoch ?? null])).rows;
     const plans = await tx.query<{ id: string; version: string | number }>(`UPDATE orch_plans SET status='INVALIDATED',invalidation_reasons=array_append(invalidation_reasons,$2),version=version+1,updated_at=now() WHERE conversation_id=$1 AND status IN ('AWAITING_CONFIRMATION','APPROVED','PARTIALLY_SENT') AND ($3::bigint IS NULL OR skill_epoch<$3::bigint) RETURNING id,version`, [conversationId, reason, staleSkillEpoch ?? null]);

@@ -11,6 +11,19 @@ import java.util.concurrent.TimeUnit
 import java.io.File
 
 class ModelClientTest {
+    @Test fun strategyLabelsAreParsedAlongsideTheRepliesInOneRequest() = runTest {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(envelope("""{"alternatives":["行呀","去老地方？","下午如何"],"alternativeLabels":["简短接话","继续聊","问清楚"]}""")))
+            server.start()
+            val result = ModelClient(allowLocalTestHttp = true).reply(archive, "保留我改的意思", ModelSettings(
+                textEndpoint = server.url("/").toString(), textKey = "synthetic"))
+            assertEquals(listOf("简短接话", "继续聊", "问清楚"), result.alternativeLabels)
+            val request = server.takeRequest()!!.body.readUtf8()
+            assertTrue(request.contains("不能只替换同义词"))
+            assertTrue(request.contains("保留我改的意思"))
+            assertEquals(1, server.requestCount)
+        }
+    }
     private fun envelope(content: String) = kotlinx.serialization.json.buildJsonObject {
         put("choices", kotlinx.serialization.json.buildJsonArray { add(kotlinx.serialization.json.buildJsonObject {
             put("message", kotlinx.serialization.json.buildJsonObject { put("content", kotlinx.serialization.json.JsonPrimitive(content)) })
@@ -19,11 +32,12 @@ class ModelClientTest {
     private val archive = ContextEngine.append(ChatArchive(name = "测试对象"), listOf(ChatMessage(speaker = Speaker.OTHER, text = "周末有空吗")))
     @Test fun `real HTTP shape supports bounded chunked responses and required context`() = runTest {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setChunkedBody(envelope("""{"alternatives":["周日下午可以"],"note":"","uncertain":false}"""), 11))
+            server.enqueue(MockResponse().setChunkedBody(envelope("""{"alternatives":["周日下午可以","周末见","你想去哪"],"note":"","uncertain":false}"""), 11))
             server.start()
             val result = ModelClient(allowLocalTestHttp = true).reply(archive, "简短一点", ModelSettings(
                 textEndpoint = server.url("/v1/chat/completions").toString(), textKey = "test-secret"))
-            assertEquals("周日下午可以", result.alternatives.single())
+            assertEquals(3, result.alternatives.size)
+            assertEquals("周日下午可以", result.alternatives.first())
             val request = server.takeRequest(3, TimeUnit.SECONDS)!!
             assertEquals("Bearer test-secret", request.getHeader("Authorization"))
             val body = request.body.readUtf8()
@@ -45,7 +59,7 @@ class ModelClientTest {
         }
     }
     @Test fun `empty or malformed alternatives fail instead of fabricating a reply`() = runTest {
-        for (content in listOf("不是 JSON", """{"alternatives":[]}""", """{"alternatives":[""]}""")) {
+        for (content in listOf("不是 JSON", """{"alternatives":[]}""", """{"alternatives":[""]}""", """{"alternatives":["只有一条"]}""", """{"alternatives":["第一条","第二条"]}""", """{"alternatives":["一","二","三","四"]}""")) {
             MockWebServer().use { server ->
                 server.enqueue(MockResponse().setBody(envelope(content))); server.start()
                 assertNotNull(runCatching { ModelClient(allowLocalTestHttp = true).reply(archive, "", ModelSettings(textEndpoint = server.url("/").toString(), textKey = "key")) }.exceptionOrNull())
@@ -119,7 +133,7 @@ class ModelClientTest {
     }
     @Test fun `base address sends one request to the complete operation path`() = runTest {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody(envelope("""{"alternatives":["好的"]}"""))); server.start()
+            server.enqueue(MockResponse().setBody(envelope("""{"alternatives":["好的","行呀","没问题"]}"""))); server.start()
             ModelClient(allowLocalTestHttp = true).reply(archive, "", ModelSettings(textEndpoint = server.url("/v1").toString(), textKey = "key"))
             assertEquals("/v1/chat/completions", server.takeRequest().path)
             assertEquals(1, server.requestCount)

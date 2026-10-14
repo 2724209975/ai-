@@ -4,9 +4,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
-import type { OwnerAuthService } from '../../packages/infrastructure/auth/owner-auth.mts';
+import type { OwnerAuthService } from '../../../packages/infrastructure/auth/owner-auth.mts';
 import { createOwnerHttpHandler, type OwnerPort } from './owner-http.mts';
 import { createOwnerSessionHandler } from './owner-session-http.mts';
+import {projectRelease} from '../../../packages/infrastructure/release.mts';
 
 export type OwnerAppOptions = {
   auth: OwnerAuthService;
@@ -59,7 +60,7 @@ export function createOwnerApp(options: OwnerAppOptions) {
   const apiHandler = createOwnerHttpHandler({
     ownerPort: options.ownerPort,
     authenticate: (request: IncomingMessage) => options.auth.authenticateRequest(request),
-    verifyWrite: (request: IncomingMessage, session: Parameters<OwnerAuthService['verifyWrite']>[1]) => options.auth.verifyWrite(request, session),
+    verifyWrite: (request: IncomingMessage, session: NonNullable<Parameters<OwnerAuthService['verifyWrite']>[1]>) => options.auth.verifyWrite(request, session),
   });
 
   return async function ownerApp(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -68,7 +69,10 @@ export function createOwnerApp(options: OwnerAppOptions) {
     const path = new URL(request.url ?? '/', 'http://localhost').pathname;
     try {
       if (path.startsWith('/api/v1/session') && await sessionHandler(request, response)) return;
-      if (path.startsWith('/api/v1/')) return await apiHandler(request, response);
+      if(path==='/api/v1/project-version'&&request.method==='GET'){
+        const session=await options.auth.authenticateRequest(request);response.writeHead(session?200:401,{'Content-Type':'application/json','Cache-Control':'no-store'});response.end(JSON.stringify(session?projectRelease:{code:'UNAUTHORIZED'}));return;
+      }
+      if (path.startsWith('/api/v1/') || path.startsWith('/api/v2/')) return await apiHandler(request, response);
       if (method !== 'GET' && method !== 'HEAD') { response.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify({ code: 'VALIDATION_FAILED', message: 'METHOD_NOT_ALLOWED' })); return; }
       const relative = path === '/' ? 'index.html' : decodeURIComponent(path.slice(1));
       const target = resolve(buildDir, relative);

@@ -28,7 +28,7 @@ test('account fault invalidates pending/approved work, preserves unknown sends, 
     await admin.query(`CREATE SCHEMA ${schema}`); await admin.query(`SET search_path TO ${schema}`); await applyMigrations(admin, resolve('db/migrations'));
     pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 4 });
     const data = new PgDataProvider(), accountId = randomUUID(), otherAccount = randomUUID(), authority = {};
-    const platform = new MockPlatformAdapter({ platform: 'qq', accountId, authority });
+    const platform = new MockPlatformAdapter({ platform: 'wechat', accountId, authority });
     platform.setConnection('RECONCILING'); platform.setConnection('CONNECTED');
     const intelligence = createPgPersistentFakeIntelligence({ pool, data });
     const service = new PgConfirmedService({ pool, data, intelligence, platform, authority });
@@ -89,7 +89,7 @@ test('account fault invalidates pending/approved work, preserves unknown sends, 
     });
     await new Promise<void>(done => helper.listen(0, '127.0.0.1', done));
     const helperAddress = helper.address(); assert.ok(helperAddress && typeof helperAddress !== 'string');
-    const bridge = createWxBridge({ pool, accountId, selfRef: 'fixture-self', ingressToken: 'fixture-token',
+    const bridge = createWxBridge({ pool, accountId, startPaused: true, selfRef: 'fixture-self', ingressToken: 'fixture-token',
       rawStore: { async put() { throw new Error('UNUSED'); } }, onError: () => {},
       watchdog: { probe: localHelperProbe({ pid: 1, alive: () => alive, baseUrl: `http://127.0.0.1:${helperAddress.port}/` }),
         intervalMs: 600_000, timeoutMs: 30, quietMs: 100, now: () => now } });

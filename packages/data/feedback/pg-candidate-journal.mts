@@ -12,6 +12,18 @@ export function validRejectionReason(value: unknown): value is RejectionReason {
 type Scope = { callerContactId: string; contactId: string; planId: string; shownAlternativeIds?: readonly string[]; at: string };
 
 export class PgCandidateFeedbackJournal {
+  /** A selection/edit is a preference event. Only delivery proves these final words were sent. */
+  async recordDelivered(tx:PgClient,input:{contactId:string;planId:string;at:string}){
+    await setContactScope(tx,input.contactId);
+    const plan=(await tx.query<{approved_alternative_id:string|null;alternatives:{alternativeId:string;parts:{content:string}[]}[]}>('SELECT approved_alternative_id,alternatives FROM orch_plans WHERE id=$1 AND contact_id=$2',[input.planId,input.contactId])).rows[0];
+    const sends=(await tx.query<{id:string;status:string;content:string;content_sha256:string}>('SELECT id,status,content,content_sha256 FROM orch_send_tasks WHERE plan_id=$1 ORDER BY sequence',[input.planId])).rows;
+    const chosen=plan?.alternatives.find(a=>a.alternativeId===plan.approved_alternative_id);
+    if(!chosen||!sends.length||sends.some(s=>s.status!=='DELIVERED'))return;
+    const original=[...chosen.parts.map(p=>p.content).join('\n')],final=[...sends.map(p=>p.content).join('\n')];
+    const common=original.filter((c,i)=>c===final[i]).length;
+    const delivered={sendIds:sends.map(s=>s.id),contentHashes:sends.map(s=>s.content_sha256),at:input.at,originalCharacters:original.length,finalCharacters:final.length,changedCharacters:Math.max(original.length,final.length)-common,learnStyle:chosen.parts.some((p,i)=>p.content!==sends[i]?.content)};
+    await tx.query(`UPDATE data_feedback SET rating=COALESCE(rating,'{}'::jsonb)||jsonb_build_object('delivered',$3::jsonb),updated_at=$4 WHERE contact_id=$1 AND plan_id=$2 AND action IN ('selected','edited') AND rating->'delivered' IS NULL`,[input.contactId,input.planId,JSON.stringify(delivered),input.at]);
+  }
   async #validate(tx: PgClient, input: Scope) {
     if (!input.contactId || input.callerContactId !== input.contactId) throw new Error('FORBIDDEN');
     if (!uuid.test(input.planId) || !Number.isFinite(Date.parse(input.at))) throw new Error('VALIDATION_FAILED');

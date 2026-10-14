@@ -30,6 +30,21 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue' | 'feedback
     const path = new URL(request.url ?? '/', 'http://localhost').pathname;
     const json = (status: number, body: unknown) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); };
     if (path === '/api/v1/session') return json(200, { ownerId: 'fixture-owner', csrfToken: 'fixture', expiresAt: '2099-01-01T00:00:00Z' });
+    if (path === '/api/v1/workspace/conversations') {
+      const params=new URL(request.url!, 'http://localhost').searchParams;
+      let items=[{id:'conversation-1',contactId:'contact-1',contactName:'测试联系人',platform:'wechat',pendingCount:stale?0:1,needsAttention:false,preview:'你好'}];
+      if(mode==='queue') items.push({ ...items[0], id:'conversation-unknown',contactName:'需核对联系人',pendingCount:0,needsAttention:true },{ ...items[0], id:'conversation-past',contactName:'已处理联系人',pendingCount:0 });
+      if(params.get('filter')==='attention') items=items.filter(i=>i.needsAttention);
+      return json(200,{items,total:items.length,nextCursor:null});
+    }
+    if (/^\/api\/v1\/conversations\/[^/]+\/workspace$/.test(path)) {
+      if(mode==='unknown')return json(503,{code:'MODEL_UNAVAILABLE',message:'故障',retryable:true,correlationId:'trace-503'});
+      const id=path.split('/')[4];
+      const past=id==='conversation-past',unknown=id==='conversation-unknown';
+      const chosen={ ...task(),conversationId:id, ...(past ? {status:'REJECTED',allowedActions:[]} : unknown ? {status:'INVALIDATED',allowedActions:[]} : {}) };
+      const sends=mode==='feedback' || mode==='queue' && !unknown ? [] : [{sendTaskId:'unknown-send',version:2,sequence:1,status:'RESULT_UNKNOWN',receiptLevel:'unknown',correlationId:'trace-send'}];
+      return json(200,{contact:{...contact,name:past?'已处理联系人':unknown?'需核对联系人':contact.name},conversation:{id,contactId:contact.id,contactName:past?'已处理联系人':unknown?'需核对联系人':contact.name,version:2,status:'PAUSED_OWNER',allowedActions:[],revision:2,generation:2,pauseReasons:['OWNER_ORIGIN'],messages:[{id:'self-1',actor:'unknown',type:'text',text:'来源待核',at:'2026-09-24T00:00:00Z',originEvidenceRefs:['bridge:account-1:0123456789abcdef0123456789abcdef']}],sends},tasks:[chosen],nextCursor:null});
+    }
     if (path === '/api/v1/contacts' && request.method === 'GET') return json(200, { items: [contact] });
     if (path === '/api/v1/contacts/contact-1/updatePolicy' && request.method === 'POST') {
       let body = '';
@@ -45,7 +60,7 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue' | 'feedback
       connections: mode === 'ready' ? [{ accountId: 'account-1', platform: 'qq', connectionState: 'reconciling',
         verificationStatus: 'unknown', lastReconciledAt: '未完成', limitations: ['历史范围待核'],
         recovery: { status: 'RECONCILING', historyComplete: false, gaps: ['history_gap'], unresolvedSendCount: 1 } }] : [],
-      faults: [] });
+      faults: mode==='ready' ? [{id:'synthetic-fault',status:'ACTIVE',summary:'合成账号故障'}] : [] });
     if (path === '/api/v1/tasks' && request.method === 'GET') return mode === 'unknown'
       ? json(503, { code: 'MODEL_UNAVAILABLE', message: '故障', retryable: true, correlationId: 'trace-503' })
       : json(200, { items: mode === 'queue' ? [task(),
@@ -95,145 +110,48 @@ async function fixture(mode: 'stale' | 'unknown' | 'ready' | 'queue' | 'feedback
     close: () => new Promise<void>(resolveClose => server.close(() => resolveClose())) };
 }
 
-test('390px: candidate view and optional quick rejection reason reach the server', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
-  const { chromium } = await import('playwright');
-  const api = await fixture('feedback'); const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    await page.goto(api.url + '/#tasks');
-    await page.getByLabel('拒绝原因（可选）').selectOption('too_long');
-    await page.getByRole('button', { name: '拒绝候选', exact: true }).click();
-    await page.getByText(/feedback-retry/).first().waitFor();
-    assert.equal(await page.getByLabel('拒绝原因（可选）').inputValue(), 'too_long', 'failed command preserves optional reason');
-    await page.getByRole('button', { name: '拒绝候选', exact: true }).click();
-    await page.getByText('暂无待处理任务', { exact: true }).waitFor();
-    const rejected = api.candidateCommands.filter(c => c.action === 'reject');
-    assert.equal(rejected.length, 2);
-    assert.equal(rejected[1]!.body.rejectionReason, 'too_long');
-    assert.equal(rejected[0]!.body.rejectionReason, 'too_long');
-    assert.deepEqual(rejected[0]!.body.shownAlternativeIds, ['a-1']);
-    assert.equal(rejected[0]!.body.expectedVersion, 1);
-    assert.ok(api.candidateCommands.some(c => c.action === 'present' && JSON.stringify(c.body.shownAlternativeIds) === '["a-1"]'));
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-  } finally { await browser.close(); await api.close(); }
-});
 
-test('390px: contact expression preferences and restrictions save together', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
-  const { chromium } = await import('playwright');
-  const api = await fixture('ready'); const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    await page.goto(api.url + '/#contacts');
-    await page.getByLabel('表达偏好（每行一条）').fill('简短\n口语化');
-    await page.getByLabel('避免内容（每行一条）').fill('不提钱');
-    await page.getByRole('button', { name: '保存聊天设置' }).click();
-    await page.getByText('表达偏好：简短、口语化').waitFor();
-    assert.deepEqual(api.savedPolicy(), { goal: '自然聊天', stylePreferences: ['简短', '口语化'], restrictions: ['不提钱'] });
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-  } finally { await browser.close(); await api.close(); }
-});
-
-test('390px: delivery and resume is one explicit command; record-only keeps resume absent', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
-  const { chromium } = await import('playwright');
-  const api = await fixture('queue'); const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    await page.goto(api.url + '/#tasks');
-    await page.getByLabel('核对证据').fill('测试好友确认收到');
-    await page.getByRole('button', { name: '已送达并恢复', exact: true }).click();
-    await page.waitForFunction(() => !document.querySelector('button.primary:disabled'));
-    assert.equal(api.resolutions.length, 1);
-    assert.equal(api.resolutions[0]?.resume, true);
-    assert.equal(api.resolutions[0]?.status, 'DELIVERED');
-    assert.equal(api.resolutions[0]?.expectedVersion, 2);
-    assert.equal(api.resolutions[0]?.evidenceRef, '测试好友确认收到');
-    await page.getByRole('button', { name: '只记已送达', exact: true }).click();
-    await page.waitForFunction(() => !document.querySelector('button.primary:disabled'));
-    assert.equal(api.resolutions.length, 2);
-    assert.equal(api.resolutions[1]?.resume, undefined);
-  } finally { await browser.close(); await api.close(); }
-});
-
-test('320px: unprovided connection/fault status, auto fallback and stale 409', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
-  const { chromium } = await import('playwright');
-  const api = await fixture('stale'); const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
-    await page.goto(api.url + '/#overview');
-    await page.getByText(/连接与恢复查询尚未接入/).waitFor();
-    await page.getByText(/故障汇总查询尚未接入/).waitFor();
-    await page.getByText(/存在结果未知的发送/).waitFor();
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-    await mkdir(evidence, { recursive: true });
-    await page.screenshot({ path: resolve(evidence, 'g2-overview-320.png'), fullPage: true });
-    await page.getByRole('link', { name: '待办' }).click();
-    await page.getByText(/自动模式暂未开放，本轮转人工确认/).waitFor();
-    await page.getByRole('button', { name: '确认并发送' }).click();
-    await page.getByText(/旧版本未发送/).waitFor();
-    await page.getByText('暂无待处理任务').waitFor();
-    await page.getByRole('button', { name: '历史记录（1）' }).click();
-    await page.getByText(/已失效：NEW_MESSAGE/).waitFor();
-    assert.equal(await page.getByRole('button', { name: '确认并发送' }).count(), 0);
-    await page.getByRole('link', { name: '会话' }).click();
-    await page.getByText(/存在来源未明的自身账号消息/).waitFor();
-    await page.getByText(/核对证据引用：bridge:account-1:0123456789abcdef0123456789abcdef/).waitFor();
-    await page.getByText(/发送结果未知。核对前不要重复发送/).waitFor();
-    await page.getByText(/自动决策（仅 mock 平台）/).waitFor();
-  } finally { await browser.close(); await api.close(); }
-});
-
-test('390px: 503 remains a failure and 501 pages are unavailable', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
-  const { chromium } = await import('playwright');
-  const api = await fixture('unknown'); const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    await page.goto(api.url + '/#tasks');
-    await page.getByText(/服务或依赖暂不可用，当前状态不能视为正常/).waitFor();
-    assert.equal(await page.getByText('暂无待处理任务').count(), 0);
-    for (const [name, path] of [['Skill', 'skills'], ['导入', 'imports'], ['故障', 'faults']]) {
-      await Promise.all([
-        page.waitForResponse(response => response.url().endsWith('/api/v1/' + path) && response.status() === 501),
-        page.getByRole('link', { name }).click(),
-      ]);
-      await page.getByRole('heading', { name, exact: true }).waitFor();
-      await page.getByText(/持久化接口尚未提供/).waitFor();
-      assert.equal(await page.getByText('后端当前无记录。').count(), 0);
-    }
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-    await mkdir(evidence, { recursive: true });
-    await page.screenshot({ path: resolve(evidence, 'g2-faults-501-390.png') });
-  } finally { await browser.close(); await api.close(); }
-});
-
-test('390px: current tasks keep unknown sends visible and history remains accessible', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
-  const { chromium } = await import('playwright');
-  const api = await fixture('queue'); const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    await page.goto(api.url + '/#tasks');
-    await page.getByRole('button', { name: '待处理（2）' }).waitFor();
-    assert.equal(await page.getByRole('heading', { name: '需核对联系人' }).count(), 1);
-    assert.equal(await page.getByRole('heading', { name: '已处理联系人' }).count(), 0);
-    await page.getByRole('button', { name: '历史记录（1）' }).click();
-    await page.getByRole('heading', { name: '已处理联系人' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: '确认并发送' }).count(), 0);
-    await page.getByRole('button', { name: '待处理（2）' }).click();
-    await page.getByRole('heading', { name: '需核对联系人' }).waitFor();
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-  } finally { await browser.close(); await api.close(); }
-});
-
-test('390px: new connection projection displays recovery gaps without claiming readiness', { skip: !enabled && 'set RUN_BROWSER_E2E=1' }, async () => {
-  const { chromium } = await import('playwright');
-  const api = await fixture('ready'); const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-    await page.goto(api.url + '/#overview');
-    await page.getByText(/正在核对历史与发送结果/).first().waitFor();
-    await page.getByText(/历史覆盖：未证实连续/).waitFor();
-    await page.getByText(/同步缺口：history_gap/).waitFor();
-    await page.getByText(/当前查询范围内没有故障记录/).waitFor();
-    assert.equal(await page.getByText(/连接与恢复查询尚未接入/).count(), 0);
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
-  } finally { await browser.close(); await api.close(); }
-});
+const settings = {skip:!enabled && 'set RUN_BROWSER_E2E=1',timeout:20000};
+async function browserCase(mode: Parameters<typeof fixture>[0], width: number, action: (page:any,api:Awaited<ReturnType<typeof fixture>>)=>Promise<void>) {
+  const {chromium}=await import('playwright');const api=await fixture(mode);const browser=await chromium.launch({headless:true});
+  try{const page=await browser.newPage({viewport:{width,height:844},isMobile:true,hasTouch:true});await action(page,api);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);}
+  finally{await browser.close();await api.close();}
+}
+test('390px: candidate telemetry and rejection reason survive a temporary failure',settings,()=>browserCase('feedback',390,async(page,api)=>{
+  await page.goto(api.url+'/#chat/conversation-1');await page.getByText('候选说明与反馈',{exact:true}).click();
+  await page.getByLabel('不回复原因（可选）').selectOption('too_long');await page.getByRole('button',{name:'不回复',exact:true}).click();
+  await page.getByText(/feedback-retry/).first().waitFor();assert.equal(await page.getByLabel('不回复原因（可选）').inputValue(),'too_long');
+  await page.getByRole('button',{name:'不回复',exact:true}).click();await page.getByText('当前没有待确认的回复').waitFor();
+  const commands=api.candidateCommands.filter(c=>c.action==='reject');assert.equal(commands.length,2);assert.equal(commands[1].body.rejectionReason,'too_long');assert.deepEqual(commands[0].body.shownAlternativeIds,['a-1']);
+  assert.ok(api.candidateCommands.some(c=>c.action==='present'));
+}));
+test('390px: contact settings save expression preferences and restrictions in the current chat',settings,()=>browserCase('ready',390,async(page,api)=>{
+  await page.goto(api.url+'/#chat/conversation-1');await page.getByRole('button',{name:'聊天设置',exact:true}).click();
+  await page.getByLabel('表达偏好（每行一条）').fill('简短\n口语化');await page.getByLabel('避免内容（每行一条）').fill('不提钱');
+  await page.getByRole('button',{name:'保存聊天设置'}).click();await page.getByText('设置已保存',{exact:true}).waitFor();
+  assert.deepEqual(api.savedPolicy()?.stylePreferences,['简短','口语化']);assert.deepEqual(api.savedPolicy()?.restrictions,['不提钱']);
+}));
+test('390px: delivery and resume is explicit, while record-only omits resume',settings,()=>browserCase('ready',390,async(page,api)=>{
+  await page.goto(api.url+'/#chat/conversation-1');await page.getByRole('button',{name:'已收到，恢复聊天',exact:true}).click();
+  await page.getByText('操作已完成',{exact:true}).waitFor();assert.equal(api.resolutions[0].resume,true);assert.equal(api.resolutions[0].expectedVersion,2);
+  await page.getByText('其他核对选项',{exact:true}).click();await page.getByRole('button',{name:'只记已送达',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.notice')?.textContent==='操作已完成');assert.equal(api.resolutions[1]?.resume,undefined);
+}));
+test('320px: unknown connection coverage, stale confirmation and source evidence remain truthful',settings,()=>browserCase('stale',320,async(page,api)=>{
+  await page.goto(api.url+'/#overview');await page.getByText(/连接与恢复查询尚未接入/).waitFor();await page.getByText(/故障汇总查询尚未接入/).waitFor();
+  await page.goto(api.url+'/#chat/conversation-1');await page.getByRole('button',{name:'确认并发送'}).click();await page.getByText(/旧版本未发送/).first().waitFor();
+  assert.equal(await page.getByRole('button',{name:'确认并发送'}).count(),0);await page.getByText('来源详情',{exact:true}).click();await page.getByText(/bridge:account-1/).waitFor();
+}));
+test('390px: query failures block actions, and unfinished pages are absent from primary navigation',settings,()=>browserCase('unknown',390,async(page,api)=>{
+  await page.goto(api.url+'/#chat/conversation-1');await page.getByText(/trace-503/).waitFor();assert.equal(await page.getByRole('button',{name:'确认并发送'}).count(),0);
+  assert.deepEqual(await page.locator('nav a').allTextContents(),['聊天','人物与导入','模型配置','运行状态','更多']);
+  for(const name of ['skills','imports','faults']){await page.goto(api.url+'/#'+name);await page.getByText(/持久化接口尚未提供/).waitFor();}
+}));
+test('390px: unresolved sends remain visible on their conversation, and past candidates are readable',settings,()=>browserCase('queue',390,async(page,api)=>{
+  await page.goto(api.url+'/#chat/conversation-unknown');await page.getByRole('button',{name:'已收到，恢复聊天'}).waitFor();assert.equal(await page.getByRole('button',{name:'确认并发送'}).count(),0);
+  await page.goto(api.url+'/#chat/conversation-past');await page.getByText('历史候选',{exact:true}).click();await page.getByText('已选择不回复',{exact:true}).waitFor();
+}));
+test('390px: recovery coverage gaps are shown without claiming connection readiness',settings,()=>browserCase('ready',390,async(page,api)=>{
+  await page.goto(api.url+'/#overview');await page.getByText(/history_gap/).waitFor();await page.getByText(/未证实连续/).waitFor();
+  await page.getByText('合成账号故障 · 仍需处理',{exact:true}).waitFor();
+}));

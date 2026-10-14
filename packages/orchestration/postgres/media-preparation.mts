@@ -51,7 +51,9 @@ export async function preparePersistentImages(input: Input): Promise<{ context: 
       await tx.query('UPDATE orch_conversations SET generation=$2,version=version+1 WHERE conversation_id=$1', [conversationId, Number(d.generation)]);
       context = await data.buildContext(tx, { callerContactId: contactId, contactId, allowedScopes: policy.factScopes,
         generation: Number(d.generation), policyVersion: policy.version, cutoffTime: context.snapshot.cutoffTime,
-        cutoffMessageId: context.snapshot.cutoffMessageId ?? undefined, mode: 'live' });
+        cutoffMessageId: context.snapshot.cutoffMessageId ?? undefined, mode: 'live',
+        v2:context.contextPackageV2?{ownerId:context.contextPackageV2.identity.ownerId,revision:context.contextPackageV2.conversationRevision,
+          triggerMessageIds:context.contextPackageV2.triggerMessageIds,budget:context.contextPackageV2.budget}:undefined });
       fence = { ...fence, generation: Number(d.generation), dependency: Number(d.dependency_epoch) };
     });
   }

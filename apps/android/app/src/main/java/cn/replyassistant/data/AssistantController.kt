@@ -19,25 +19,72 @@ class AssistantController(private val context: Context, private val models: Mode
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val store = LocalStore(context, if (storageNamespace.isBlank()) "assistant.db" else "$storageNamespace.db")
     private val secrets = SecureSettings(context, if (storageNamespace.isBlank()) "model_settings" else "${storageNamespace}_settings")
+    private val usage=MobileUsageStore(context,storageNamespace)
     private val images = ImageImporter(context)
     private val skills = SkillBundle(context)
+    private val linkClient = LinkClient()
+    private var linkJob: Job? = null
+    private var linkApplying = false
+    private var linkRequested = false
     private val mutable = MutableStateFlow(AssistantState())
     private var storageReady = false
     private var work: Job? = null
     private var workVersion = 0L
+    private var workArchiveId:String?=null
+    private val panelPositions = mutableMapOf<String, ReplyPanelPosition>()
+    fun panelPosition(id: String) = panelPositions[id] ?: ReplyPanelPosition()
+    fun savePanelPosition(id: String, position: ReplyPanelPosition) { panelPositions[id] = position }
     val state: StateFlow<AssistantState> = mutable
+    private var backupPassword:CharArray?=null
+    private var pendingBackup:BackupPayload?=null
+    fun usageSnapshot()=usage.snapshot()
+    /** Explicit maintenance request: paired archives and labelled synthetic archives only. */
+    fun clearSyncedAndSyntheticHistory(includeAll:Boolean=false){
+        cancelWork()
+        val ids=mutable.value.archives.filter {includeAll||it.desktop!=null||it.name.contains("合成")||it.name.startsWith("测试")||it.name.startsWith("Synthetic",true)}.map {it.id}.toSet()
+        val oldPreview=mutable.value.preview
+        update {state->state.copy(archives=state.archives.map {a->if(a.id !in ids)a else a.copy(messages=emptyList(),summaries=emptyList(),draft=null,draftHistory=emptyList(),historyUndo=null,replyAttempt=null,lastDecisionV2=null,pending=false,consultation=Consultation(),relationship="",style="",preferences=emptyList(),feedback=emptyList(),memory=RelationshipMemory(),revision=a.revision+1,desktop=a.desktop?.copy(cursor=0,records=emptyList(),packet=ContextPacket(),conflicts=emptyList(),exportedProfile=null,messageBaseVersions=emptyMap(),resetRevision=0))},preview=if(oldPreview?.archiveId in ids)null else oldPreview?.copy(heldBatches=oldPreview.heldBatches.filterNot {it.archiveId in ids}),error="",notice="已清理同步记录和合成测试资料，模型配置与费用记录保留")}
+        val kept=(mutable.value.preview?.pages.orEmpty()+mutable.value.preview?.heldBatches.orEmpty().flatMap {it.pages}+mutable.value.archives.flatMap {it.consultation.pages}).map {it.path}.toSet()
+        File(context.cacheDir,"screenshots").listFiles()?.filter {it.path !in kept}?.forEach {it.delete()}
+    }
+    fun prepareBackup(password:String){require(password.length>=8){"备份密码至少8位"};backupPassword?.fill('\u0000');backupPassword=password.toCharArray()}
+    fun cancelBackup(){backupPassword?.fill('\u0000');backupPassword=null;pendingBackup=null;mutable.value=mutable.value.copy(backupPreview=null)}
+    fun exportBackup(uri:Uri){scope.launch {
+        if(mutable.value.backupBusy)return@launch
+        val password=backupPassword?:return@launch;backupPassword=null
+        val payload=ArchiveBackup.payload(mutable.value.archives,mutable.value.settings);mutable.value=mutable.value.copy(backupBusy=true)
+        try {withContext(Dispatchers.IO){val bytes=ArchiveBackup.encrypt(payload,password);context.contentResolver.openOutputStream(uri,"wt")?.use {it.write(bytes)}?:error("文件无法写入")};notice("加密备份已保存，密码、模型密钥和连接凭据均未导出")}
+        catch(e:Exception){reportError("备份未完成：${e.message.orEmpty().take(100)}")}
+        finally{password.fill('\u0000');mutable.value=mutable.value.copy(backupBusy=false)}
+    }}
+    fun importBackup(uri:Uri){scope.launch {
+        if(mutable.value.backupBusy)return@launch
+        val password=backupPassword?:return@launch;backupPassword=null;pendingBackup=null;mutable.value=mutable.value.copy(backupBusy=true,backupPreview=null)
+        try {val payload=withContext(Dispatchers.IO){val bytes=context.contentResolver.openInputStream(uri)?.use {it.readNBytes(ArchiveBackup.MAX_BYTES+1)}?:error("文件无法读取");ArchiveBackup.decrypt(bytes,password)};pendingBackup=payload;mutable.value=mutable.value.copy(backupPreview=ArchiveBackup.preview(payload,mutable.value.archives.map {it.id}.toSet()))}
+        catch(_:Exception){reportError("无法读取备份：密码错误、文件损坏或版本不支持。现有资料未改动")}
+        finally{password.fill('\u0000');mutable.value=mutable.value.copy(backupBusy=false)}
+    }}
+    fun restoreBackup(includePreferences:Boolean){
+        require(!mutable.value.busy&&!mutable.value.linkBusy&&!mutable.value.backupBusy){"请等待当前生成或同步完成"};val p=pendingBackup?:error("请先选择并预览备份")
+        val merged=ArchiveBackup.merge(mutable.value.archives,p);update {it.copy(archives=merged,backupPreview=null)}
+        if(includePreferences)saveSettings(mutable.value.settings.copy(globalStyle=p.globalStyle,preferences=(mutable.value.settings.preferences+p.preferences).distinctBy {it.id}))
+        cancelBackup();notice("已恢复新增档案；同ID档案保留手机当前版本，模型配置与费用记录保留，恢复档案需重新关联电脑")
+    }
     init {
+        models.reserveCall={settings,role,model,input,output->usage.reserve(settings,role,model,input,output)}
+        models.completeCall={id,input,output,status->usage.complete(id,input,output,status)}
         runCatching {
             val archives = store.archives().map { archive ->
-                if (archive.draft?.state == DraftState.SUBMITTING) archive.copy(draft = archive.draft.copy(state = DraftState.UNKNOWN)) else archive
+                (if (archive.draft?.state == DraftState.SUBMITTING) archive.copy(draft = archive.draft.copy(state = DraftState.UNKNOWN)) else archive).recoverReplyAttempt()
             }
             val preview = store.session()
             mutable.value = AssistantState(archives = archives, preview = preview, selectedArchiveId = preview?.archiveId)
             storageReady = true
             runCatching { secrets.read() }.onSuccess { settings -> mutable.value = mutable.value.copy(settings = settings,
+                linkStatus = if(settings.linkConnection!=null) "已配对，连接电脑后同步；已下载资料可离线使用" else "未连接电脑",
                 selectedArchiveId = preview?.archiveId ?: settings.lastArchiveId?.takeIf { id -> archives.any { it.id == id && it.enabled } }) }
                 .onFailure { mutable.value = mutable.value.copy(error = "加密配置无法读取，请重新填写模型配置；聊天档案已保留") }
-            val kept = (preview?.pages.orEmpty() + archives.flatMap { it.consultation.pages }).map { it.path }.toSet()
+            val kept = (preview?.pages.orEmpty() + preview?.heldBatches.orEmpty().flatMap { it.pages } + archives.flatMap { it.consultation.pages }).map { it.path }.toSet()
             File(context.cacheDir, "screenshots").listFiles()?.filter { it.path !in kept }?.forEach { it.delete() }
             persist()
         }.onFailure { mutable.value = mutable.value.copy(error = "本地数据或加密配置无法读取，请勿清除数据；可以重新填写模型配置后保存") }
@@ -48,6 +95,122 @@ class AssistantController(private val context: Context, private val models: Mode
         val next = transform(mutable.value)
         store.save(next.archives, next.preview)
         mutable.value = next
+        if (!linkApplying && next.settings.linkConnection != null) scheduleLinkSync()
+    }
+    private fun scheduleLinkSync() {
+        if(mutable.value.linkNeedsPairing)return
+        linkRequested = true
+        if (linkJob?.isActive == true) return
+        linkJob = scope.launch { do { delay(1500); if(!mutable.value.linkBusy){linkRequested=false;syncDesktopNow()} } while(linkRequested && mutable.value.settings.linkConnection != null && !mutable.value.linkNeedsPairing) }
+    }
+    fun desktopForeground() { if (mutable.value.settings.linkConnection != null && !mutable.value.linkNeedsPairing) scheduleLinkSync() }
+    fun openLink(id:String?=mutable.value.selectedArchiveId) { mutable.value=mutable.value.copy(linkScreen=true,linkArchiveId=id) }
+    fun closeLink() { mutable.value=mutable.value.copy(linkScreen=false) }
+    private fun linkFailed(e:Exception) { mutable.value=mutable.value.copy(linkNeedsPairing=mutable.value.linkNeedsPairing||e is LinkHttpException&&e.status==401,
+        linkStatus=if(e is LinkHttpException)e.message.orEmpty() else if(e is java.io.IOException) "电脑暂时不可达，手机继续使用已下载资料；修改保留在手机，下次连接续传" else e.message ?: "联动未完成") }
+    fun pairDesktop(text:String) { scope.launch {
+        if(mutable.value.linkBusy)return@launch
+        mutable.value=mutable.value.copy(linkBusy=true,linkStatus="正在连接电脑…")
+        try { val connection=linkClient.pair(text); val settings=mutable.value.settings.copy(linkConnection=connection)
+            secrets.save(settings);mutable.value=mutable.value.copy(settings=settings,linkNeedsPairing=false,desktopContacts=emptyList(),linkStatus="电脑已配对，请选择当前对象的电脑联系人")
+            mutable.value=mutable.value.copy(desktopContacts=linkClient.contacts(connection))
+        } catch(e:Exception) { linkFailed(e) }
+        finally { mutable.value=mutable.value.copy(linkBusy=false) }
+    } }
+    fun refreshDesktopContacts() { scope.launch {
+        if(mutable.value.linkBusy)return@launch
+        val connection=mutable.value.settings.linkConnection ?: return@launch
+        mutable.value=mutable.value.copy(linkBusy=true,linkStatus="正在读取电脑联系人…")
+        try {
+        mutable.value=mutable.value.copy(desktopContacts=linkClient.contacts(connection))
+        mutable.value=mutable.value.copy(linkStatus="电脑联系人已更新，选择同一个聊天对象进行关联")
+    } catch(e:Exception) { linkFailed(e) } finally {mutable.value=mutable.value.copy(linkBusy=false)} } }
+    fun bindDesktop(id:String,contact:String?) { scope.launch {
+        if(mutable.value.linkBusy)return@launch
+        mutable.value=mutable.value.copy(linkBusy=true)
+        try { val connection=mutable.value.settings.linkConnection ?: error("请先配对电脑")
+            val archive=mutable.value.archives.find {it.id==id} ?: error("档案不存在")
+            val linked=linkClient.bind(connection,archive,contact).copy(contactLabel=mutable.value.desktopContacts.find {it.id==contact}?.let {"${it.name} · ${it.platform}"} ?: "仅整理手机资料")
+            mutateArchive(id) {it.copy(desktop=linked)}
+            mutable.value=mutable.value.copy(linkStatus="已关联，正在同步")
+        }catch(e:Exception){linkFailed(e)}
+        finally { mutable.value=mutable.value.copy(linkBusy=false);scheduleLinkSync() }
+    } }
+    fun disconnectDesktop() {
+        require(!mutable.value.linkBusy) { "同步中，请稍后断开" }
+        val settings=mutable.value.settings.copy(linkConnection=null)
+        secrets.save(settings);mutable.value=mutable.value.copy(settings=settings,desktopContacts=emptyList(),linkNeedsPairing=false,linkStatus="已断开，已下载资料仍可离线使用")
+    }
+    fun unlinkDesktop(id:String) { scope.launch {
+        if(mutable.value.linkBusy)return@launch
+        mutable.value=mutable.value.copy(linkBusy=true,linkStatus="正在解除关联…")
+        try {
+        val a=mutable.value.archives.find {it.id==id} ?: return@launch
+        val c=mutable.value.settings.linkConnection ?: error("请连接电脑后解除关联")
+        val g=a.desktop ?: return@launch
+        linkClient.call(c,"groups/${g.groupId}/unbind",kotlinx.serialization.json.buildJsonObject {})
+        mutateArchive(id) {it.copy(desktop=it.desktop?.copy(active=false),revision=it.revision+1)}
+        mutable.value=mutable.value.copy(linkStatus="已解除关联，手机资料保留")
+    }catch(e:Exception){linkFailed(e)}finally{mutable.value=mutable.value.copy(linkBusy=false)}} }
+    fun resolveDesktop(id:String,recordId:String,side:String) {scope.launch {
+        if(mutable.value.linkBusy)return@launch
+        mutable.value=mutable.value.copy(linkBusy=true,linkStatus="正在保存版本选择…")
+        var resolved=false
+        try {
+        val a=mutable.value.archives.find {it.id==id} ?: return@launch
+        val linked=a.desktop ?: return@launch
+        val conflict=linked.conflicts.find {it.id==recordId} ?: return@launch
+        val c=mutable.value.settings.linkConnection ?: error("请先连接电脑")
+        linkClient.call(c,"groups/${linked.groupId}/resolve",kotlinx.serialization.json.buildJsonObject {
+            put("recordId",kotlinx.serialization.json.JsonPrimitive(recordId));put("side",kotlinx.serialization.json.JsonPrimitive(side));put("expectedVersion",kotlinx.serialization.json.JsonPrimitive(conflict.current.version))
+        });resolved=true
+    }catch(e:Exception){linkFailed(e)}finally{mutable.value=mutable.value.copy(linkBusy=false)}
+        if(resolved)syncDesktopNow(id)
+    } }
+    fun syncDesktop(id:String?=null) {scope.launch {syncDesktopNow(id)} }
+    private suspend fun syncDesktopNow(id:String?=null) {
+        if(mutable.value.linkBusy)return
+        val connection=mutable.value.settings.linkConnection ?: return
+        mutable.value=mutable.value.copy(linkBusy=true,linkStatus="正在同步…")
+        try {
+            val budget=linkClient.budget(connection);usage.accept(budget,connection.deviceId)
+            if(budget.supported&&budget.phones.any {it.deviceId==connection.deviceId}) {
+                val ledger=usage.snapshot();linkClient.call(connection,"usage",kotlinx.serialization.json.buildJsonObject {put("budgetId",kotlinx.serialization.json.JsonPrimitive(budget.budgetId));put("spentMicroCny",kotlinx.serialization.json.JsonPrimitive(ledger.spentMicroCny));put("calls",kotlinx.serialization.json.JsonPrimitive(ledger.totalCalls));put("tokens",kotlinx.serialization.json.JsonPrimitive(ledger.totalTokens))})
+            }
+            for(entry in mutable.value.settings.pendingLinkDeletes) {
+                val parts=entry.split('/',limit=2)
+                if(parts.size==2&&parts[0]!=connection.deviceId)continue
+                val groupId=parts.last()
+                linkClient.call(connection,"groups/$groupId/delete",kotlinx.serialization.json.buildJsonObject {})
+                val settings=mutable.value.settings.copy(pendingLinkDeletes=mutable.value.settings.pendingLinkDeletes.filterNot {it==entry})
+                secrets.save(settings);mutable.value=mutable.value.copy(settings=settings)
+            }
+            val snapshots=mutable.value.archives.filter {it.desktop?.active==true&&it.desktop.deviceId==connection.deviceId&&it.enabled&&!it.temporary&&(id==null||it.id==id)}
+            for((index,snapshot) in snapshots.withIndex()) {
+                mutable.value=mutable.value.copy(linkStatus="正在同步 ${snapshot.name}（${index+1}/${snapshots.size}）…")
+                val (linked,profile)=linkClient.sync(connection,snapshot)
+                val latest=mutable.value.archives.find {it.id==snapshot.id} ?: continue
+                if(mutable.value.settings.linkConnection!=connection||latest.desktop?.groupId!=snapshot.desktop?.groupId)continue
+                if(latest.messages!=snapshot.messages||latest.linkProfile()!=snapshot.linkProfile()) {
+                    linkApplying=true
+                    try {mutateArchive(snapshot.id){mergeLinkedHistory(snapshot,it,linked).let {next->next.copy(revision=maxOf(next.revision,it.revision+1))}}}finally{linkApplying=false}
+                    linkRequested=true
+                    continue
+                }
+                val changed=latest.copy(desktop=linked).desktopPrompt()!=latest.desktopPrompt()||linked.records.filter {it.kind in setOf("context_v2","memory_v2")||it.kind=="message"&&it.id.startsWith("desktop:")}!=latest.desktop?.records.orEmpty().filter {it.kind in setOf("context_v2","memory_v2")||it.kind=="message"&&it.id.startsWith("desktop:")}||profile!=null&&profile!=latest.linkProfile()
+                linkApplying=true
+                try {mutateArchive(snapshot.id) { current ->
+                    val p=profile
+                    val merged=mergeLinkedHistory(snapshot,current,linked)
+                    merged.copy(revision=if(changed) maxOf(merged.revision,current.revision+1) else merged.revision,
+                        relationship=p?.relationship ?: current.relationship,style=p?.style ?: current.style,preferences=p?.preferences ?: current.preferences,
+                        memory=if(p!=null&&current.memory.consent&&p.memory.consent)current.memory.copy(profile=p.memory.profile) else current.memory)
+                }} finally {linkApplying=false}
+            }
+            val conflicts=mutable.value.archives.filter {it.desktop?.active==true&&it.desktop.deviceId==connection.deviceId}.sumOf {it.desktop?.conflicts?.size ?: 0}
+            mutable.value=mutable.value.copy(linkNeedsPairing=false,linkStatus=when {snapshots.isEmpty()->"电脑已连接，请先关联对象";linkRequested->"本次修改已保留，正在继续同步";conflicts>0->"已同步，有${conflicts}项两端修改需要选择";else->"已同步，电脑资料可离线使用"})
+        }catch(e:Exception){linkFailed(e)}
+        finally {mutable.value=mutable.value.copy(linkBusy=false);if(linkRequested&&linkJob?.isActive!=true&&!mutable.value.linkNeedsPairing)scheduleLinkSync()}
     }
     fun notice(text: String) { mutable.value = mutable.value.copy(notice = text, error = "") }
     fun reportError(text: String) { mutable.value = mutable.value.copy(error = text, notice = "") }
@@ -55,14 +218,19 @@ class AssistantController(private val context: Context, private val models: Mode
     fun mutateArchive(id: String, transform: (ChatArchive) -> ChatArchive) {
         update { old -> old.copy(archives = old.archives.map { if (it.id == id) transform(it) else it }) }
     }
+    fun linkPersonChannel(sourceId:String,targetId:String?) {
+        require(!mutable.value.busy&&!mutable.value.linkBusy){"请等待当前生成或同步完成"}
+        update {it.copy(archives=PersonChannels.link(it.archives,sourceId,targetId))}
+        notice(if(targetId==null)"已解除本机人物关联，原聊天保留" else "已确认是同一个人，保留各渠道原文")
+    }
     fun createArchive(name: String, platform: String, temporary: Boolean = false): String {
         require(name.isNotBlank()) { "请填写档案名称" }
-        val archive = ChatArchive(name = name.trim(), platform = platform.trim().ifBlank { "通用截图" }, temporary = temporary)
-        val previous = mutable.value.preview?.takeIf { it.pages.any { page -> page.includeVisual } }
+        val archive = ChatArchive(name = name.trim(), platform = platform.trim().ifBlank { "通用截图" }, temporary = temporary, lastUsedAt = System.currentTimeMillis())
+        val previous = mutable.value.preview?.takeIf { it.archiveId != null }
+        val held = previous?.let { holdWhenLeaving(it) }
         update { old -> old.copy(archives = old.archives + archive, selectedArchiveId = archive.id,
-            preview = if (previous != null) PreviewSession(archiveId = archive.id, bindingConfirmed = true)
+            preview = if (previous != null) PreviewSession(archiveId = archive.id, bindingConfirmed = true, heldBatches = held.orEmpty())
                 else old.preview?.copy(archiveId = archive.id, bindingConfirmed = true, version = old.preview.version + 1)) }
-        previous?.pages?.forEach { File(it.path).delete() }
         rememberArchive(archive.id)
         autoGenerate()
         return archive.id
@@ -70,12 +238,26 @@ class AssistantController(private val context: Context, private val models: Mode
     fun selectArchive(id: String) {
         if (mutable.value.busy) return
         require(mutable.value.archives.any { it.id == id })
-        val previous = mutable.value.preview?.takeIf { it.archiveId != id && it.pages.any { page -> page.includeVisual } }
-        update { it.copy(selectedArchiveId = id, preview = if (previous != null) PreviewSession(archiveId = id, bindingConfirmed = true)
-            else it.preview?.copy(archiveId = id, bindingConfirmed = true, version = it.preview.version + 1)) }
-        previous?.pages?.forEach { File(it.path).delete() }
+        if (mutable.value.selectedArchiveId == id) return
+        val previous = mutable.value.preview
+        val saved = previous?.heldBatches.orEmpty().firstOrNull { it.archiveId == id }
+        val remaining = previous?.heldBatches.orEmpty().filterNot { it.id == saved?.id }
+        val held = if (previous != null && previous.archiveId != null && (previous.pages.isNotEmpty() || previous.manualRows.isNotEmpty()))
+            holdWhenLeaving(previous.copy(heldBatches = remaining)) else remaining
+        val next = when {
+            saved != null -> PreviewSession(archiveId=id,bindingConfirmed=true,pages=saved.pages,manualRows=saved.rows,instruction=saved.instruction,heldBatches=held,version=saved.version)
+            previous?.archiveId == null && previous != null -> previous.copy(archiveId=id,bindingConfirmed=true,version=previous.version+1)
+            previous != null -> PreviewSession(archiveId=id,bindingConfirmed=true,heldBatches=held)
+            else -> null
+        }
+        update { it.copy(selectedArchiveId = id, captureStatus="", error="", notice="已切换对象，使用该对象的记录与草稿", archives = it.archives.map { a -> if (a.id == id) a.copy(lastUsedAt = System.currentTimeMillis()) else a }, preview=next) }
         rememberArchive(id)
-        autoGenerate()
+        if (previous?.archiveId == null && saved == null) autoGenerate()
+    }
+    private fun holdWhenLeaving(preview: PreviewSession): List<HeldScreenshotBatch> {
+        if (preview.pages.isEmpty() && preview.manualRows.isEmpty()) return preview.heldBatches
+        require(preview.heldBatches.size < 4) { "还有4批未处理截图，请先恢复处理后再切换对象" }
+        return preview.heldBatches + HeldScreenshotBatch(archiveId = preview.archiveId,pages = preview.pages,rows = preview.manualRows,instruction = preview.instruction,version=preview.version)
     }
     fun startPreview() {
         if (mutable.value.preview == null) update { it.copy(preview = PreviewSession(archiveId = it.selectedArchiveId,
@@ -100,13 +282,15 @@ class AssistantController(private val context: Context, private val models: Mode
         generate(current.preview?.instruction.orEmpty(), automatic = true)
     }
     fun draftIsCurrent(): Boolean {
-        val draft = selected()?.draft ?: return false
+        val archive=selected()?:return false
+        val draft = archive.draft ?: return false
+        if(draft.contextV2?.let {MobilePipelineV2.contextCurrent(archive,it,archives=mutable.value.archives)}==false)return false
         val preview = mutable.value.preview
         return preview?.pages.isNullOrEmpty() || draft.previewVersion == preview?.version
     }
     fun closePreview() {
         if (mutable.value.busy) return
-        mutable.value.preview?.pages?.forEach { File(it.path).delete() }
+        (mutable.value.preview?.pages.orEmpty() + mutable.value.preview?.heldBatches.orEmpty().flatMap { it.pages }).forEach { File(it.path).delete() }
         update { old -> old.copy(preview = null, archives = old.archives.filterNot { it.temporary },
             selectedArchiveId = old.selectedArchiveId?.takeIf { id -> old.archives.any { it.id == id && !it.temporary } }) }
     }
@@ -116,9 +300,18 @@ class AssistantController(private val context: Context, private val models: Mode
     }
     fun deleteArchive(id: String) {
         if (mutable.value.busy) return
-        val files = mutable.value.archives.find { it.id == id }?.consultation?.pages.orEmpty() + mutable.value.preview?.takeIf { it.archiveId == id }?.pages.orEmpty()
+        mutable.value.archives.find {it.id==id}?.desktop?.let { linked ->
+            val settings=mutable.value.settings.copy(pendingLinkDeletes=(mutable.value.settings.pendingLinkDeletes+"${linked.deviceId}/${linked.groupId}").distinct())
+            secrets.save(settings);mutable.value=mutable.value.copy(settings=settings)
+        }
+        val files = mutable.value.archives.find { it.id == id }?.consultation?.pages.orEmpty() + mutable.value.preview?.takeIf { it.archiveId == id }?.pages.orEmpty() +
+            mutable.value.preview?.heldBatches.orEmpty().filter { it.archiveId == id }.flatMap { it.pages }
         update { old -> old.copy(archives = old.archives.filterNot { it.id == id }, selectedArchiveId = old.selectedArchiveId?.takeUnless { it == id },
-            preview = old.preview?.let { if (it.archiveId == id) null else it }, advisorArchiveId = old.advisorArchiveId?.takeUnless { it == id }) }
+            preview = old.preview?.let { p ->
+                val held = p.heldBatches.filterNot { it.archiveId == id }
+                if (p.archiveId == id) { if (held.isEmpty()) null else PreviewSession(heldBatches = held) }
+                else p.copy(heldBatches = held)
+            }, advisorArchiveId = old.advisorArchiveId?.takeUnless { it == id }) }
         files.forEach { File(it.path).delete() }
     }
     fun reviseMessages(id: String, rows: List<ChatMessage>) {
@@ -126,6 +319,22 @@ class AssistantController(private val context: Context, private val models: Mode
             preview = state.preview?.let { p -> if (p.archiveId != id) p else p.copy(version = p.version + 1, pages = p.pages.map { page ->
                 if (page.includeVisual) page.copy(rows = rows.filter { it.sourceId == page.id }, corrected = true) else page
             }) }) }
+    }
+    fun repairHistory(id:String,expectedRevision:Long,rows:List<ChatMessage>){
+        require(!mutable.value.busy){"请等待当前生成完成"}
+        val archive=mutable.value.archives.find {it.id==id} ?: error("档案不存在")
+        require(archive.revision==expectedRevision){"记录已更新，请重新预览整理结果"}
+        require(ScreenshotStitcher.repair(archive.messages)==rows){"整理预览已失效，请重新打开"}
+        mutateArchive(id){ContextEngine.revise(it,rows).copy(historyUndo=it.messages)}
+        notice("已整理聊天记录，原记录备份和手工草稿已保留")
+    }
+    fun undoHistoryRepair(id:String){
+        require(!mutable.value.busy){"请等待当前生成完成"}
+        val archive=mutable.value.archives.find {it.id==id} ?: error("档案不存在")
+        val backup=archive.historyUndo ?: error("没有可撤销的整理")
+        require(archive.messages==ScreenshotStitcher.repair(backup)){"整理后记录已变化，已保留备份，不能覆盖新消息"}
+        mutateArchive(id){ContextEngine.revise(it,backup).copy(historyUndo=null)}
+        notice("已恢复整理前的记录")
     }
     fun setInstruction(text: String) { update { it.copy(preview = it.preview?.copy(instruction = text)) } }
     fun previewOverlayOpacity(bubble: Float, panel: Float) {
@@ -137,21 +346,24 @@ class AssistantController(private val context: Context, private val models: Mode
     }
     fun saveSettings(settings: ModelSettings) {
         runCatching {
+            require(ModelDiagnostics.errors(settings).isEmpty()){ModelDiagnostics.errors(settings).distinct().joinToString("；")}
             models.validateEndpoint(settings.textEndpoint)
             if (settings.visionEndpoint.isNotBlank()) models.validateEndpoint(settings.visionEndpoint)
+            if(listOf(settings.qualityEndpoint,settings.qualityModel,settings.qualityKey).any {it.isNotBlank()}) {require(listOf(settings.qualityEndpoint,settings.qualityModel,settings.qualityKey).all {it.isNotBlank()}) {"高档模型接口、名称和密钥请一起填写"};models.validateEndpoint(settings.qualityEndpoint)}
+            require(settings.dailyCallLimit in 1..1000 && settings.dailyTokenLimit in 8192..2000000) {"每日调用上限应为1–1000次，预估token上限应为8192–2000000"}
             val saved = settings.copy(lastArchiveId = mutable.value.settings.lastArchiveId,
                 screenshotUploadAccepted = settings.screenshotUploadAccepted || mutable.value.settings.screenshotUploadAccepted,
                 bubbleOpacity = mutable.value.settings.bubbleOpacity, panelOpacity = mutable.value.settings.panelOpacity)
             val previous = mutable.value.settings
             secrets.save(saved)
-            if (previous.globalStyle != saved.globalStyle || previous.preferences != saved.preferences)
+            if (!previous.sameReplyConfiguration(saved))
                 update { state -> state.copy(archives = state.archives.map { it.copy(revision = it.revision + 1) }) }
             mutable.value = mutable.value.copy(settings = saved, error = "", notice = "设置已保存到手机")
         }.onFailure { reportError(it.message ?: "无法保存设置") }
     }
     fun importImages(uris: List<Uri>, forConsultation: Boolean = false): Job? {
         val advisorId = mutable.value.advisorArchiveId.takeIf { forConsultation }
-        if (advisorId != null) return launchWork {
+        if (advisorId != null) return launchWork("正在准备咨询截图") {
             val archive = mutable.value.archives.find { it.id == advisorId } ?: error("档案已删除")
             require(archive.consultation.pages.size + uris.size <= 8) { "最多8张截图" }
             val pages = mutableListOf<ScreenshotPage>()
@@ -164,7 +376,7 @@ class AssistantController(private val context: Context, private val models: Mode
 
         cancelWork()
         mutable.value = mutable.value.copy(advisorArchiveId = null)
-        return launchWork {
+        return launchWork("正在准备截图") {
         require(uris.isNotEmpty()) { "没有收到图片" }
         require((mutable.value.preview?.pages?.size ?: 0) + uris.size <= 8) { "一次最多追加8张截图，请先处理当前内容" }
         startPreview()
@@ -177,11 +389,37 @@ class AssistantController(private val context: Context, private val models: Mode
         scope.launch { work?.join(); if (workVersion == importVersion) autoGenerate() }
         }
     }
-    fun addCapturedPage(page: ScreenshotPage) {
+    fun addCapturedPage(page: ScreenshotPage, append: Boolean = true) {
         cancelWork()
         startPreview()
+        if (!append) {
+            val previous = mutable.value.preview!!
+            val unfinished = previous.pages.any { !it.includeVisual } || previous.manualRows.isNotEmpty()
+            if (unfinished && previous.heldBatches.size >= 4) {
+                File(page.path).delete(); reportError("还有4批未处理截图，请在更多中恢复处理后再截新一轮"); return
+            }
+            val held = if (unfinished) previous.heldBatches + HeldScreenshotBatch(archiveId = previous.archiveId,
+                pages = previous.pages, rows = previous.manualRows, instruction = previous.instruction,version=previous.version) else previous.heldBatches
+            update { state -> state.copy(captureStatus="", preview = PreviewSession(archiveId = state.selectedArchiveId, bindingConfirmed = state.selectedArchiveId != null, heldBatches = held)) }
+            if (!unfinished) previous.pages.forEach { File(it.path).delete() }
+        }
         if (mutable.value.preview!!.pages.size >= 8) { File(page.path).delete(); reportError("一次最多8张截图"); return }
         updatePreview { it.copy(pages = it.pages + page) }
+        autoGenerate()
+    }
+    fun restoreCaptureBatch(id: String) {
+        if (mutable.value.busy) return
+        val current = mutable.value.preview ?: return
+        val held = current.heldBatches.find { it.id == id } ?: return
+        require(held.archiveId == null || mutable.value.archives.any { it.id == held.archiveId && it.enabled }) { "原聊天档案已不可用" }
+        val unfinished = current.pages.any { !it.includeVisual } || current.manualRows.isNotEmpty()
+        val remaining = current.heldBatches.filterNot { it.id == id } + if (unfinished) listOf(HeldScreenshotBatch(
+            archiveId = current.archiveId, pages = current.pages, rows = current.manualRows, instruction = current.instruction,version=current.version)) else emptyList()
+        update { it.copy(selectedArchiveId = held.archiveId, preview = PreviewSession(archiveId = held.archiveId,
+            bindingConfirmed = held.archiveId != null, pages = held.pages, manualRows = held.rows, instruction = held.instruction, heldBatches = remaining,version=held.version)) }
+        if (!unfinished) current.pages.forEach { File(it.path).delete() }
+        held.archiveId?.let { rememberArchive(it) }
+        notice("已恢复旧截图及原对象，手工回复保留")
         autoGenerate()
     }
     fun recognizePage(pageId: String) = launchWork {
@@ -192,90 +430,97 @@ class AssistantController(private val context: Context, private val models: Mode
     }
     fun editDraft(text: String) { selected()?.let { archive ->
         if (archive.draft?.state in setOf(DraftState.SUBMITTING, DraftState.SUBMITTED, DraftState.UNKNOWN, DraftState.SENT)) return
-        mutateArchive(archive.id) { it.copy(draft = it.draft?.copy(text = text, state = DraftState.EDITING, manuallyEdited = true)) }
+        mutateArchive(archive.id) { it.copy(draft = it.draft?.let { d -> d.copy(text = text, state = DraftState.EDITING,
+            manuallyEdited = true, editedAlternatives = d.editedAlternatives + (d.selected to text)) }) }
     } }
     fun chooseAlternative(index: Int) { selected()?.let { archive ->
         if (archive.draft?.state in setOf(DraftState.SUBMITTING, DraftState.SUBMITTED, DraftState.UNKNOWN, DraftState.SENT)) return
-        mutateArchive(archive.id) { it.copy(draftHistory = Personalization.rememberDraft(it), draft = it.draft?.let { d -> d.copy(selected = index, text = d.alternatives[index], state = DraftState.EDITING, manuallyEdited = false) }) }
+        mutateArchive(archive.id) { it.copy(draftHistory = Personalization.rememberDraft(it), draft = it.draft?.selectAlternative(index)) }
     } }
-    fun generate(instruction: String, automatic: Boolean = false) = launchWork {
-        require(!mutable.value.settings.paused) { "辅助已暂停，请先在设置恢复" }
-        var archive = selected() ?: error("请先选择或新建聊天档案")
-        require(archive.draft?.state !in setOf(DraftState.SUBMITTING, DraftState.SUBMITTED, DraftState.UNKNOWN)) { "上次发送结果尚未核对，请先确认已发送或确认未发出" }
-        val generationStarted = System.nanoTime()
-        fun elapsed() = java.lang.String.format(java.util.Locale.ROOT,"%.1f",(System.nanoTime()-generationStarted)/1_000_000_000.0)
+    fun generate(instruction: String, automatic: Boolean = false) = launchWork("正在整理上下文",selected()?.id,instruction) {
         val requestSettings = mutable.value.settings
-        val preview = mutable.value.preview
-        val skillContent = if (archive.skill.enabled) withContext(Dispatchers.IO) { skills.payload(instruction + "\n" + archive.messages.takeLast(32).joinToString("\n") { it.text }) } else ""
-        if (!preview?.pages.isNullOrEmpty()) {
-            require(mutable.value.settings.screenshotUploadAccepted) { "请先同意将截图发送到你配置的多模态模型服务" }
-            require(preview!!.archiveId == archive.id) { "请先选择当前聊天对象" }
-            if (automatic && archive.draft?.manuallyEdited == true) return@launchWork
-            val snapshot = archive
-            val result = models.screenshotReply(snapshot, preview.pages, preview.manualRows, instruction, requestSettings, skillContent)
-            val latest = mutable.value.archives.find { it.id == snapshot.id } ?: error("档案已删除")
-            require(mutable.value.settings.sameReplyConfiguration(requestSettings) && latest.revision == snapshot.revision && latest.skill == snapshot.skill && latest.memory == snapshot.memory && latest.preferences == snapshot.preferences && mutable.value.preview?.id == preview.id &&
-                mutable.value.preview?.version == preview.version && mutable.value.selectedArchiveId == snapshot.id && latest.draft == snapshot.draft) {
-                "有新消息、截图或草稿修改，请重新生成；原草稿已保留"
+        require(!requestSettings.paused) { "辅助已暂停，请先在设置恢复" }
+        var archive = selected() ?: error("请先选择或新建聊天档案")
+        if(automatic && archive.draft?.manuallyEdited == true) return@launchWork
+        require(archive.draft?.state !in setOf(DraftState.SUBMITTING,DraftState.SUBMITTED,DraftState.UNKNOWN)) { "请先核对上次发送结果" }
+        markReplyPhase(archive.id,"context",instruction)
+        val requestInstruction = if(!automatic && draftIsCurrent() && archive.draft?.state != DraftState.SENT)
+            instruction + "\n本人尚未发送的改写参考：\n" + archive.draft?.text.orEmpty().take(2000) else instruction
+        fun unchanged(snapshot:ChatArchive,preview:PreviewSession?) {
+            val latest=mutable.value.archives.find {it.id==snapshot.id} ?: error("档案已删除")
+            require(latest.revision==snapshot.revision && latest.messages==snapshot.messages && latest.draft==snapshot.draft && latest.skill==snapshot.skill && latest.memory==snapshot.memory && latest.preferences==snapshot.preferences && mutable.value.settings.sameReplyConfiguration(requestSettings) && mutable.value.selectedArchiveId==snapshot.id && mutable.value.preview==preview) {
+                "有新消息、记忆、截图或草稿修改，旧结果未采用；请重新生成"
             }
-            if (result.contactMismatch) { reportError(result.note.ifBlank { "画面可能属于其他对象，请切换聊天对象后重试" }); return@launchWork }
-            if (result.needsMoreContext) { reportError(result.note.ifBlank { "截图内容不足，请补图或补充想怎么回" }); return@launchWork }
-            val pages = preview.pages.zip(result.pages).map { (page, recognized) ->
-                val rows = if (page.corrected) page.rows else recognized.messages.map {
-                    ChatMessage(speaker = it.speaker, text = it.text.trim(), uncertain = it.uncertain || it.speaker == Speaker.UNKNOWN,
-                        origin = Origin.SCREENSHOT, sourceId = page.id, generated = it.speaker == Speaker.ME &&
-                            ((listOfNotNull(snapshot.draft) + snapshot.draftHistory).any { d -> it.text.trim() == d.text.trim() || it.text.trim() in d.alternatives.map(String::trim) } ||
-                                snapshot.messages.any { m -> m.generated && m.text.trim() == it.text.trim() }))
+        }
+        val preview=mutable.value.preview
+        if(preview!=null) {
+            require(preview.archiveId==archive.id && preview.bindingConfirmed) {"请先确认截图属于当前对象"}
+            val snapshot=archive
+            val unresolved=preview.pages.filterNot {it.corrected}
+            var recognized=emptyList<cn.replyassistant.ai.VisualPage>()
+            if(unresolved.isNotEmpty()) {
+                require(requestSettings.screenshotUploadAccepted) {"请先同意将截图发送到你配置的多模态模型"}
+                mutable.value=mutable.value.copy(workLabel="正在识别聊天记录")
+                markReplyPhase(archive.id,"recognition",instruction)
+                val result=models.screenshotReply(snapshot,unresolved,emptyList(),"",requestSettings,recognitionOnly=true)
+                unchanged(snapshot,preview)
+                require(!result.contactMismatch) {result.note.ifBlank {"截图可能属于其他对象，请核对"}}
+                require(!result.needsMoreContext) {result.note.ifBlank {"截图内容不足，请补图或纠正"}}
+                recognized=result.pages
+            }
+            val pages=preview.pages.map {page ->
+                if(page.corrected) page else {
+                    val r=recognized.first {it.sourceId==page.id}
+                    val rows=r.messages.map {m->ChatMessage(speaker=m.speaker,text=m.text.trim(),uncertain=m.uncertain||m.speaker==Speaker.UNKNOWN,
+                        origin=if(page.accessibleText.isBlank())Origin.SCREENSHOT else Origin.ACCESSIBILITY,sourceId=page.id,
+                        generated=m.speaker==Speaker.ME&&((listOfNotNull(snapshot.draft)+snapshot.draftHistory).any {d->m.text.trim()==d.text.trim()||m.text.trim() in d.alternatives.map(String::trim)}||snapshot.messages.any {it.generated&&it.text.trim()==m.text.trim()}))}
+                    page.copy(rows=rows,corrected=true,includeVisual=true,imageDescription=r.imageDescription.trim())
                 }
-                val description = if (page.corrected) page.imageDescription else recognized.imageDescription.trim()
-                val savedRows = if (!page.corrected && description.isNotBlank() && rows.none { it.text.contains(description) }) rows + ChatMessage(
-                    speaker = Speaker.UNKNOWN, text = "[图片内容，发言归属不确定] $description", uncertain = true, origin = Origin.SCREENSHOT, sourceId = page.id)
-                    else rows
-                page.copy(rows = savedRows, includeVisual = true, imageDescription = description)
             }
-            val sourceIds = pages.map { it.id }.toSet() + preview.manualRows.map { it.sourceId }
-            var merged = snapshot.copy(messages = snapshot.messages.filterNot { it.sourceId in sourceIds })
-            pages.forEach { merged = ContextEngine.append(merged, it.rows, observeDraft = false) }
-            merged = ContextEngine.append(merged, preview.manualRows, observeDraft = false)
-            merged = merged.copy(revision = snapshot.revision + 1, summaries = ContextEngine.summarize(merged.messages), memory = Personalization.invalidateMemory(snapshot, merged.messages))
-            if (snapshot.skill.enabled) require(result.advisor != null) { "军师分析缺失，截图和草稿已保留，请重试" }
-            val certain = merged.messages.filter { !it.uncertain && it.speaker != Speaker.UNKNOWN }.flatMap { listOf(it.id,it.sourceId) }.toSet() -
-                merged.messages.filter { it.uncertain }.map { it.sourceId }.toSet()
-            merged = Personalization.applyMemory(merged, result.memorySuggestions, certain, emptySet())
-            val next = merged.copy(draftHistory = Personalization.rememberDraft(snapshot), draft = ReplyDraft(contextRevision = merged.revision, alternatives = result.alternatives,
-                instruction = instruction, note = result.note.ifBlank { if (pages.any { p -> p.rows.any { it.uncertain } }) "部分识别内容不确定，可在补充／纠正查看" else "" },
-                uncertain = result.uncertain || pages.any { p -> p.rows.any { it.uncertain } }, previewVersion = preview.version, advisor = result.advisor))
-            update { state -> state.copy(archives = state.archives.map { if (it.id == next.id) next else it }, preview = preview.copy(pages = pages)) }
-            notice(if (merged.memory != snapshot.memory) "建议已生成（${elapsed()}秒），关系记忆已更新，可查看或撤销" else "建议已生成（${elapsed()}秒），填写和复制都不会发送")
+            val ids=pages.map {it.id}.toSet()+preview.manualRows.map {it.sourceId}
+            var merged=archive.copy(messages=archive.messages.filterNot {it.sourceId in ids})
+            pages.forEach {page->
+                val rows=if(page.imageDescription.isNotBlank()&&page.rows.none {it.text.contains(page.imageDescription)}) page.rows+ChatMessage(speaker=Speaker.UNKNOWN,
+                    text="[图片内容，发言归属不确定] ${page.imageDescription}",uncertain=true,origin=Origin.SCREENSHOT,sourceId=page.id) else page.rows
+                merged=ContextEngine.append(merged,rows,observeDraft=false)
+            }
+            merged=ContextEngine.append(merged,preview.manualRows,observeDraft=false)
+            merged=merged.copy(revision=snapshot.revision+1,summaries=ContextEngine.summarize(merged.messages),memory=Personalization.invalidateMemory(snapshot,merged.messages))
+            archive=merged
+            update {state->state.copy(archives=state.archives.map {if(it.id==merged.id)merged else it},preview=preview.copy(pages=pages),captureStatus="已保存本轮识别文字，失败重试不重复识图")}
+        }
+        val snapshot=archive
+        val requestPreview=mutable.value.preview
+        val contextV2=MobilePipelineV2.build(snapshot,requestInstruction,archives=mutable.value.archives)
+        mutable.value=mutable.value.copy(workLabel="正在判断如何回应")
+        markReplyPhase(snapshot.id,"decision",instruction)
+        val decision=models.decideV2(contextV2,requestInstruction,requestSettings)
+        unchanged(snapshot,requestPreview)
+        require(MobilePipelineV2.contextCurrent(selected()?:snapshot,contextV2,archives=mutable.value.archives)) {"人物关联或长期记忆已更新，请重新生成"}
+        if(decision.action!="reply") {
+            mutateArchive(snapshot.id) {it.copy(revision=it.revision+1,lastDecisionV2=decision,pending=decision.action=="ask_user")}
+            notice(when(decision.action){"wait"->"对方还没说完，暂不生成";"skip"->"对方明确要求停止联系，本轮不生成";else->"必要资料不足，请补充个人事实后生成"})
+            markReplyPhase(snapshot.id,if(decision.action=="ask_user")"needs_context" else "no_reply",instruction)
             return@launchWork
         }
-        if (preview != null) {
-            require(preview.archiveId == archive.id && preview.bindingConfirmed) { "请先确认当前截图的档案归属" }
-            val rows = preview.pages.flatMap { it.rows } + preview.manualRows
-            require(rows.isNotEmpty()) { "请追加截图或聊天内容" }
-            require(rows.none { it.uncertain || it.speaker == Speaker.UNKNOWN || it.text.isBlank() }) { "请确认识别内容及每条的说话人" }
-            require(mutable.value.settings.textKey.isNotBlank()) { "请先在设置中填写文字模型 API Key，截图预览已保留" }
-            models.validateEndpoint(mutable.value.settings.textEndpoint)
-            // Merge one page at a time, preserving the ordered overlap between screenshots.
-            preview.pages.forEach { archive = ContextEngine.append(archive, it.rows.map { row -> row.copy(imagePath = null) }) }
-            archive = ContextEngine.append(archive, preview.manualRows)
-            val stored = archive
-            mutateArchive(archive.id) { stored }
-            preview.pages.forEach { File(it.path).delete() }
-            update { it.copy(preview = null) }
+        val skillContent=if(snapshot.skill.enabled)withContext(Dispatchers.IO){skills.payload(requestInstruction+contextV2.recentMessages.joinToString("\n"){it.text})}else ""
+        mutable.value=mutable.value.copy(workLabel=if(decision.risk_level=="high"&&requestSettings.qualityKey.isNotBlank())"正在使用高档模型起草三条候选" else "正在起草三条候选")
+        markReplyPhase(snapshot.id,"generation",instruction)
+        val result=models.generateV2(contextV2,decision,snapshot,requestInstruction,requestSettings,skillContent)
+        unchanged(snapshot,requestPreview)
+        if(snapshot.skill.enabled)require(result.advisor!=null){"军师分析缺失，资料已保留，请重试"}
+        require(MobilePipelineV2.contextCurrent(selected()?:snapshot,contextV2,archives=mutable.value.archives)) {"生成期间人物关联或长期记忆已更新，候选未采用，请重新生成"}
+        markReplyPhase(snapshot.id,"quality",instruction)
+        val quality=result.alternatives.map {MobilePipelineV2.quality(contextV2,decision,it)}
+        mutateArchive(snapshot.id) {existing ->
+            val sources=existing.messages.filter {!it.uncertain&&!it.orderUncertain&&it.speaker!=Speaker.UNKNOWN}.flatMap {listOf(it.id,it.sourceId)+it.sourceRefs}.toSet()-existing.messages.filter {it.uncertain||it.orderUncertain}.flatMap {listOf(it.sourceId)+it.sourceRefs}.toSet()
+            val next=Personalization.applyMemory(existing,result.memorySuggestions,sources,emptySet())
+            next.copy(draftHistory=Personalization.rememberDraft(existing),lastDecisionV2=decision,draft=ReplyDraft(contextRevision=existing.revision,alternatives=result.alternatives,
+                instruction=instruction,note=result.note,uncertain=result.uncertain||contextV2.recentMessages.any {it.uncertain||it.orderUncertain},advisor=result.advisor,
+                alternativeLabels=result.alternativeLabels,previewVersion=requestPreview?.version,contextV2=contextV2,decisionV2=decision,qualityV2=quality,generationModel=models.generationModelV2(decision,requestSettings)))
         }
-        require(archive.messages.isNotEmpty()) { "当前档案没有聊天内容，请先追加截图或读取聊天" }
-        val snapshot = archive
-        val result = models.reply(snapshot, instruction, requestSettings, skillContent)
-        val latest = mutable.value.archives.find { it.id == snapshot.id } ?: error("档案已删除")
-        require(latest.revision == snapshot.revision && latest.skill == snapshot.skill && latest.memory == snapshot.memory && latest.preferences == snapshot.preferences && latest.draft == snapshot.draft && mutable.value.settings.sameReplyConfiguration(requestSettings) && mutable.value.selectedArchiveId == snapshot.id) { "有新消息或内容修改，请重新生成；原草稿已保留" }
-        if (snapshot.skill.enabled) require(result.advisor != null) { "军师分析缺失，请重试" }
-        mutateArchive(snapshot.id) { existing ->
-            val sources = existing.messages.filter { !it.uncertain && it.speaker != Speaker.UNKNOWN }.flatMap { listOf(it.id,it.sourceId) }.toSet() - existing.messages.filter { it.uncertain }.map { it.sourceId }.toSet()
-            val it = Personalization.applyMemory(existing, result.memorySuggestions, sources, emptySet())
-            it.copy(draftHistory = Personalization.rememberDraft(it), draft = ReplyDraft(contextRevision = snapshot.revision,
-            alternatives = result.alternatives, instruction = instruction, note = result.note, uncertain = result.uncertain, advisor = result.advisor)) }
-        notice(if (result.uncertain) "建议已生成（${elapsed()}秒），但有背景需要补充" else "回复建议已生成（${elapsed()}秒），确认前不会发送")
+        notice(if(quality.any {it.status=="blocked"})"三条候选已生成，含需修改的内容；检查通过后可复制" else "三条候选已在手机生成，请选择、核对并复制")
+        markReplyPhase(snapshot.id,"completed",instruction)
     }
     fun copyDraft() {
         val archive = selected() ?: return
@@ -284,14 +529,6 @@ class AssistantController(private val context: Context, private val models: Mode
         (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("回复", text))
         mutateArchive(archive.id) { it.copy(draft = it.draft?.copy(state = DraftState.COPIED)) }
         notice("已复制，尚未标记为发送")
-    }
-    fun fillDraft(): Boolean {
-        val archive = selected() ?: return false
-        require(ContextEngine.canAct(archive) && draftIsCurrent()) { "上下文已更新，请重新检查或生成" }
-        val result = ChatAccessibilityService.fill(archive.draft!!.text)
-        if (result) { mutateArchive(archive.id) { it.copy(draft = it.draft?.copy(state = DraftState.FILLED)) }; notice("已填入，请在原软件检查并点击发送") }
-        else notice("无法确认填写结果，请检查原输入框；已有文字或无法定位时使用复制")
-        return result
     }
     fun acknowledgeSent() { selected()?.let { archive ->
         require(draftIsCurrent() || archive.draft?.state in setOf(DraftState.SUBMITTED, DraftState.UNKNOWN, DraftState.SENT)) { "截图已更新，请先核对草稿" }
@@ -303,24 +540,12 @@ class AssistantController(private val context: Context, private val models: Mode
         notice("已记录你核对上次未发出，不会自动重发")
     } }
     fun reviewDraft() { selected()?.let { archive ->
+        require(archive.draft?.contextV2==null) {"独立流程的资料已更新，请重新生成，不能直接复用旧决策"}
         require(archive.draft != null && archive.draft.state !in setOf(DraftState.SUBMITTING, DraftState.SUBMITTED, DraftState.UNKNOWN, DraftState.SENT))
         mutateArchive(archive.id) { it.copy(draft = it.draft?.copy(contextRevision = it.revision, previewVersion = mutable.value.preview?.version)) }
         notice("已记录你核对最新上下文，草稿仍未发送")
     } }
     fun dismissPending() { selected()?.let { archive -> mutateArchive(archive.id) { it.copy(pending = false) }; notice("本轮暂不回复，后续新消息仍会提示") } }
-    fun sendNotification() {
-        val archive = selected() ?: return
-        require(ContextEngine.canAct(archive) && draftIsCurrent()) { "上下文已更新或回复已处理，请重新检查" }
-        require(!mutable.value.settings.paused) { "辅助已暂停" }
-        val draft = archive.draft!!
-        val scopeKey = requireNotNull(archive.notificationScope) { "该档案没有通知快捷回复入口，请使用复制" }
-        require(NotificationReplies.canSend(scopeKey, archive)) { "快捷回复入口已失效或未经验证，请使用复制" }
-        mutateArchive(archive.id) { it.copy(draft = draft.copy(state = DraftState.SUBMITTING)) }
-        // Persist SUBMITTING before invoking an external action; no automatic retry on a crash.
-        val submitted = NotificationReplies.send(context, scopeKey, archive, draft.text)
-        mutateArchive(archive.id) { it.copy(draft = draft.copy(state = if (submitted) DraftState.SUBMITTED else DraftState.UNKNOWN)) }
-        notice(if (submitted) "已提交给原软件，尚未确认送达。请核对后点击“我已发送”" else "发送结果不明，请到原聊天核对；不会自动重试")
-    }
     fun receiveNotification(scopeKey: String, name: String, platform: String, rows: List<ChatMessage>) {
         scope.launch {
             if (mutable.value.settings.paused) return@launch
@@ -343,10 +568,9 @@ class AssistantController(private val context: Context, private val models: Mode
         } else bound
     } }
     fun readCurrentChat() {
-        val rows = ChatAccessibilityService.readCurrent() ?: run { reportError("请在目标聊天中打开悬浮面板，再读取当前聊天"); return }
-        startPreview()
-        updatePreview { it.copy(manualRows = it.manualRows + rows, bindingConfirmed = false) }
-        notice("已读取当前可见文字，请确认说话人并删除界面按钮和标题")
+        if(mutable.value.busy) return
+        val layout = ChatAccessibilityService.readLayout() ?: run { reportError("未读取到聊天文字，请检查无障碍权限，或改用截屏"); return }
+        addCapturedPage(ScreenshotPage(path="",rows=emptyList(),accessibleText=layout),append=false)
     }
 
     fun openAdvisor(id: String) {
@@ -354,6 +578,12 @@ class AssistantController(private val context: Context, private val models: Mode
         require(mutable.value.archives.any { it.id == id && it.enabled })
         mutable.value = mutable.value.copy(advisorArchiveId = id)
     }
+    fun openHistory(id:String) {
+        require(mutable.value.archives.any {it.id==id&&it.enabled}) {"档案不存在"}
+        mutable.value=mutable.value.copy(historyArchiveId=id,advisorArchiveId=null)
+        desktopForeground()
+    }
+    fun closeHistory(){mutable.value=mutable.value.copy(historyArchiveId=null)}
     fun closeAdvisor() { if (!mutable.value.busy) mutable.value = mutable.value.copy(advisorArchiveId = null) }
     fun setSkill(id: String, enabled: Boolean) = mutateArchive(id) { it.copy(skill = it.skill.copy(enabled = enabled), revision = it.revision + 1) }
     fun feedback(kind: String, correction: String = "") {
@@ -409,7 +639,7 @@ class AssistantController(private val context: Context, private val models: Mode
         mutateArchive(id) { it.copy(consultation = it.consultation.copy(pages = it.consultation.pages.filterNot { p -> p.id == pageId },version = it.consultation.version + 1)) }
         File(page.path).delete()
     }
-    fun consult(id: String) = launchWork {
+    fun consult(id: String) = launchWork("正在分析问题") {
         require(!mutable.value.settings.paused) { "辅助已暂停" }
         val snapshot = mutable.value.archives.find { it.id == id } ?: error("档案已删除")
         require(snapshot.skill.enabled) { "请先为此对象启用狗头军师" }
@@ -424,8 +654,8 @@ class AssistantController(private val context: Context, private val models: Mode
             analysis = requireNotNull(result.advisor),replies = result.alternatives,
             imageDescriptions = result.pages.map { p -> (p.messages.map { "${it.speaker}：${it.text}${if(it.uncertain) " [不确定]" else ""}" } + p.imageDescription).joinToString("\n") },
             sourceIds = result.pages.map { it.sourceId })
-        val certain = snapshot.messages.filter { !it.uncertain && it.speaker != Speaker.UNKNOWN }.flatMap { listOf(it.id,it.sourceId) }.toSet() -
-            snapshot.messages.filter { it.uncertain }.map { it.sourceId }.toSet() + result.pages.filter { p -> p.messages.isNotEmpty() && p.messages.none { it.uncertain || it.speaker == Speaker.UNKNOWN } }.map { it.sourceId }
+        val certain = snapshot.messages.filter { !it.uncertain && !it.orderUncertain && it.speaker != Speaker.UNKNOWN }.flatMap { listOf(it.id,it.sourceId)+it.sourceRefs }.toSet() -
+            snapshot.messages.filter { it.uncertain||it.orderUncertain }.flatMap {listOf(it.sourceId)+it.sourceRefs}.toSet() + result.pages.filter { p -> p.messages.isNotEmpty() && p.messages.none { it.uncertain || it.speaker == Speaker.UNKNOWN } }.map { it.sourceId }
         val updated = Personalization.applyMemory(snapshot,result.memorySuggestions,certain,(snapshot.consultation.turns.map { it.id } + questionId).toSet())
         mutateArchive(id) { updated.copy(consultation = snapshot.consultation.copy(turns = snapshot.consultation.turns + turn,question = "",background = "",pages = emptyList(),version = snapshot.consultation.version + 1)) }
         snapshot.consultation.pages.forEach { File(it.path).delete() }
@@ -469,15 +699,20 @@ class AssistantController(private val context: Context, private val models: Mode
         a.consultation.pages.forEach { File(it.path).delete() }
     }
 
-    private fun cancelWork() { workVersion++; work?.cancel(); work = null; mutable.value = mutable.value.copy(busy = false) }
-    private fun launchWork(block: suspend () -> Unit): Job? {
+    fun cancelGeneration() { cancelWork(); mutable.value = mutable.value.copy(generationCancelled = true); notice("已取消，本轮内容和原回复已保留") }
+    fun retryReply(){val archive=selected() ?: return;generate(archive.replyAttempt?.instruction ?: archive.draft?.instruction.orEmpty())}
+    private fun markReplyPhase(id:String,phase:String,instruction:String,error:String=""){mutateArchive(id){it.copy(replyAttempt=ReplyAttempt(phase,instruction,error,it.replyAttempt?.takeIf {a->a.phase in replyRunningPhases}?.startedAt ?: System.currentTimeMillis()))}}
+    private fun cancelWork() { workArchiveId?.let {id->mutable.value.archives.find {it.id==id}?.replyAttempt?.takeIf {it.phase in replyRunningPhases}?.let {markReplyPhase(id,"cancelled",it.instruction)}};workVersion++; work?.cancel(); work = null;workArchiveId=null; mutable.value = mutable.value.copy(busy = false, workLabel = "", workStartedAt = 0) }
+    private fun launchWork(label: String = "正在处理内容",replyTargetId:String?=null,replyInstruction:String="", block: suspend () -> Unit): Job? {
         if (mutable.value.busy) return null
-        mutable.value = mutable.value.copy(busy = true, error = "", notice = "")
+        mutable.value = mutable.value.copy(busy = true, error = "", notice = "", workLabel = label,
+            workStartedAt = android.os.SystemClock.elapsedRealtime(), generationCancelled = false)
         val version = ++workVersion
+        workArchiveId=replyTargetId
         return scope.launch(start = CoroutineStart.LAZY) {
             try { block() } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { reportError(e.message?.take(240) ?: "操作失败，原有内容已保留") }
-            finally { if (version == workVersion) mutable.value = mutable.value.copy(busy = false) }
+            catch (e: Exception) { if(version==workVersion){val message=e.message?.take(240) ?: "操作失败，原有内容已保留";replyTargetId?.let {markReplyPhase(it,"failed",replyInstruction,message)};reportError(message)} }
+            finally { if (version == workVersion){workArchiveId=null;mutable.value = mutable.value.copy(busy = false, workLabel = "", workStartedAt = 0)} }
         }.also { work = it; it.start() }
     }
 }

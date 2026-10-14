@@ -1,0 +1,149 @@
+{
+  "protocol": "p4-5d-entry-structure-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "sourceSha256": "f5c78bb0c0bf4362fc86276b206ba7ee29def51fe27218242c8ecb0f2ab4368c",
+  "versionBranch": "V_3_9_11_25",
+  "exceptionUsable": true,
+  "exceptionReason": null,
+  "rangeCount": 182927,
+  "offsets": [
+    {
+      "key": "k_sqlite3_column_blob",
+      "rva": "0x3a1e380",
+      "position": "interior",
+      "offsetIntoRange": "0x170",
+      "rangeStart": "0x3a1e210",
+      "rangeEnd": "0x3a1e38b",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [
+        "mov [rsp+d],reg"
+      ],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_column_bytes",
+      "rva": "0x3a1e470",
+      "position": "interior",
+      "offsetIntoRange": "0x20",
+      "rangeStart": "0x3a1e450",
+      "rangeEnd": "0x3a1ee05",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_column_count",
+      "rva": "0x3a1e350",
+      "position": "interior",
+      "offsetIntoRange": "0x140",
+      "rangeStart": "0x3a1e210",
+      "rangeEnd": "0x3a1e38b",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [
+        "mov [rsp+d],reg"
+      ],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_column_name",
+      "rva": "0x3a1ed50",
+      "position": "interior",
+      "offsetIntoRange": "0x900",
+      "rangeStart": "0x3a1e450",
+      "rangeEnd": "0x3a1ee05",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_column_type",
+      "rva": "0x3a1eba0",
+      "position": "interior",
+      "offsetIntoRange": "0x750",
+      "rangeStart": "0x3a1e450",
+      "rangeEnd": "0x3a1ee05",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_exec",
+      "rva": "0x3a59b30",
+      "position": "interior",
+      "offsetIntoRange": "0x16c",
+      "rangeStart": "0x3a599c4",
+      "rangeEnd": "0x3a59c5a",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [
+        "mov [rsp+d],reg"
+      ],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_finalize",
+      "rva": "0x3a1cbe0",
+      "position": "range-start",
+      "offsetIntoRange": null,
+      "rangeStart": "0x3a1cbe0",
+      "rangeEnd": "0x3a1cccf",
+      "selfEntryShapes": [
+        "mov [rsp+d],reg"
+      ],
+      "rangeStartEntryShapes": [
+        "mov [rsp+d],reg"
+      ],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": true
+    },
+    {
+      "key": "k_sqlite3_open",
+      "rva": "0x3a98fa0",
+      "position": "interior",
+      "offsetIntoRange": "0x4d0",
+      "rangeStart": "0x3a98ad0",
+      "rangeEnd": "0x3a99175",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [
+        "mov [rsp+d],reg"
+      ],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_prepare",
+      "rva": "0x3a617b0",
+      "position": "interior",
+      "offsetIntoRange": "0x610",
+      "rangeStart": "0x3a611a0",
+      "rangeEnd": "0x3a64aec",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    },
+    {
+      "key": "k_sqlite3_step",
+      "rva": "0x3a1db30",
+      "position": "interior",
+      "offsetIntoRange": "0x450",
+      "rangeStart": "0x3a1d6e0",
+      "rangeEnd": "0x3a1dc0f",
+      "selfEntryShapes": [],
+      "rangeStartEntryShapes": [],
+      "rangeStartTrampoline": null,
+      "assessedAsEntry": false
+    }
+  ],
+  "verifiedEntries": 1,
+  "disposition": "NO_GO",
+  "reasons": [
+    "registered-offsets-are-not-structurally-function-entries",
+    "entry-identity-and-abi-still-unverified"
+  ]
+}

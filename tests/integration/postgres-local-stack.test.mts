@@ -44,7 +44,7 @@ async function environment() {
     DATABASE_URL: `postgres://postgres@127.0.0.1:${pgPort}/postgres`, PUBLIC_ORIGIN: `http://127.0.0.1:${corePort}`,
     LOCAL_BRIDGE_PORT: String(bridgePort), OWNER_ID: randomUUID(), OWNER_PASSWORD_HASH: passwordHash,
     WECHAT_ACCOUNT_ID: randomUUID(), WECHAT_SELF_REF: 'fixture_self', WECHAT_INGRESS_TOKEN: randomBytes(32).toString('hex'), WECHAT_PROCESS_ID: String(process.pid),
-    INTELLIGENCE_PROVIDER: 'persistent-fake', WECHAT_INTELLIGENCE: 'persistent-fake', WECHAT_ENABLE_OUTBOUND: '0', START_PAUSED: '0',
+    INTELLIGENCE_PROVIDER: 'persistent-fake', WECHAT_INTELLIGENCE: 'persistent-fake', WECHAT_ENABLE_OUTBOUND: '0', START_PAUSED: '1',
     SESSION_DIR: join(root, 'sessions'), RAW_EVENT_DIR: join(root, 'raw'), WEB_BUILD_DIR: resolve('apps/web/build'),
     FIXTURE_CONTROL_TOKEN: randomBytes(32).toString('hex'), FIXTURE_ENABLE_OUTBOUND: '1', FIXTURE_WORKER_ENABLED: '0',
     WORKER_INTERVAL_MS: '100', OUTBOX_INTERVAL_MS: '100', SKILL_OUTBOX_INTERVAL_MS: '100', FIXTURE_TIMEOUT_MS: '1000' };
@@ -81,7 +81,47 @@ async function poolFor(config: LocalStackConfig) {
   pool.on('error', () => {}); return pool;
 }
 async function noProcesses(children: ChildProcess[]) { await until(() => children.every(child => !alive(child)), 'CHILD_LEAK', 5000); }
-function pidExists(pid: number) { try { process.kill(pid, 0); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false; throw error; } }
+/** PIDs can be reused by concurrent tests after a crash. Compare creation identity as well. */
+async function processIdentities(pids:number[]):Promise<Map<number,string>> {
+  if (!pids.length) return new Map();
+  if (pids.some(pid=>!Number.isSafeInteger(pid)||pid<1))throw new Error('INVALID_PROCESS_ID');
+  if (process.platform==='win32') {
+    const snapshot=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',`$taskProcessIds=@(${pids.join(',')}); Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {$taskProcessIds -contains $_.ProcessId} | Select-Object @{Name='Id';Expression={$_.ProcessId}},@{Name='Born';Expression={$_.CreationDate.ToUniversalTime().Ticks.ToString()}} | ConvertTo-Json -Compress`],{windowsHide:true,encoding:'utf8'});
+    if(snapshot.error||snapshot.status!==0)throw new Error('PROCESS_IDENTITY_FAILED');
+    const parsed=snapshot.stdout.trim()?JSON.parse(snapshot.stdout):[];
+    const rows=Array.isArray(parsed)?parsed:[parsed];
+    if(rows.some(row=>!row.Born))throw new Error('PROCESS_IDENTITY_FAILED');
+    return new Map(rows.map(row=>[row.Id,row.Born]));
+  }
+  const identities=await Promise.all(pids.map(async pid=>{
+    try {const stat=await readFile(`/proc/${pid}/stat`,'utf8');return [pid,stat.slice(stat.lastIndexOf(')')+2).split(/\s+/)[19]] as const;}
+    catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return;throw error;}
+  }));
+  return new Map(identities.filter((row):row is readonly [number,string]=>Boolean(row)));
+}
+
+test('native dual topology: independent synthetic bridge ports/restart, shared real core/database, START_PAUSED=0',settings,async()=>{
+  const setup=await environment(), qqPort=await port(), wxPort=await port();
+  const config=await readLocalStackConfig({...setup.env,START_PAUSED:'0',LOCAL_STACK_PLATFORMS:'qq,wechat',LOCAL_QQ_BRIDGE_PORT:String(qqPort),LOCAL_WECHAT_BRIDGE_PORT:String(wxPort),QQ_ACCOUNT_ID:randomUUID(),QQ_SELF_ID:'synthetic-self',QQ_BRIDGE_TOKEN:'synthetic-token'});
+  const controller=new AbortController(),children:{name:string;child:ChildProcess}[]=[],trace:{event:string;name?:string}[]=[];
+  const names=['postgres','core','bridge-qq','bridge-wechat'];
+  const driver=createLocalStackDriver({config,signal:controller.signal,log:async()=>{},entries:{'bridge-qq':resolve('tests/fixtures/local-stack-bind.mts'),'bridge-wechat':resolve('tests/fixtures/local-stack-bind.mts')},onSpawn:(name,child)=>children.push({name,child})});
+  const running=superviseLocalStack({names,isolatedServices:['bridge-qq','bridge-wechat'],start:driver.start,signal:controller.signal,backoffMs:50,log:async(event,name)=>{trace.push({event,name});}});
+  void running.catch(()=>{});
+  let pool:Awaited<ReturnType<typeof poolFor>>|undefined;
+  try {
+    await until(()=>trace.some(t=>t.event==='stack_ready'),'DUAL_STACK_NOT_READY');
+    const initial=new Map(children.map(c=>[c.name,c.child]));pool=await poolFor(config);
+    assert.equal((await pool.query('SELECT paused FROM dispatch_global_control WHERE singleton=true')).rows[0].paused,false);
+    for(const bridge of config.bridges!)assert.equal((await fetch(`http://127.0.0.1:${bridge.port}/healthz`)).status,200);
+    initial.get('bridge-qq')!.kill('SIGKILL');
+    await until(()=>trace.filter(t=>t.event==='service_ready'&&t.name==='bridge-qq').length>=2,'QQ_REPLACEMENT_NOT_READY');
+    for(const name of ['postgres','core','bridge-wechat']) {assert.equal(children.filter(c=>c.name===name).length,1);assert.ok(alive(initial.get(name)!));}
+    await pool.end();pool=undefined;initial.get('core')!.kill('SIGKILL');
+    await until(()=>trace.filter(t=>t.event==='stack_ready').length>=2,'DEPENDENCY_REPLACEMENT_NOT_READY');
+    assert.equal(alive(initial.get('bridge-wechat')!),false);assert.equal(children.filter(c=>c.name==='bridge-wechat').length,2);
+  } finally {controller.abort();await pool?.end();await running.catch(()=>{});await noProcesses(children.map(c=>c.child));await cleanupRoot(setup.root);}
+});
 
 test('native stack: ordered boot, killed core/bridge and immediate PG shutdown restart paused without send replay', settings, async () => {
   const setup = await environment(), simulator = await helper(setup.env);
@@ -92,8 +132,8 @@ test('native stack: ordered boot, killed core/bridge and immediate PG shutdown r
   const driver = createLocalStackDriver({ config, signal: controller.signal, log,
     entries: { bridge: resolve('tests/fixtures/local-stack-bridge.mts') }, onSpawn: (name, child) => children.push({ name, child }) });
   let running: Promise<void> | undefined, pool: Awaited<ReturnType<typeof poolFor>> | undefined;
-  const databaseProcesses = new Set<number>();
-  const rememberDatabaseProcesses = async () => { for (const row of (await pool!.query('SELECT pid FROM pg_stat_activity')).rows) databaseProcesses.add(row.pid); };
+  const databaseProcesses = new Map<number,string>();
+  const rememberDatabaseProcesses = async () => { for (const [pid,identity] of await processIdentities((await pool!.query('SELECT pid FROM pg_stat_activity')).rows.map(row=>row.pid))) databaseProcesses.set(pid,identity); };
   const contactId = randomUUID(), conversationId = randomUUID(), externalContactRef = 'fixture_peer';
   try {
     // Seed an enrolled contact before boot, using the same owned PostgreSQL driver.
@@ -116,8 +156,8 @@ test('native stack: ordered boot, killed core/bridge and immediate PG shutdown r
     assert.deepEqual(trace.filter(item => item.event === 'service_ready').map(item => item.name), ['postgres', 'core', 'bridge']);
     pool = await poolFor(config); let control = service(pool, config.env.WECHAT_ACCOUNT_ID!);
     await rememberDatabaseProcesses();
-    assert.equal((await pool.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n, 12);
-    assert.equal((await control.ownerOverview()).globalPaused, true, 'driver overrides START_PAUSED=0');
+    assert.equal((await pool.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n, 19);
+    assert.equal((await control.ownerOverview()).globalPaused, true, 'explicit START_PAUSED=1 is preserved');
     assert.ok((await control.getConversation(conversationId)).control.pauseReasons.includes('ACCOUNT_FAULT'));
     assert.equal((await fetch(`${config.env.PUBLIC_ORIGIN}/api/v1/overview`)).status, 401);
     const resume = async () => {
@@ -171,7 +211,7 @@ test('native stack: ordered boot, killed core/bridge and immediate PG shutdown r
       reason: 'ACCOUNT_FAULT', idempotencyKey: randomUUID() }), { message: 'SEND_RESULT_UNKNOWN' });
     await pool!.end(); pool = undefined; controller.abort(); await running;
     await noProcesses(children.map(item => item.child));
-    await until(() => [...databaseProcesses].every(pid => !pidExists(pid)), 'DATABASE_DESCENDANT_LEAK', 5000);
+    await until(async () => {const current=await processIdentities([...databaseProcesses.keys()]);return [...databaseProcesses].every(([pid,identity])=>current.get(pid)!==identity);}, 'DATABASE_DESCENDANT_LEAK', 5000);
     assert.deepEqual(trace.filter(item => item.event === 'service_stopped').slice(-3).map(item => item.name), ['bridge', 'core', 'postgres']);
     const length = children.length; await sleep(200); assert.equal(children.length, length, 'manual stop does not restart');
     const privateLog = await readFile(join(setup.root, 'logs/stack.jsonl'), 'utf8');

@@ -17,3 +17,8 @@ playwright-report/
 .local-stack-logs/
 .local-workspace-release/
 output/
+
+.local-mobile-link/
+.local-model-budget/
+.local-prerelease/
+.playwright-cli/

@@ -6,9 +6,11 @@ import { WxhelperHttpTransport } from '../../packages/platform/wechat/wxhelper-h
 import { WxhelperLoopbackMediaTransport, WXHELPER_DEFAULT_BASE_URL } from '../../packages/platform/wechat/wxhelper-media-transport.mts';
 import { createDeepSeekFromEnv, createTextModelIntelligence, describeDeepSeekEnv, readDeepSeekEnv, DEEPSEEK_DEFAULT_MODEL, readMediaEnv, createMediaUnderstandingFromEnv } from '../../packages/ai/index.mts';
 import { createWxBridge } from './wechat-bridge.mts';
-import { resolveWxBridgeRunMode } from './run-mode.mts';
+import { resolveWxBridgeRunMode,readBridgeStartPaused } from './run-mode.mts';
 import { preflightWxBinaryFiles, type WxBinaryFingerprint } from '../../packages/platform/wechat/binary-preflight.mts';
 import { localHelperProbe } from './watchdog.mts';
+import {configureUnifiedMoneyEnv} from '../../packages/ai/generation/unified-budget.mts';
+configureUnifiedMoneyEnv(process.env);
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -74,10 +76,12 @@ const intelligence = intelligenceProvider === 'deepseek'
 const { Pool } = await import('pg');
 const pool = new Pool({ connectionString: required('DATABASE_URL'), max: 8 });
 const bridge = createWxBridge({ pool, accountId, binaryFingerprint,
-  startPaused: true, watchdog: { probe: watchdogProbe,
+  startPaused: readBridgeStartPaused(process.env), watchdog: { probe: watchdogProbe,
     quietMs: Number(process.env.WECHAT_QUIET_MS ?? '300000'), intervalMs: Number(process.env.WECHAT_WATCHDOG_INTERVAL_MS ?? '10000') },
   onWatchdogFatal: () => process.exit(1),
   selfRef, ingressToken,
+  aggregationWindowMs: optionalNumber('AGGREGATION_WINDOW_MS', 0, 0, 600_000),
+  maxAggregationMs: optionalNumber('MAX_AGGREGATION_MS', 30_000, 1, 600_000),
   ...(intelligence ? { intelligence } : {}),
   ...(imageUnderstanding ? { imageUnderstanding: { provider: imageUnderstanding.provider, timeoutMs: mediaEnv.timeoutMs,
     observe: measurement => process.stdout.write(`${JSON.stringify({ at: new Date().toISOString(), event: 'media_model_call', ...measurement })}\n`) } } : {}),

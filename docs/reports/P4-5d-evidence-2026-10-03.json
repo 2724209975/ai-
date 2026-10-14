@@ -1,0 +1,341 @@
+{
+  "protocol": "p4-5d-xref-audit-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "clientBytes": 100449384,
+  "offsetSourceSha256": "f5c78bb0c0bf4362fc86276b206ba7ee29def51fe27218242c8ecb0f2ab4368c",
+  "versionBranch": "V_3_9_11_25",
+  "sections": [
+    ".text",
+    "IPPCODE",
+    ".G2?"
+  ],
+  "scanBytes": 79729664,
+  "anchors": [
+    {
+      "name": "get-table-incompatible-queries",
+      "rva": "0x51a10c0",
+      "text": "sqlite3_get_table() called with two or more incompatible queries",
+      "anchorVerified": true,
+      "referenceCount": 1,
+      "sites": [
+        {
+          "site": "0x3a74a1d",
+          "siteRva": 61295133,
+          "kind": "lea",
+          "target": "0x51a10c0",
+          "displacement": "0x172c69c",
+          "bytes": "488d0d9cc67201e8a7c1f7ff48894708"
+        }
+      ],
+      "sitesTruncated": false
+    },
+    {
+      "name": "malformed-database-schema",
+      "rva": "0x51a15e8",
+      "text": "malformed database schema",
+      "anchorVerified": true,
+      "referenceCount": 4,
+      "sites": [
+        {
+          "site": "0x3a65590",
+          "siteRva": 61232528,
+          "kind": "lea",
+          "target": "0x51a15e8",
+          "displacement": "0x173c051",
+          "bytes": "488d1551c07301e834b5f8ff488bc848"
+        },
+        {
+          "site": "0x3a656c0",
+          "siteRva": 61232832,
+          "kind": "lea",
+          "target": "0x51a15e8",
+          "displacement": "0x173bf21",
+          "bytes": "488d1521bf7301e804b4f8ff488b4b08"
+        },
+        {
+          "site": "0x3a6576d",
+          "siteRva": 61233005,
+          "kind": "lea",
+          "target": "0x51a15e8",
+          "displacement": "0x173be74",
+          "bytes": "488d1574be7301e857b3f8ff488b4b08"
+        },
+        {
+          "site": "0x3a659a6",
+          "siteRva": 61233574,
+          "kind": "lea",
+          "target": "0x51a15e8",
+          "displacement": "0x173bc3b",
+          "bytes": "488d153bbc7301e81eb1f8ff488b4b08"
+        }
+      ],
+      "sitesTruncated": false
+    },
+    {
+      "name": "unrecognized-token",
+      "rva": "0x51a1988",
+      "text": "unrecognized token: \"",
+      "anchorVerified": true,
+      "referenceCount": 1,
+      "sites": [
+        {
+          "site": "0x3a98ded",
+          "siteRva": 61443565,
+          "kind": "lea",
+          "target": "0x51a1988",
+          "displacement": "0x1708b94",
+          "bytes": "488d15948b7001458bc7488bcfe8218b"
+        }
+      ],
+      "sitesTruncated": false
+    },
+    {
+      "name": "unable-to-open-database-file",
+      "rva": "0x51a1b98",
+      "text": "unable to open database file",
+      "anchorVerified": true,
+      "referenceCount": 0,
+      "sites": [],
+      "sitesTruncated": false
+    },
+    {
+      "name": "database-is-locked",
+      "rva": "0x51a1c80",
+      "text": "database is locked",
+      "anchorVerified": true,
+      "referenceCount": 0,
+      "sites": [],
+      "sitesTruncated": false
+    },
+    {
+      "name": "sql-logic-error",
+      "rva": "0x51a1cc8",
+      "text": "SQL logic error",
+      "anchorVerified": true,
+      "referenceCount": 0,
+      "sites": [],
+      "sitesTruncated": false
+    },
+    {
+      "name": "file-is-not-a-database",
+      "rva": "0x51a1ea0",
+      "text": "file is not a database",
+      "anchorVerified": true,
+      "referenceCount": 0,
+      "sites": [],
+      "sitesTruncated": false
+    },
+    {
+      "name": "fts5-syntax-error-near",
+      "rva": "0x51a3450",
+      "text": "fts5: syntax error near",
+      "anchorVerified": true,
+      "referenceCount": 2,
+      "sites": [
+        {
+          "site": "0x3acc3e6",
+          "siteRva": 61653990,
+          "kind": "lea",
+          "target": "0x51a3450",
+          "displacement": "0x16d7063",
+          "bytes": "488d1563706d01488bcee84b4f00004c"
+        },
+        {
+          "site": "0x3ad1806",
+          "siteRva": 61675526,
+          "kind": "lea",
+          "target": "0x51a3450",
+          "displacement": "0x16d1c43",
+          "bytes": "488d15431c6d01488b75b0488bcb448b"
+        }
+      ],
+      "sitesTruncated": false
+    },
+    {
+      "name": "database-or-disk-is-full",
+      "rva": "0x51a1bb8",
+      "text": "database or disk is full",
+      "anchorVerified": true,
+      "referenceCount": 0,
+      "sites": [],
+      "sitesTruncated": false
+    },
+    {
+      "name": "string-or-blob-too-big",
+      "rva": "0x519ee90",
+      "text": "string or blob too big",
+      "anchorVerified": true,
+      "referenceCount": 8,
+      "sites": [
+        {
+          "site": "0x3a22a79",
+          "siteRva": 60959353,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x177c410",
+          "bytes": "488d0510c4770148c743300000000048"
+        },
+        {
+          "site": "0x3a2b025",
+          "siteRva": 60993573,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x1773e64",
+          "bytes": "488d15643e7701498bcde89c08ffffb8"
+        },
+        {
+          "site": "0x3a40feb",
+          "siteRva": 61083627,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x175de9e",
+          "bytes": "488d059ede750148c743300000000048"
+        },
+        {
+          "site": "0x3a529be",
+          "siteRva": 61155774,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x174c4cb",
+          "bytes": "488d05cbc4740148c743300000000048"
+        },
+        {
+          "site": "0x3a53164",
+          "siteRva": 61157732,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x174bd25",
+          "bytes": "488d0525bd740148c743300000000048"
+        },
+        {
+          "site": "0x3aca056",
+          "siteRva": 61644886,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x16d4e33",
+          "bytes": "488d05334e6d0148c743300000000048"
+        },
+        {
+          "site": "0x3acd8e7",
+          "siteRva": 61659367,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x16d15a2",
+          "bytes": "488d05a2156d0148c743300000000048"
+        },
+        {
+          "site": "0x3aed7d7",
+          "siteRva": 61790167,
+          "kind": "lea",
+          "target": "0x519ee90",
+          "displacement": "0x16b16b2",
+          "bytes": "488d05b2166b0148c743300000000048"
+        }
+      ],
+      "sitesTruncated": false
+    },
+    {
+      "name": "foreign-key-constraint-failed",
+      "rva": "0x519ef48",
+      "text": "FOREIGN KEY constraint failed",
+      "anchorVerified": true,
+      "referenceCount": 4,
+      "sites": [
+        {
+          "site": "0x3a1f0ec",
+          "siteRva": 60944620,
+          "kind": "lea",
+          "target": "0x519ef48",
+          "displacement": "0x177fe55",
+          "bytes": "488d1555fe7701c7413813030000c681"
+        },
+        {
+          "site": "0x3a1f356",
+          "siteRva": 60945238,
+          "kind": "lea",
+          "target": "0x519ef48",
+          "displacement": "0x177fbeb",
+          "bytes": "488d15ebfb7701897b38488bcbc683c2"
+        },
+        {
+          "site": "0x3a1f434",
+          "siteRva": 60945460,
+          "kind": "lea",
+          "target": "0x519ef48",
+          "displacement": "0x177fb0d",
+          "bytes": "488d150dfb7701897b38488bcbc683c2"
+        },
+        {
+          "site": "0x3a58d3d",
+          "siteRva": 61181245,
+          "kind": "lea",
+          "target": "0x519ef48",
+          "displacement": "0x1746204",
+          "bytes": "488d2d046274014489b424a000000048"
+        }
+      ],
+      "sitesTruncated": false
+    },
+    {
+      "name": "sqlite-sequence-name",
+      "rva": "0x519ddc9",
+      "text": "sqlite_sequence",
+      "anchorVerified": true,
+      "referenceCount": 0,
+      "sites": [],
+      "sitesTruncated": false
+    },
+    {
+      "name": "sqlite-master-name",
+      "rva": "0x519d2bf",
+      "text": "sqlite_master",
+      "anchorVerified": true,
+      "referenceCount": 0,
+      "sites": [],
+      "sitesTruncated": false
+    },
+    {
+      "name": "database-header-magic",
+      "rva": "0x4da3638",
+      "text": "SQLite format 3",
+      "anchorVerified": true,
+      "referenceCount": 1,
+      "sites": [
+        {
+          "site": "0x3a0e194",
+          "siteRva": 60875156,
+          "kind": "cmp",
+          "target": "0x4da3638",
+          "displacement": "0x139549d",
+          "bytes": "483b059d5439010f850e010000488b47"
+        }
+      ],
+      "sitesTruncated": false
+    },
+    {
+      "name": "database-header-magic-alt",
+      "rva": "0x519dff0",
+      "text": "SQLite format 3",
+      "anchorVerified": true,
+      "referenceCount": 1,
+      "sites": [
+        {
+          "site": "0x3a05f5a",
+          "siteRva": 60841818,
+          "kind": "lea",
+          "target": "0x519dff0",
+          "displacement": "0x179808f",
+          "bytes": "488d158f807901498bcd480f45d5e803"
+        }
+      ],
+      "sitesTruncated": false
+    }
+  ],
+  "disposition": "NO_GO",
+  "voiceDatabaseReady": false,
+  "reasons": [
+    "sqlite-entry-semantics-and-abi-unverified",
+    "reference-sites-found-but-not-yet-tied-to-a-call-chain",
+    "registered-offsets-unchanged:15"
+  ]
+}

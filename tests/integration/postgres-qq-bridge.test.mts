@@ -3,7 +3,7 @@
  * the outbound OneBot request shape. It is NOT platform verification: no QQ account is involved. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -68,7 +68,7 @@ test('QQ ledger echo is private, inert and idempotent for SUBMITTED and DELIVERE
   });
 });
 
-test('QQ self events without all four ledger conditions keep account quarantine', echoSettings, async t => {
+test('QQ unproven self events pause the mapped contact or quarantine an unmapped account', echoSettings, async t => {
   const cases = [
     { name: 'wrong peer', event: { target_id: 20003 } },
     { name: 'target is the account itself', event: { target_id: Number(SELF_ID) } },
@@ -88,10 +88,12 @@ test('QQ self events without all four ledger conditions keep account quarantine'
       if (item.sql) await fixture.pool.query(item.sql);
       const body = selfEcho(item.id ?? 90001, item.event);
       assert.equal((await fixture.post(body)).status, 204, fixture.failures.join(' | '));
-      assert.ok((await fixture.conversation()).pause_reasons.includes('OWNER_ORIGIN_UNMAPPED'));
+      const mapped = !['wrong peer','target is the account itself','no target_id','manual self event with matching ID and target'].includes(item.name);
+      assert.ok((await fixture.conversation()).pause_reasons.includes(mapped ? 'OWNER_ORIGIN' : 'OWNER_ORIGIN_UNMAPPED'));
       assert.equal((await fixture.pool.query('SELECT paused FROM dispatch_control')).rows[0]!.paused, true);
       assert.equal((await fixture.pool.query("SELECT count(*)::int AS n FROM platform_inbox_raw WHERE conversation_id='agent-echo'")).rows[0]!.n, 0);
-      const raw = (await fixture.pool.query("SELECT payload_ref FROM platform_inbox_raw WHERE conversation_id='unmapped:self'")).rows;
+      const raw = (await fixture.pool.query('SELECT payload_ref,conversation_id FROM platform_inbox_raw WHERE payload_sha256=$1',[createHash('sha256').update(body).digest('hex')])).rows;
+      assert.equal(raw[0]?.conversation_id,mapped ? fixture.conversationId : 'unmapped:self');
       assert.equal(raw.length, 1);
       assert.equal(await readFile(join(fixture.rawRoot, raw[0]!.payload_ref), 'utf8'), body);
     } finally { await fixture.cleanup(); }
@@ -115,8 +117,8 @@ test('QQ echo before HTTP result stays quarantined on replay after the ledger ca
     assert.equal((await echo).status, 204);
     assert.equal((await fixture.pool.query('SELECT status FROM dispatch_attempts')).rows[0]!.status, 'SUBMITTED');
     assert.equal((await fixture.post(body)).status, 204);
-    assert.ok((await fixture.conversation()).pause_reasons.includes('OWNER_ORIGIN_UNMAPPED'));
-    assert.equal((await fixture.pool.query("SELECT count(*)::int AS n FROM platform_inbox_raw WHERE conversation_id IN ('unmapped:self','agent-echo')")).rows[0]!.n, 1);
+    assert.ok((await fixture.conversation()).pause_reasons.includes('OWNER_ORIGIN'));
+    assert.equal((await fixture.pool.query('SELECT count(*)::int AS n FROM platform_inbox_raw WHERE payload_sha256=$1',[createHash('sha256').update(body).digest('hex')])).rows[0]!.n, 1);
     assert.equal((await fixture.pool.query("SELECT count(*)::int AS n FROM platform_inbox_raw WHERE conversation_id='agent-echo'")).rows[0]!.n, 0);
   } finally { reply(); await fixture.cleanup(); }
 });
@@ -410,7 +412,7 @@ test('real PostgreSQL + fake OneBot: unmapped self pauses account and discovery 
     assert.equal((await auditRawEventFiles(fixture.rawRoot, fixture.pool, fixture.accountId)).files, 0);
 
     const self = JSON.stringify({ post_type: 'message_sent', message_type: 'private', sub_type: 'friend',
-      self_id: Number(SELF_ID), user_id: Number(SELF_ID), target_id: 20002, message_id: 45002,
+      self_id: Number(SELF_ID), user_id: Number(SELF_ID), target_id: 29999, message_id: 45002,
       time: Math.floor(Date.now() / 1000), message: [{ type: 'text', data: { text: '身份无法核实' } }] });
     assert.equal((await fixture.post(self)).status, 204, 'authenticated but unmapped self event must not be discarded');
     const unknown = await fixture.pool.query<{ payload_ref: string; conversation_id: string }>("SELECT payload_ref,conversation_id FROM platform_inbox_raw WHERE conversation_id='unmapped:self'");

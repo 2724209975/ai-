@@ -8,6 +8,7 @@ import { adaptDataContextProjection } from '../understanding/context-adapter.mts
 import { prepareReplyForOrchestration } from './orchestration-handoff.mts';
 import { createTextCandidateGateway, type TextModelMeasurement, type TextModelProvider } from '../generation/text-provider-contract.mts';
 import type { PolicyProjection, RiskCategory } from '../types.mts';
+import { generationFromText } from '../pipeline-v2/providers.mts';
 
 function projectedPolicy(policy: Policy): PolicyProjection {
   return { contactId: policy.contactId, version: policy.version, goal: policy.goal,
@@ -72,13 +73,13 @@ function intelligenceFromPort(ai: ReturnType<typeof createFakeIntelligencePort>,
 }
 
 export function createPersistentFakeIntelligence(): PersistentIntelligence {
-  return intelligenceFromPort(createFakeIntelligencePort(), 'fake-deterministic-1');
+  return { ...intelligenceFromPort(createFakeIntelligencePort(), 'fake-deterministic-1'), v2Generations: [] };
 }
 
 /** Same decision, checks and persistence as the fake path; only candidate text comes from the model.
  * A model that fails to answer yields MODEL_UNAVAILABLE, which 02 turns into a paused contact. */
 export function createTextModelIntelligence(provider: TextModelProvider, observe?: (measurement: TextModelMeasurement) => void): PersistentIntelligence {
-  return intelligenceFromPort(createFakeIntelligencePort(createTextCandidateGateway(provider, observe)), 'fake-deterministic-1');
+  return { ...intelligenceFromPort(createFakeIntelligencePort(createTextCandidateGateway(provider, observe)), 'fake-deterministic-1'), v2Generations: [generationFromText(provider)] };
 }
 
 /** Compatibility wrapper used by the composition roots. */

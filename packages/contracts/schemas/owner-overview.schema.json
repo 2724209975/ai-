@@ -22,7 +22,7 @@
         "required": ["accountId", "platform", "connectionState"],
         "properties": {
           "accountId": { "type": "string", "minLength": 1 },
-          "platform": { "type": "string", "enum": ["wechat", "qq"] },
+          "platform": { "type": "string", "enum": ["wechat", "qq", "unknown"] },
           "connectionState": { "$ref": "#/$defs/connectionState" },
           "capabilitySnapshotId": { "type": "string", "minLength": 1 },
           "verificationStatus": { "type": "string", "enum": ["documented", "tested", "unsupported", "unknown"] },
@@ -56,6 +56,6 @@
   },
   "$defs": {
     "queryStatus": { "type": "string", "enum": ["ready", "unavailable"] },
-    "connectionState": { "type": "string", "enum": ["disconnected", "connecting", "relogin_required", "reconciling", "connected", "degraded"] }
+    "connectionState": { "type": "string", "enum": ["disconnected", "connecting", "relogin_required", "reconciling", "connected", "degraded", "unknown", "probe_healthy"] }
   }
 }

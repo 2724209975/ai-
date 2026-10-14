@@ -13,7 +13,7 @@ export type ReadinessReport = { status: 'ready' | 'not_ready'; checks: Readiness
 export type HealthHandler = (request: IncomingMessage, response: ServerResponse) => Promise<boolean>;
 
 /** Both startup and readiness require the latest conversation migration. */
-export const conversationSchemaProbe = 'SELECT collection_due_at,paused_inbound_unreviewed_count FROM orch_conversations LIMIT 0';
+export const conversationSchemaProbe = 'SELECT collection_due_at,paused_inbound_unreviewed_count,pipeline_version,current_reply_job_id,context_package_v2,decision_record,route_record,quality_results FROM orch_conversations LEFT JOIN orch_platform_accounts USING(account_id) LEFT JOIN orch_reply_jobs ON orch_reply_jobs.id=current_reply_job_id LEFT JOIN data_context_snapshots ON data_context_snapshots.id=orch_reply_jobs.context_snapshot_id LEFT JOIN data_memory_items ON data_memory_items.contact_id=orch_conversations.contact_id LEFT JOIN data_memory_tasks ON data_memory_tasks.contact_id=orch_conversations.contact_id LEFT JOIN data_style_profiles ON data_style_profiles.contact_id=orch_conversations.contact_id LEFT JOIN ai_model_calls_v2 ON ai_model_calls_v2.job_id=orch_reply_jobs.id LEFT JOIN ai_model_configs_v2 ON false LIMIT 0';
 
 export type ReadinessProbeOptions = {
   pool: PgPool;

@@ -1,0 +1,17 @@
+{
+  "providerId": "YOUR_PROVIDER",
+  "modelId": "YOUR_HIGH_QUALITY_MODEL",
+  "modelVersion": "YOUR_MODEL_VERSION",
+  "baseUrl": "https://provider.example/v1/",
+  "apiKey": "YOUR_API_KEY",
+  "dataRegion": "YOUR_PROVIDER_REGION",
+  "retentionPolicy": "provider-default-unverified",
+  "price": {
+    "currency": "CNY",
+    "inputPerMillion": null,
+    "cachedInputPerMillion": null,
+    "outputPerMillion": null,
+    "source": "https://provider.example/pricing",
+    "effectiveAt": "2026-10-12"
+  }
+}

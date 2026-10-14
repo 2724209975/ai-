@@ -11,16 +11,20 @@ import { PgContextRepository } from './context-repository.mts';
 import { PgMediaRepository, interpretationRef, type MediaDraftInput, type StoredMediaInterpretation } from './media-repository.mts';
 import type { MediaAsset } from '../media/file-store.mts';
 import type { MediaInterpretationRef } from '../../contracts/index.mts';
+import type { ContextPackageV2,ContextV2Options } from '../../contracts/context-memory-v2.mts';
+import { MemoryRepository,type Embedding } from '../memory-v2/repository.mts';
+import { contextBudget,fitContextPackage,keywordScore } from '../memory-v2/context-builder.mts';
+import {collectPersonBackground} from '../people/context.mts';
 
 export type Ref = Readonly<{ id: string; version: number }>;
 type MessageRef = Ref & { type?: string; mediaInterpretation?: MediaInterpretationRef };
 export type ObservedMessage = Readonly<{ contactId: string; conversationId: string; platformAccountId: string; platformMessageId: string; platformEventId: string; platformOrderKey?: string; actor: 'owner' | 'contact' | 'agent' | 'system' | 'platform' | 'unknown'; type: 'text' | 'image' | 'voice' | 'sticker_static' | 'sticker_animated' | 'unsupported'; contentRef?: string; mediaId?: string; quotedMessageId?: string; sentAt: string; receivedAt: string; provenance: Record<string, unknown>; isAgentGenerated: boolean; mode: 'live' | 'import' | 'trial' | 'replay' }>;
-export type FactInput = Readonly<{ subject: string; scope: string; content: string; sourceCategory: 'owner-confirmed' | 'owner-message-candidate' | 'model-inference'; evidenceRefs: readonly Ref[]; validFrom: string; validUntil?: string }>;
-export type BuildInput = Readonly<{ callerContactId: string; contactId: string; cutoffTime: string; cutoffMessageId?: string; generation: number; allowedScopes: readonly string[]; policyVersion: number; mode?: 'live' | 'import' }>;
+export type FactInput = Readonly<{ subject: string; scope: string; content: string; sourceCategory: 'owner-confirmed' | 'owner-message-candidate' | 'model-inference' | 'explicit-statement' | 'imported-unverified'; evidenceRefs: readonly Ref[]; validFrom: string; validUntil?: string }>;
+export type BuildInput = Readonly<{ callerContactId: string; contactId: string; cutoffTime: string; cutoffMessageId?: string; generation: number; allowedScopes: readonly string[]; policyVersion: number; mode?: 'live' | 'import'; v2?: ContextV2Options; queryEmbedding?: Embedding }>;
 type DbMessage = Record<string, unknown> & { id: string; version: string | number; contact_id: string; conversation_id: string; content_ref: string | null; media_id: string | null; deletion_status: string };
 type DbFact = Record<string, unknown> & { id: string; version: string | number; scope: string; content: string | null; confirmation_status: string; deletion_status: string; valid_from: Date | string; valid_until: Date | string | null };
 type DbAnalysis = Record<string, unknown> & { id: string; version: string | number; contact_id: string; status: string };
-type DbSnapshot = { id: string; contact_id: string; conversation_id: string; generation: string | number; cutoff_time: Date | string; cutoff_message_id: string | null; policy_version: string | number; message_refs: MessageRef[]; summary_refs: Ref[]; fact_refs: Ref[]; analysis_refs: Ref[]; hash: string; status: string; created_at: Date | string; updated_at: Date | string };
+type DbSnapshot = { id: string; contact_id: string; conversation_id: string; generation: string | number; cutoff_time: Date | string; cutoff_message_id: string | null; policy_version: string | number; message_refs: MessageRef[]; summary_refs: Ref[]; fact_refs: Ref[]; analysis_refs: Ref[]; context_package_v2?:ContextPackageV2|null; hash: string; status: string; created_at: Date | string; updated_at: Date | string };
 
 function uuid7(): string {
   const b = randomBytes(16); b.writeUIntBE(Date.now(), 0, 6);
@@ -362,6 +366,7 @@ export class PgDataProvider {
       const cutoff = await tx.query<{ id: string }>('SELECT id FROM data_messages WHERE id=$1 AND contact_id=$2 AND sent_at<=$3::timestamptz AND deletion_status=\'active\'', [input.cutoffMessageId,input.contactId,input.cutoffTime]);
       if (!cutoff.rows.length) throw new Error('NOT_FOUND');
     }
+    if(input.v2)return this.#buildContextV2(tx,input,c);
     const repo = new PgContextRepository(tx);
     const scope = { callerContactId: input.callerContactId, contactId: input.contactId, allowedScopes: input.allowedScopes };
     const messages = await repo.queryMessages({ ...scope, cutoffTime: input.cutoffTime, cutoffMessageId: input.cutoffMessageId, mode: input.mode });
@@ -375,6 +380,57 @@ export class PgDataProvider {
       VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,'[]'::jsonb,$8::jsonb,$9::jsonb,$10,$11,'valid',now(),now())`, [snapshot.id,c.conversation_id,input.contactId,input.generation,input.cutoffMessageId ?? null,input.cutoffTime,JSON.stringify(core.messageRefs),JSON.stringify(core.factRefs),JSON.stringify(core.analysisRefs),input.policyVersion,snapshot.hash]);
     const dependencyEpoch = await getDependencyEpoch(tx,c.conversation_id);
     return this.readContextProjection(tx,{ callerContactId: input.callerContactId, contactId: input.contactId, snapshotId: snapshot.id, allowedScopes: input.allowedScopes, expectedDependencyEpoch: dependencyEpoch });
+  }
+
+  async #buildContextV2(tx:PgClient,input:BuildInput,c:{conversation_id:string;platform_account_id:string}) {
+    const options=input.v2!,budget=contextBudget(options.retrievalMode==='light'?{...options.budget,recentLimit:12}:options.budget);
+    if(!Number.isSafeInteger(options.revision)||options.revision<1||!options.triggerMessageIds.length)throw new Error('VALIDATION_FAILED');
+    const repo=new PgContextRepository(tx),memory=new MemoryRepository(tx,{ownerId:options.ownerId,contactId:input.contactId});
+    const identity=await memory.bind();
+    const scope={callerContactId:input.callerContactId,contactId:input.contactId,allowedScopes:input.allowedScopes};
+    const recent=await repo.queryMessages({...scope,cutoffTime:input.cutoffTime,cutoffMessageId:input.cutoffMessageId,limit:budget.recentLimit,mode:'import',numericOrder:true});
+    const triggers=(await tx.query<DbMessage>(`SELECT * FROM data_messages WHERE contact_id=$1 AND conversation_id=$2 AND platform_account_id=$3
+      AND id=ANY($4::uuid[]) AND sent_at<=$5 AND deletion_status='active' AND mode='live'`,[input.contactId,c.conversation_id,c.platform_account_id,options.triggerMessageIds,input.cutoffTime])).rows;
+    if(triggers.length!==new Set(options.triggerMessageIds).size)throw new Error('NOT_FOUND');
+    const rows=[...new Map([...recent,...triggers].map(m=>[String(m.id),m as DbMessage])).values()];
+    const quotedIds=rows.map(m=>m.quoted_message_id).filter(Boolean);
+    const nativeQuotes=rows.map(m=>(m.provenance as Record<string,unknown>)?.quotedPlatformMessageId).filter(x=>typeof x==='string');
+    const quotes=(await tx.query<DbMessage>(`SELECT * FROM data_messages WHERE contact_id=$1 AND conversation_id=$2 AND platform_account_id=$3
+      AND (id=ANY($4::uuid[]) OR platform_message_id=ANY($5::text[])) AND deletion_status='active' AND mode IN ('live','import') AND sent_at<=$6`,
+      [input.contactId,c.conversation_id,c.platform_account_id,quotedIds,nativeQuotes,input.cutoffTime])).rows;
+    for(const row of rows){
+      const native=(row.provenance as Record<string,unknown>)?.quotedPlatformMessageId;
+      if(!row.quoted_message_id&&native)row.quoted_message_id=quotes.find(q=>q.platform_message_id===native)?.id??null;
+    }
+    rows.sort(orderContextMessages);quotes.sort(orderContextMessages);
+    const bodies=await this.#mediaMessages(tx,input.contactId,[...rows,...quotes]);
+    const project=(m:DbMessage)=>({id:m.id,version:Number(m.version),actor:String(m.actor),type:String(m.type),content:m.type==='text'?String(m.content_ref??''):
+      bodies.interpretations.get(m.id)?.text??`[${m.type} 内容未取到可靠文本]`,sentAt:asIso(m.sent_at as Date|string),quotedMessageId:m.quoted_message_id?String(m.quoted_message_id):null});
+    const query=triggers.map(m=>m.content_ref??'').join('\n'),retrieved=input.allowedScopes.includes(input.contactId)?await memory.retrieve(query,input.cutoffTime,options.retrievalMode==='light'?undefined:input.queryEmbedding):{items:[],retrieval:{keyword:true,vector:false,embeddingModel:null}};
+    if(options.retrievalMode==='light')retrieved.items=[...retrieved.items.filter(m=>m.memoryType==='boundary'||m.locked||m.memoryType==='promise'),...retrieved.items.filter(m=>m.memoryType!=='boundary'&&!m.locked&&m.memoryType!=='promise').slice(0,3)];
+    const classified=new Set((await memory.list()).map(m=>m.id));
+    const controls=await memory.controls();
+    const facts=(await repo.queryFacts({...scope,asOf:input.cutoffTime})).filter(f=>!classified.has(String(f.id))&&(controls.enabled||f.scope==='global'));
+    facts.sort((a,b)=>keywordScore(query,String(b.content))-keywordScore(query,String(a.content)));
+    const summary=await memory.summary(input.cutoffTime);
+    const personBackground=input.allowedScopes.includes(input.contactId)?await collectPersonBackground(tx,options.ownerId,input.contactId,query,input.cutoffTime):undefined;
+    const pack=fitContextPackage({schemaVersion:'2.0',personBackground,identity:{ownerId:options.ownerId,accountId:c.platform_account_id,contactId:input.contactId,conversationId:c.conversation_id,platform:identity.platform},
+      conversationRevision:options.revision,triggerMessageIds:[...options.triggerMessageIds],recentMessages:rows.map(project),quotedMessages:quotes.filter(q=>!rows.some(m=>m.id===q.id)).map(project),
+      summary:summary&&options.retrievalMode==='light'?{...summary,content:summary.content.slice(0,600),pendingTopics:summary.pendingTopics.slice(-5)}:summary,relationship:await memory.relationship(),memories:retrieved.items,personalStyle:await memory.style(),
+      facts:facts.slice(0,20).map(f=>({id:String(f.id),version:Number(f.version),subject:String(f.subject),content:String(f.content)})),sourceRefs:[],
+      selection:[...rows.map(m=>({id:m.id,included:true,reason:options.triggerMessageIds.includes(m.id)?'current_batch':'recent_message'})),...retrieved.items.map(m=>({id:m.id,included:true,reason:m.selectionReasons!.join('+')}))],
+      retrieval:retrieved.retrieval,budget:{...budget,estimatedInputTokens:0,estimateVersion:'cjk-char-latin4-v1'}});
+    const selected=new Set([...pack.recentMessages,...pack.quotedMessages].map(m=>m.id));
+    const messages=[...new Map([...quotes,...rows].filter(m=>selected.has(m.id)).map(m=>[m.id,m])).values()].sort(orderContextMessages);
+    const media=await this.#mediaMessages(tx,input.contactId,messages);
+    const factRefs=[...pack.facts,...pack.memories].map(f=>({id:f.id,version:f.version}));
+    const analysis=await repo.queryAnalysis({...scope,cutoffTime:input.cutoffTime});
+    const summaryRefs=pack.summary?[{id:pack.summary.id,version:pack.summary.version}]:[];
+    const id=uuid7(),digest=sha({pack,messageRefs:media.messageRefs,factRefs,analysis});
+    await tx.query(`INSERT INTO data_context_snapshots(id,conversation_id,contact_id,generation,cutoff_message_id,cutoff_time,message_refs,summary_refs,fact_refs,analysis_refs,policy_version,hash,status,created_at,updated_at,context_package_v2)
+      VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12,'valid',now(),now(),$13::jsonb)`,
+      [id,c.conversation_id,input.contactId,input.generation,input.cutoffMessageId??null,input.cutoffTime,JSON.stringify(media.messageRefs),JSON.stringify(summaryRefs),JSON.stringify(factRefs),JSON.stringify(analysis?refs([analysis as DbAnalysis]):[]),input.policyVersion,digest,JSON.stringify(pack)]);
+    return this.readContextProjection(tx,{callerContactId:input.contactId,contactId:input.contactId,snapshotId:id,allowedScopes:input.allowedScopes,expectedDependencyEpoch:await getDependencyEpoch(tx,c.conversation_id)});
   }
 
   #message(m: Record<string, unknown>) {
@@ -397,11 +453,13 @@ export class PgDataProvider {
     const result = await tx.query<DbSnapshot>(`SELECT * FROM data_context_snapshots WHERE id=$1 AND contact_id=$2`, [input.snapshotId,input.contactId]);
     const s = result.rows[0]; if (!s) throw new Error('NOT_FOUND');
     if (s.status !== 'valid') throw new Error('STALE_CONTEXT');
+    if(s.context_package_v2)await new MemoryRepository(tx,{ownerId:s.context_package_v2.identity.ownerId,contactId:input.contactId}).validatePackage(s.context_package_v2);
     if (await getDependencyEpoch(tx,s.conversation_id) !== input.expectedDependencyEpoch) throw new Error('STALE_CONTEXT');
     const control = await tx.query<{ generation: string | number }>('SELECT generation FROM dispatch_control WHERE conversation_id=$1', [s.conversation_id]);
     if (!control.rows[0] || Number(control.rows[0].generation) !== Number(s.generation)) throw new Error('STALE_CONTEXT');
     const messages = await tx.query<DbMessage>(`SELECT * FROM data_messages WHERE id=ANY($1::uuid[]) AND contact_id=$2 AND deletion_status='active'`, [s.message_refs.map(r => r.id),input.contactId]);
     const facts = await tx.query<DbFact>(`SELECT * FROM data_facts WHERE id=ANY($1::uuid[]) AND scope=ANY($2::text[]) AND (scope='global' OR scope=$3)
+      AND (memory_owner_id IS NULL OR memory_owner_id=current_setting('app.memory_owner_id',true))
       AND confirmation_status='confirmed' AND deletion_status='active' AND valid_from<=now() AND (valid_until IS NULL OR now()<valid_until)`, [s.fact_refs.map(r => r.id),scopes,input.contactId]);
     const analyses = await tx.query<DbAnalysis>(`SELECT * FROM data_analyses WHERE id=ANY($1::uuid[]) AND contact_id=$2 AND status='valid'`, [s.analysis_refs.map(r => r.id),input.contactId]);
     if (s.analysis_refs.length) {
@@ -415,7 +473,7 @@ export class PgDataProvider {
     if (!sameRefs(messageRefs,[...s.message_refs].sort((a,b) => a.id.localeCompare(b.id))) || !sameRefs(factRefs,[...s.fact_refs].sort((a,b) => a.id.localeCompare(b.id))) || !sameRefs(analysisRefs,[...s.analysis_refs].sort((a,b) => a.id.localeCompare(b.id)))) throw new Error('STALE_CONTEXT');
     const snapshot = { id: s.id, contactId: s.contact_id, conversationId: s.conversation_id, generation: Number(s.generation), cutoffTime: asIso(s.cutoff_time), cutoffMessageId: s.cutoff_message_id ?? undefined, policyVersion: Number(s.policy_version), messageRefs: s.message_refs, summaryRefs: s.summary_refs, factRefs: s.fact_refs, analysisRefs: s.analysis_refs, hash: s.hash, createdAt: asIso(s.created_at), updatedAt: asIso(s.updated_at) };
     const byRef = <T extends { id: string }>(rows: readonly T[], ordered: readonly Ref[]) => { const map = new Map(rows.map(r => [r.id,r])); return ordered.map(r => map.get(r.id)!); };
-    return { snapshot, messages: byRef(messages.rows,s.message_refs).map(m => ({ ...this.#message(m),
+    return { snapshot, contextPackageV2:s.context_package_v2??undefined, messages: byRef(messages.rows,s.message_refs).map(m => ({ ...this.#message(m),
       mediaInterpretation: media.interpretations.get(m.id) })), facts: await this.#facts(tx,byRef(facts.rows,s.fact_refs)), analyses: await Promise.all(byRef(analyses.rows,s.analysis_refs).map(a => this.#analysis(tx,a))), dependencyEpoch: input.expectedDependencyEpoch };
   }
 
@@ -423,4 +481,11 @@ export class PgDataProvider {
     await this.#scope(tx,callerContactId,contactId,[]);
     const c = await this.#contact(tx,contactId); return getDependencyEpoch(tx,c.conversation_id);
   }
+}
+
+function orderContextMessages(a:Record<string,unknown>,b:Record<string,unknown>):number{
+  const timeDifference=Date.parse(asIso(a.sent_at as Date|string))-Date.parse(asIso(b.sent_at as Date|string));if(timeDifference)return timeDifference;
+  const ak=String(a.platform_order_key??''),bk=String(b.platform_order_key??'');
+  if(/^\d+$/.test(ak)&&/^\d+$/.test(bk)){const x=BigInt(ak),y=BigInt(bk);if(x!==y)return x<y?-1:1;}
+  return ak.localeCompare(bk)||String(a.platform_message_id).localeCompare(String(b.platform_message_id))||String(a.id).localeCompare(String(b.id));
 }

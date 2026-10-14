@@ -1,0 +1,10 @@
+import {readFile,writeFile,stat} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {replayDecisionV21} from '../packages/ai/eval/decision-v21-replay.mts';
+const args=process.argv.slice(2);
+if(args.length&&args.length!==2)throw new Error('USAGE: node scripts/decision-v21-replay.mts [deidentified-dataset.json report.json]');
+const input=resolve(args[0]??'tests/fixtures/decision-v21/scenarios.json'),output=resolve(args[1]??'docs/reports/decision-v21-replay-2026-10-13.json');
+if(input===output)throw new Error('REPLAY_OUTPUT_MUST_DIFFER_FROM_INPUT');
+if((await stat(input)).size>2_000_000)throw new Error('REPLAY_SAMPLE_TOO_LARGE');
+const report=await replayDecisionV21(JSON.parse(await readFile(input,'utf8')));await writeFile(output,JSON.stringify(report,null,2)+'\n');
+process.stdout.write(JSON.stringify({scenarios:report.scenarios,matched:report.matched,complexEmotionMissRate:report.complexEmotionMissRate,unnecessaryUpgradeRate:report.unnecessaryUpgradeRate,externalCalls:0,platformCalls:0,report:output})+'\n');

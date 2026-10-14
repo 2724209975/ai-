@@ -1,49 +1,19 @@
 package cn.replyassistant.platform
 
 import android.app.Notification
-import android.app.PendingIntent
-import android.app.RemoteInput
-import android.content.Intent
-import android.content.Context
-import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import cn.replyassistant.AssistantApplication
 import cn.replyassistant.domain.*
 import androidx.core.app.NotificationCompat
 
-data class NotificationTicket(val key: String, val notificationKey: String, val sourceId: String,
-    val action: PendingIntent, val inputs: Array<RemoteInput>, val capturedAt: Long)
-
 object NotificationReplies {
-    private val tickets = mutableMapOf<String, NotificationTicket>()
-    // Capability must be explicitly checked on this handset. No platform is enabled by default.
-    private val verified = mutableSetOf<String>()
     private val capturedRows = linkedMapOf<String, List<ChatMessage>>()
     fun rememberRows(key: String, rows: List<ChatMessage>) {
         capturedRows[key] = rows
         while (capturedRows.size > 100) capturedRows.remove(capturedRows.keys.first())
     }
     fun pendingRows(key: String): List<ChatMessage> = capturedRows[key].orEmpty()
-    fun verify(key: String, value: Boolean) { if (value) verified += key else verified -= key }
-    fun isVerified(key: String): Boolean = key in verified
-    fun hasTicket(key: String): Boolean = tickets[key]?.let { System.currentTimeMillis() - it.capturedAt < 600_000 } ?: false
-    fun put(ticket: NotificationTicket) { tickets[ticket.key] = ticket }
-    fun remove(notificationKey: String) { tickets.entries.removeAll { it.value.notificationKey == notificationKey } }
-    fun canSend(key: String, archive: ChatArchive): Boolean = archive.enabled && key == archive.notificationScope && key in verified &&
-        tickets[key]?.let { ticket -> System.currentTimeMillis() - ticket.capturedAt < 600_000 && archive.messages.any { it.sourceId == ticket.sourceId } } == true
-    fun send(context: Context, key: String, archive: ChatArchive, text: String): Boolean {
-        if (!canSend(key, archive)) return false
-        // Consume the action before invoking it; it cannot be retried by another button press.
-        val ticket = tickets.remove(key) ?: return false
-        return runCatching {
-            val bundle = Bundle().apply { ticket.inputs.forEach { putCharSequence(it.resultKey, text) } }
-            val intent = Intent()
-            RemoteInput.addResultsToIntent(ticket.inputs, intent, bundle)
-            RemoteInput.setResultsSource(intent, RemoteInput.SOURCE_FREE_FORM_INPUT)
-            ticket.action.send(context, 0, intent)
-        }.isSuccess
-    }
 }
 
 class ChatNotificationService : NotificationListenerService() {
@@ -73,11 +43,6 @@ class ChatNotificationService : NotificationListenerService() {
             sourceId = NotificationIdentityFactory.digest("$scope|${notification.`when`}|$plain"))) else emptyList()
         if (rows.isEmpty()) return
         NotificationReplies.rememberRows(scope, rows)
-        NotificationReplies.remove(sbn.key)
-        val action = notification.actions?.firstOrNull { action -> action.remoteInputs?.count { it.allowFreeFormInput } == 1 }
-        action?.let { NotificationReplies.put(NotificationTicket(scope, sbn.key, rows.last().sourceId,
-            it.actionIntent, it.remoteInputs.filter { input -> input.allowFreeFormInput }.toTypedArray(), System.currentTimeMillis())) }
         (application as AssistantApplication).controller.receiveNotification(scope, title, platform, rows)
     }
-    override fun onNotificationRemoved(sbn: StatusBarNotification) { NotificationReplies.remove(sbn.key) }
 }

@@ -1,15 +1,11 @@
 package cn.replyassistant
 
-import android.app.PendingIntent
-import android.app.RemoteInput
 import android.content.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import cn.replyassistant.ai.ModelClient
 import cn.replyassistant.data.AssistantController
 import cn.replyassistant.domain.*
-import cn.replyassistant.platform.NotificationReplies
-import cn.replyassistant.platform.NotificationTicket
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
@@ -21,12 +17,32 @@ import okhttp3.tls.HeldCertificate
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(AndroidJUnit4::class)
 class ControllerDeviceTest {
+    @Test fun switchingObjectsKeepsPendingTextAndDraftWithItsOriginalOwner() {
+        val namespace="switch-isolation-${newId()}"
+        lateinit var controller:AssistantController
+        main {
+            controller=AssistantController(context,storageNamespace=namespace)
+            val a=controller.createArchive("同名对象","平台A")
+            controller.mutateArchive(a){it.copy(draft=ReplyDraft(contextRevision=0,alternatives=listOf("A手工稿"),manuallyEdited=true))}
+            controller.startPreview()
+            controller.updatePreview {it.copy(manualRows=listOf(ChatMessage(speaker=Speaker.OTHER,text="A待补充的聊天")),instruction="A的要求")}
+            val b=controller.createArchive("同名对象","平台B")
+            assertTrue(controller.state.value.preview!!.manualRows.isEmpty())
+            controller.mutateArchive(b){it.copy(draft=ReplyDraft(contextRevision=0,alternatives=listOf("B手工稿"),manuallyEdited=true))}
+            controller.selectArchive(a)
+            assertEquals("A待补充的聊天",controller.state.value.preview!!.manualRows.single().text)
+            assertEquals("A的要求",controller.state.value.preview!!.instruction)
+            assertEquals("A手工稿",controller.selected()!!.draft!!.text)
+            controller.selectArchive(b)
+            assertTrue(controller.state.value.preview!!.manualRows.isEmpty())
+            assertEquals("B手工稿",controller.selected()!!.draft!!.text)
+            controller.scope.cancel()
+        }
+    }
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     private fun main(block: () -> Unit) { instrumentation.runOnMainSync(block) }
@@ -34,12 +50,12 @@ class ControllerDeviceTest {
         val cert = HeldCertificate.Builder().commonName("localhost").addSubjectAlternativeName("localhost").build()
         val serverCerts = HandshakeCertificates.Builder().heldCertificate(cert).build()
         val clientCerts = HandshakeCertificates.Builder().addTrustedCertificate(cert.certificate).build()
-        val server = MockWebServer().apply { useHttps(serverCerts.sslSocketFactory(), false); start() }
+        val server = MockWebServer().apply { dispatcher=IndependentPipelineDispatcher(); useHttps(serverCerts.sslSocketFactory(), false); start() }
         val client = ModelClient(OkHttpClient.Builder().sslSocketFactory(clientCerts.sslSocketFactory(), clientCerts.trustManager)
             .followRedirects(false).retryOnConnectionFailure(false).build())
         return server to client
     }
-    private fun response() = MockResponse().setBody("""{"choices":[{"message":{"content":"{\"alternatives\":[\"周日下午可以呀\"],\"note\":\"\",\"uncertain\":false}"}}]}""")
+    private fun response() = MockResponse().setBody("""{"choices":[{"message":{"content":"{\"alternatives\":[\"周日下午可以呀\",\"周末见\",\"你想去哪\"],\"note\":\"\",\"uncertain\":false}"}}]}""")
 
     @Test fun screenshotPreviewGeneratesAndCopiedDraftSurvivesRestartWithoutBecomingHistory() {
         val (server, model) = server()
@@ -63,7 +79,7 @@ class ControllerDeviceTest {
             lateinit var restored: AssistantController
             main { restored = AssistantController(context, model, namespace) }
             assertEquals(DraftState.COPIED, restored.state.value.archives.single().draft!!.state)
-            assertNull(restored.state.value.preview)
+            assertNotNull(restored.state.value.preview)
             assertEquals(id, restored.state.value.archives.single().id)
             main { controller.scope.cancel(); restored.scope.cancel() }
         }
@@ -79,7 +95,7 @@ class ControllerDeviceTest {
         }
         runBlocking { job!!.join() }
         assertTrue(controller.state.value.archives.single().messages.isEmpty())
-        assertTrue(controller.state.value.error.contains("档案归属"))
+        assertTrue(controller.state.value.error.contains("属于当前对象"))
         assertNotNull(controller.state.value.preview)
         main { controller.scope.cancel() }
     }
@@ -118,31 +134,25 @@ class ControllerDeviceTest {
         assertEquals("回复", restored.state.value.archives.single().draft!!.text)
         main { controller.scope.cancel(); restored.scope.cancel() }
     }
-    @Test fun syntheticNotificationActionIsConsumedBeforeSecondClickAndIsNotMarkedDelivered() {
-        val scope = "synthetic-${newId()}"; val source = newId(); val action = "cn.replyassistant.TEST_${newId()}"
-        val received = CountDownLatch(1); val count = AtomicInteger(0)
-        val receiver = object : BroadcastReceiver() { override fun onReceive(context: Context?, intent: Intent?) {
-            if (RemoteInput.getResultsFromIntent(intent)?.getCharSequence("reply") == "测试回复") { count.incrementAndGet(); received.countDown() }
-        } }
-        context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
+    @Test fun copyingSelectedCandidateDoesNotRecordSendingUntilOwnerAcknowledgesIt() {
         lateinit var controller: AssistantController
-        var controllerCreated = false
-        try {
-            val pending = PendingIntent.getBroadcast(context, 991, Intent(action).setPackage(context.packageName), PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_CANCEL_CURRENT)
-            NotificationReplies.put(NotificationTicket(scope, source, source, pending, arrayOf(RemoteInput.Builder("reply").setLabel("回复").build()), System.currentTimeMillis()))
-            NotificationReplies.verify(scope, true)
-            main {
+        main {
+            try {
                 controller = AssistantController(context, storageNamespace = "synthetic-${newId()}")
-                controllerCreated = true
                 val id = controller.createArchive("合成通知", "测试")
-                controller.mutateArchive(id) { it.copy(notificationScope = scope, messages = listOf(ChatMessage(speaker = Speaker.OTHER, text = "消息", sourceId = source)),
-                    draft = ReplyDraft(contextRevision = 0, alternatives = listOf("测试回复"))) }
-                controller.sendNotification()
-                assertTrue(runCatching { controller.sendNotification() }.isFailure)
+                controller.mutateArchive(id) { it.copy(notificationScope = "synthetic-scope", messages = listOf(ChatMessage(speaker = Speaker.OTHER, text = "消息")),
+                    draft = ReplyDraft(contextRevision = 0, alternatives = listOf("测试回复", "第二条", "第三条"))) }
+                controller.chooseAlternative(1)
+                controller.copyDraft()
+                assertEquals(DraftState.COPIED, controller.selected()!!.draft!!.state)
+                assertEquals("第二条", controller.selected()!!.draft!!.text)
+                assertEquals(1, controller.selected()!!.messages.size)
+                controller.acknowledgeSent()
+                assertEquals(DraftState.SENT, controller.selected()!!.draft!!.state)
+                assertEquals("第二条", controller.selected()!!.messages.last().text)
+            } finally {
+                controller.scope.cancel()
             }
-            assertEquals(DraftState.SUBMITTED, controller.state.value.archives.single().draft!!.state)
-            assertTrue("Synthetic receiver must get the RemoteInput result", received.await(5, TimeUnit.SECONDS)); assertEquals(1, count.get())
-            assertEquals(1, controller.state.value.archives.single().messages.size)
-        } finally { context.unregisterReceiver(receiver); NotificationReplies.verify(scope, false); main { if (controllerCreated) controller.scope.cancel() } }
+        }
     }
 }

@@ -44,18 +44,18 @@ test('real PostgreSQL: owner overview matches the machine contract and reports u
 
     const overview = await service.ownerOverview();
     assert.doesNotThrow(() => assertOwnerOverview(overview), 'the overview must satisfy the published schema');
-    assert.equal(overview.connectionQueryStatus, 'unavailable');
+    assert.equal(overview.connectionQueryStatus, 'ready');
     assert.equal(overview.faultQueryStatus, 'unavailable');
-    assert.deepEqual(overview.connections, []);
+    assert.equal(overview.connections.length, 1); assert.equal(overview.connections[0].connectionState, 'unknown');
     assert.deepEqual(overview.faults, []);
     // The load-bearing rule: empty arrays plus a missing/unavailable status are not "all clear".
-    assert.equal(overviewQueryStatus(overview, 'connection'), 'unavailable');
+    assert.equal(overviewQueryStatus(overview, 'connection'), 'ready');
     assert.equal(overviewQueryStatus(overview, 'fault'), 'unavailable');
     // Core fields still describe the real dispatch state.
     assert.equal(overview.globalPaused, false);
     assert.equal(overview.status, 'ACTIVE');
     assert.equal(overview.pendingCount, 0);
-    assert.deepEqual(overview.allowedActions, ['pauseAll']);
+    assert.deepEqual(overview.allowedActions, ['pauseAll','resumeAll']);
 
     const conversations = await service.ownerConversations();
     assert.equal(conversations.connectionQueryStatus, 'unavailable');

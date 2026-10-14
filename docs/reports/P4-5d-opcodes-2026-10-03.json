@@ -1,0 +1,69 @@
+{
+  "protocol": "p4-5d-vdbe-opcodes-v1",
+  "clientSha256": "2058a926258baeaecf92b30668ff200382f4493b0a5323428781d0b993e19c51",
+  "clientBytes": 100449384,
+  "runs": [
+    {
+      "firstRva": "0x519c10c",
+      "lastRva": "0x519c810",
+      "count": 141,
+      "startsAtInit": false,
+      "endsAtAbortable": false,
+      "markerNamesFound": [
+        "Halt",
+        "Column",
+        "ResultRow",
+        "OpenRead",
+        "OpenEphemeral",
+        "Abortable"
+      ],
+      "numbers": null,
+      "nameSample": [
+        "utc",
+        "unixepoch",
+        "localtime",
+        "Destroy",
+        "IdxRowid",
+        "DeferredSeek",
+        "IdxDelete",
+        "IdxInsert",
+        "SorterInsert",
+        "SeekEnd",
+        "NullRow",
+        "Rowid"
+      ]
+    },
+    {
+      "firstRva": "0x519bd50",
+      "lastRva": "0x519bf80",
+      "count": 53,
+      "startsAtInit": false,
+      "endsAtAbortable": false,
+      "markerNamesFound": [
+        "Goto",
+        "Gosub"
+      ],
+      "numbers": null,
+      "nameSample": [
+        "current_date",
+        "current_timestamp",
+        "current_time",
+        "IfNullRow",
+        "IfNot",
+        "Not",
+        "If",
+        "Once",
+        "Jump",
+        "MustBeInt",
+        "Yield",
+        "InitCoroutine"
+      ]
+    }
+  ],
+  "opcodeTablePinned": false,
+  "disposition": "NO_GO",
+  "reasons": [
+    "opcode-names-are-not-one-contiguous-run-in-this-build",
+    "no-opcode-numbering-is-emitted-without-a-bounded-run"
+  ]
+}

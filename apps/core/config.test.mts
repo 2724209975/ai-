@@ -68,6 +68,23 @@ test('the intelligence provider must be named and only the implemented one is ac
   assert.equal(JSON.stringify(deepSeek).includes('unit-test'), false, 'the key must not be copied into the config');
 });
 
+test('LAN HTTP needs explicit opt-in and accepts only RFC1918 IPv4 origins', () => {
+  for (const host of ['10.0.0.5', '172.16.0.2', '172.31.255.254', '192.168.31.17']) {
+    const env = { ...base, PUBLIC_ORIGIN: `http://${host}:8787`, HOST: '0.0.0.0' };
+    assert.throws(() => readCoreConfig(env), /INSECURE_ORIGIN/);
+    assert.throws(() => readCoreConfig({ ...env, ALLOW_LAN_HTTP: '1' }), /NON_LOOPBACK_BIND_REFUSED/);
+    const config = readCoreConfig({ ...env, ALLOW_LAN_HTTP: '1', ALLOW_NON_LOOPBACK_BIND: '1' });
+    assert.equal(config.publicOrigin, env.PUBLIC_ORIGIN);
+    assert.equal(config.secureCookies, false);
+  }
+  for (const host of ['172.15.0.1', '172.32.0.1', '169.254.1.1', '8.8.8.8', '0.0.0.0', 'phone.local', '127.example.com', '[fd00::1]']) {
+    assert.throws(() => readCoreConfig({ ...base, PUBLIC_ORIGIN: `http://${host}:8787`, ALLOW_LAN_HTTP: '1' }), /INSECURE_ORIGIN/);
+  }
+  assert.throws(() => readCoreConfig({ ...base, PUBLIC_ORIGIN: 'http://127.example.com:8787' }), /INSECURE_ORIGIN/);
+  assert.throws(() => readCoreConfig({ ...base, ALLOW_LAN_HTTP: 'maybe' }), /INVALID_ENV:ALLOW_LAN_HTTP/);
+  assert.throws(() => readCoreConfig({ ...base, PUBLIC_ORIGIN: 'http://owner:secret@192.168.1.2:8787', ALLOW_LAN_HTTP: '1' }), /INVALID_ENV:PUBLIC_ORIGIN/);
+});
+
 test('media understanding stays off, and a half-configured opt-in fails at startup', () => {
   const off = readCoreConfig(base);
   assert.equal(off.mediaImageEnabled, false);

@@ -5,6 +5,7 @@
  * and a worker that only collects. The refusal is structural: the account id below cannot match a
  * real platform event, and `submitSend` only ever throws.
  */
+import { createMobileLink } from '../../packages/link/runtime.mts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -13,7 +14,7 @@ import { FileOwnerSessionStore } from '../../packages/infrastructure/auth/sessio
 import { createJsonLogger, type Logger } from '../../packages/infrastructure/observability/logger.mts';
 import { requestIdOf, routeLabel } from '../../packages/infrastructure/observability/request-id.mts';
 import { createSkillOutboxPump } from '../../packages/infrastructure/postgres/skill-outbox-pump.mts';
-import type { PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
+import { withTransaction, type PgPool } from '../../packages/infrastructure/postgres/transaction.mts';
 import { PgDataProvider } from '../../packages/data/postgres/provider.mts';
 import { PgOwnerDataPort } from '../../packages/data/postgres/owner-data-port.mts';
 import { PgConfirmedService, type DispatchPlatform, type PersistentIntelligence } from '../../packages/orchestration/postgres/confirmed-service.mts';
@@ -24,6 +25,8 @@ import { createOwnerApp } from '../web/server/owner-server.mts';
 import type { CoreConfig } from './config.mts';
 import { createHealthHandler, createReadinessProbe, type ReadinessReport } from './health.mts';
 import type { ImagePreparationPort } from '../../packages/orchestration/postgres/media-preparation.mts';
+import { embeddingFromEnv,type EmbeddingProvider } from '../../packages/data/memory-v2/embedding.mts';
+import { createMemoryLoop } from '../../packages/data/memory-v2/loop.mts';
 
 /** Deliberately not a real platform account: no inbound event can ever be accepted by this process. */
 export const CORE_NO_DISPATCH_ACCOUNT = 'core-no-dispatch';
@@ -38,12 +41,14 @@ export type CoreRuntimeOptions = {
   /** Substituted by the entry point when a real model is configured; defaults to the fake. */
   intelligence?: PersistentIntelligence;
   images?: ImagePreparationPort;
+  embedding?: EmbeddingProvider;
 };
 
 export type CoreRuntime = {
   readonly service: PgConfirmedService;
   readonly auth: OwnerAuthService;
   readonly worker: ReturnType<typeof createDispatchWorker>;
+  readonly memoryWorker: ReturnType<typeof createMemoryLoop>;
   readonly skillOutbox: ReturnType<typeof createSkillOutboxPump>;
   readonly server: ReturnType<typeof createServer>;
   readonly logger: Logger;
@@ -68,6 +73,7 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
     pool, data,
     intelligence,
     images: options.images,
+    ownerId:config.ownerId,embedding:options.embedding??embeddingFromEnv(process.env),
     platform: {
       platform: config.platform,
       accountId: CORE_NO_DISPATCH_ACCOUNT,
@@ -86,6 +92,7 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
     intervalMs: config.skillOutboxIntervalMs,
     onError: () => logger.warn('skill_outbox_delivery_failed'),
   });
+  const memoryWorker=createMemoryLoop(service.memoryWorker,Math.max(10_000,config.workerIntervalMs),()=>logger.warn('memory_maintenance_failed'));
   const worker = createDispatchWorker({
     pool, service,
     intervalMs: config.workerIntervalMs,
@@ -107,6 +114,7 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
     hsts: config.secureCookies,
   });
 
+  let mobileLink: Awaited<ReturnType<typeof createMobileLink>> = null;
   let recovered = false;
   const readiness = createReadinessProbe({ pool, recovered: () => recovered });
   const health = createHealthHandler({ service: CORE_SERVICE_NAME, ready: readiness });
@@ -121,6 +129,7 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
     }));
     void (async () => {
       try {
+        if (mobileLink && await mobileLink.owner(request,response)) return;
         if (await health(request, response)) return;
         await app(request, response);
       } catch (error) {
@@ -134,6 +143,11 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
   /** The startup pause runs before recovery so nothing can be collected or generated unpaused. */
   async function applyStartupPause(): Promise<void> {
     if (!config.startPaused) {
+      // Only a brand-new empty environment can release migration's initial latch automatically.
+      await withTransaction(options.pool, async tx => {
+        await tx.query(`UPDATE dispatch_global_control SET paused=false WHERE singleton=true AND pause_epoch=0
+          AND NOT EXISTS(SELECT 1 FROM orch_conversations) AND NOT EXISTS(SELECT 1 FROM orch_control_commands)`);
+      });
       logger.warn('startup_pause_disabled', { reason: 'START_PAUSED_OFF' });
       return;
     }
@@ -147,9 +161,11 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
   }
 
   return {
-    service, auth, worker, skillOutbox, server, logger,
+    service, auth, worker, memoryWorker,skillOutbox, server, logger,
     readiness,
     async start(): Promise<void> {
+      mobileLink = await createMobileLink({env:process.env,pool,ownerId:config.ownerId,auth,contacts:()=>service.ownerContacts()});
+      await mobileLink?.start();
       await auth.pruneExpired();
       await applyStartupPause();
       await service.recover();
@@ -157,6 +173,7 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
       try { await skillOutbox.tick(); }
       catch { logger.warn('skill_outbox_startup_replay_failed'); }
       skillOutbox.start();
+      memoryWorker.start();
       if (config.collectionEnabled) worker.start();
       else logger.warn('collection_disabled', { reason: 'COLLECTION_ENABLED_OFF' });
       log.info('runtime_started', {
@@ -181,8 +198,10 @@ export function createCoreRuntime(options: CoreRuntimeOptions): CoreRuntime {
       // Stop accepting, then drop idle keep-alive sockets so shutdown does not wait on a client.
       server.closeIdleConnections?.();
       await closed;
+      await mobileLink?.stop();
       await skillOutbox.stop();
       await worker.stop();
+      await memoryWorker.stop();
       log.info('runtime_stopped');
     },
   };

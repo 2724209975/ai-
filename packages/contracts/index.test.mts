@@ -24,7 +24,7 @@ test('owner overview schema, literals and runtime assertion agree', async () => 
   const schema = JSON.parse(await readFile(new URL('./schemas/owner-overview.schema.json', import.meta.url), 'utf8'));
   assert.deepEqual(schema.properties.connectionQueryStatus.$ref, '#/$defs/queryStatus');
   assert.deepEqual(schema.$defs.queryStatus.enum, [...queryStatuses]);
-  assert.deepEqual(schema.$defs.connectionState.enum, [...platformConnectionStates]);
+  assert.deepEqual(schema.$defs.connectionState.enum, [...platformConnectionStates,'unknown','probe_healthy']);
   assert.deepEqual(schema.required.sort(), ['allowedActions', 'globalPaused', 'id', 'pendingCount', 'status', 'unknownSendCount', 'version'].sort());
 
   const overview = { id: 'global', version: 3, status: 'ACTIVE', globalPaused: false, allowedActions: ['pauseAll'],
@@ -33,6 +33,7 @@ test('owner overview schema, literals and runtime assertion agree', async () => 
   assert.doesNotThrow(() => assertOwnerOverview({ ...overview, connectionQueryStatus: undefined, faultQueryStatus: undefined }));
   assert.throws(() => assertOwnerOverview({ ...overview, connectionQueryStatus: 'connected' }), /VALIDATION_FAILED/);
   assert.throws(() => assertOwnerOverview({ ...overview, connections: [{ accountId: 'a', platform: 'qq', connectionState: 'CONNECTED' }] }), /VALIDATION_FAILED/);
+  for (const connectionState of ['unknown','probe_healthy']) assert.doesNotThrow(() => assertOwnerOverview({ ...overview, connections: [{accountId:'a',platform:'unknown',connectionState}] }));
   assert.throws(() => assertOwnerOverview({ ...overview, faults: [{ id: 'f', status: 'OPEN' }] }), /VALIDATION_FAILED/);
   assert.throws(() => assertOwnerOverview({ ...overview, unknownSendCount: -1 }), /VALIDATION_FAILED/);
 });

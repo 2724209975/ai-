@@ -78,7 +78,7 @@ test('QQ audit: real bridge submission and durable echo remain distinct from del
     assert.equal(report.verdict, 'operator_required'); assert.ok(!JSON.stringify(report).includes('PRIVATE'));
     assert.equal((await f.pool.query('SELECT count(*)::int AS n FROM event_outbox')).rows[0]!.n, before);
     assert.equal((await f.post(f.event(90002, true))).status, 204);
-    const after = await f.audit(); assert.equal(after.accountInbox.unmapped_self, 1); assert.equal(after.current.ownerUnmappedPause, true);
+    const after = await f.audit(); assert.equal(after.accountInbox.enrolled, 2); assert.equal(after.current.ownerUnmappedPause, false); assert.equal(after.current.contactPaused, true);
   } finally { await f.cleanup(); }
 });
 

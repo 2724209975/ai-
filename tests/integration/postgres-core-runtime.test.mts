@@ -122,7 +122,7 @@ test('real PostgreSQL: the core runtime is ready, starts paused and never dispat
       conversationId, planId: plan.id, taskVersion: Number(task.taskVersion), planVersion: plan.version,
       alternativeId: plan.alternatives[0]!.alternativeId, editedParts: parts, contentHash: contentHash(parts), idempotencyKey: 'owner-confirm-core-1',
     });
-    assert.deepEqual(await runtime.service.dispatchableConversations(), [conversationId], 'the plan must be genuinely dispatchable after confirmation');
+    assert.deepEqual(await bridgeService.dispatchableConversations(), [conversationId], 'the plan must be genuinely dispatchable after confirmation');
 
     const tick = await runtime.worker.tick();
     assert.deepEqual(tick, { collected: 0, dispatched: 0, failures: 0 });
@@ -189,7 +189,7 @@ test('real PostgreSQL: a freshly migrated database can be resumed over HTTP at e
     const overview = await fetch(`${origin}/api/v1/overview`, { headers: { cookie } });
     assert.deepEqual(await overview.json(), { id: 'global', version: 0, status: 'PAUSED', globalPaused: true,
       allowedActions: ['resumeAll'], pendingCount: 0, unknownSendCount: 0,
-      connectionQueryStatus: 'unavailable', faultQueryStatus: 'unavailable', connections: [], faults: [] });
+      connectionQueryStatus: 'ready', faultQueryStatus: 'unavailable', connections: [], faults: [] });
 
     const resumed = await fetch(`${origin}/api/v1/control/resume-all`, { method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: origin, cookie, 'x-csrf-token': csrfToken },

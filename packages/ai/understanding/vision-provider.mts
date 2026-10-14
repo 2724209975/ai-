@@ -13,6 +13,7 @@
  * bytes is refused here rather than forwarded.
  */
 import { createHash } from 'node:crypto';
+import {thinkingFields,type ThinkingParameter} from '../pipeline-v2/transport-v21.mts';
 import type { BinaryMediaProvider } from './media-provider.mts';
 import { detectImageFormat, SUPPORTED_IMAGE_FORMATS } from './image-format.mts';
 import { validateImageBytes } from '../../data/media/image-validation.mts';
@@ -34,6 +35,8 @@ export type ImageDetail = 'low' | 'high' | 'original' | 'auto';
 export const VISION_DETAIL_LEVELS: readonly ImageDetail[] = ['low', 'high', 'original', 'auto'];
 
 export type VisionProviderOptions = {
+  providerId?:string;
+  thinkingParameter?:ThinkingParameter;
   apiKey: string;
   /** Omitted means the pinned multimodal default; recorded as both model id and version. */
   modelId?: string;
@@ -43,6 +46,7 @@ export type VisionProviderOptions = {
   retentionPolicy: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
+  thinking?: 'disabled' | 'enabled';
   timeoutMs?: number;
   maxTokens?: number;
   temperature?: number;
@@ -106,6 +110,7 @@ export function createVisionMediaProvider(options: VisionProviderOptions): Binar
   const retentionPolicy = text(options.retentionPolicy);
   if (!promptVersion || !dataRegion || !retentionPolicy) throw new Error('VALIDATION_FAILED');
   const detail = options.detail ?? 'original';
+  if (options.thinking !== undefined && !['disabled','enabled'].includes(options.thinking)) throw new Error('VALIDATION_FAILED');
   if (!VISION_DETAIL_LEVELS.includes(detail)) throw new Error('VALIDATION_FAILED');
   let endpoint: URL;
   try { endpoint = new URL('chat/completions', text(options.baseUrl) || DEEPSEEK_DEFAULT_BASE_URL); }
@@ -122,7 +127,7 @@ export function createVisionMediaProvider(options: VisionProviderOptions): Binar
   if (!Number.isSafeInteger(maxInlineBytes) || maxInlineBytes < 1 || maxInlineBytes > MAX_INLINE_BYTES) throw new Error('VALIDATION_FAILED');
 
   return {
-    providerId: 'deepseek-vision',
+    providerId: options.providerId??'deepseek-vision',
     modelId,
     modelVersion: text(options.modelVersion) || modelId,
     promptVersion,
@@ -142,6 +147,7 @@ export function createVisionMediaProvider(options: VisionProviderOptions): Binar
       if (!checked.ok || signal?.aborted) throw new Error('MEDIA_UNCERTAIN');
       const request = {
         model: modelId,
+        ...thinkingFields(options.thinking,options.thinkingParameter),
         messages: [{ role: 'user', content: [
           { type: 'text', text: IMAGE_UNDERSTANDING_INSTRUCTION },
           { type: 'image_url', image_url: { url: `data:${detectedFormat};base64,${Buffer.from(bytes).toString('base64')}`, detail } },
